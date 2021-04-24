@@ -35,6 +35,7 @@ Set Contextual Implicit.
 Declare Scope ctx_scope.
 
 (** The clairvoyance monad [M] and its logics [optim] and [pessim]. *)
+(** This is (mostly) duplicated code. Skip to end of [Cv] module. *)
 (** TODO: merge with actual library *)
 Module Import Cv.
 
@@ -343,6 +344,8 @@ Inductive V : Ctx -> Ty -> Type :=
 | There g x y : V g y -> V (g :,: x) y
 .
 
+(* A lambda calculus with primitive fold. *)
+
 Inductive Tm (g : Ctx) : Ty -> Type :=
 | Let a b : Tm g a -> Tm (g :,: a) b -> Tm g b
 | App a b : Tm g (Arr a b) -> V g a -> Tm g b
@@ -447,7 +450,7 @@ Notation V1 := (There Here).
 Definition append {a} : Tm (NilCtx :,: List a :,: List a) (List a) :=
   Foldr (Var V0) (Cons V1 V0) V1.
 
-(* Manually translated with simplifications (fewer ticks). *)
+(* Manually translated with simplifications (fewer ticks; see discussion from Section 4.3). *)
 
 Fixpoint appendA_ {a} (xs : ListA a) (ys : T (ListA a)) : M (ListA a) :=
   tick >>
@@ -460,6 +463,12 @@ Fixpoint appendA_ {a} (xs : ListA a) (ys : T (ListA a)) : M (ListA a) :=
 
 Definition appendA {a} (xs ys : T (ListA a)) : M (ListA a) :=
   xs >>=! fun xs => appendA_ xs ys.
+
+(** The costs of [append] and [appendA] are asymptotically equivalent. Informally:
+cost(appendA) <= cost(append) <= 2 * cost(appendA)
+
+The two main theorems are [appendA_le_append] and [append_le_appendA].
+*)
 
 Lemma appendA_le_append_ {a} (xs : ListA (toType a)) (ys : T (ListA (toType a)))
   : (appendA_ xs ys <= eval (Foldr (g := NilCtx :,: _ :,: _) (Var V0) (Cons V1 V0) V1) (tt, Thunk xs, ys))%M.
@@ -836,6 +845,8 @@ Qed.
 
 (** Correspondence between the two semantics *)
 
+(** Auxiliary evaluation functions. *)
+
 Definition evalVl {g u} (e : env g) (t : Vl g u) : toType u :=
   match t with
   | VLam t => fun (x : T (toType _)) => eval t (e, x)
@@ -851,7 +862,7 @@ Fixpoint evalEnv {g} (e : Env g) : env g :=
   | ECons e1 v => (evalEnv e1, mapT (evalVl (evalEnv e1)) v)
   end.
 
-(** Proof *)
+(** Proof (soundness, then adequacy). *)
 
 Inductive eq_T {a b} (r : a -> b -> Prop) : T a -> T b -> Prop :=
 | eq_T_Discarded : eq_T r Discarded Discarded
@@ -1476,6 +1487,8 @@ Qed.
 
 Definition elem {a} (z : M a) (x : a) (n : nat) : Prop := z x n.
 
+(** This theorem combines soundness and adequacy to make the equivalence more
+explicit using [<->]. *)
 Theorem soundess_and_adequacy g u (t : Tm g u) (e : Env g) (x : toType u) (n : nat)
   : elem (eval t (evalEnv e)) x n
   <-> exists g' (s' : Rnm g g') (e' : Env g') (v' : Vl g' u),
