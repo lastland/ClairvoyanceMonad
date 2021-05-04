@@ -27,182 +27,26 @@ Axiom prop_ext : forall P Q, (P <-> Q) -> P = Q.
 (**)
 
 From Coq Require Import
-  Arith Lia Setoid Morphisms.
+     Arith Psatz Omega Setoid Morphisms.
+
+Require Import Clairvoyance.
 
 Set Implicit Arguments.
 Set Contextual Implicit.
 
 Declare Scope ctx_scope.
 
-(** The clairvoyance monad [M] and its logics [optim] and [pessim]. *)
-(** This is (mostly) duplicated code. Skip to end of [Cv] module. *)
-(** TODO: merge with actual library *)
-Module Import Cv.
-
-Definition M (a : Type) : Type := a -> nat -> Prop.
-Inductive T (a : Type) : Type :=
-| Discarded
-| Thunk (v : a)
-.
-
 Definition mapT {a b} (f : a -> b) (t : T a) : T b :=
   match t with
-  | Discarded => Discarded
+  | Undefined => Undefined
   | Thunk x => Thunk (f x)
   end.
 
 Definition T_prop {a} (f : a -> Prop) : T a -> Prop :=
   fun t => match t with
-           | Discarded => True
+           | Undefined => True
            | Thunk x => f x
-           end.
-
-Definition optim {a} (t : M a) (r : a -> nat -> Prop) : Prop :=
-  exists x n, t x n /\ r x n.
-
-Definition pessim {a} (t : M a) (r : a -> nat -> Prop) : Prop :=
-  forall x n, t x n -> r x n.
-
-Definition runM {a} : M a -> a -> nat -> Prop :=
-  fun t x0 n0 => optim t (fun x n => x = x0 /\ n = n0).
-
-Theorem runM_simpl {a} (t : M a) (x0 : a) (n0 : nat)
-  : runM t x0 n0 <-> t x0 n0.
-Proof. firstorder congruence. Qed.
-
-(* Users shouldn't see those constructors or try to pattern-match on them,
-at least in programs. Not sure if the abstraction can be fully maintained in proofs. *)
-
-Definition val {a} (x : a) : T a := Thunk x.
-
-Definition ret {a : Type} (x : a) : M a :=
-  fun y n => y = x /\ n = 0.
-
-Definition bind {a b : Type} (u : M a) (k : a -> M b) : M b :=
-  fun y n => exists x mx my, u x mx /\ k x y my /\ n = mx + my.
-
-Definition tick : M unit :=
-  fun _ n => n = 1.
-
-(** Every function body should be wrapped in [ticky]. One could use some more types
-    to help enforce this. *)
-Definition ticky {a} (u : M a) : M a :=
-  bind (Cv.tick) (fun _ => u).
-
-Definition force {a} (t : T a) : M a :=
-  match t with
-  | Discarded => fun _ _ => False
-  | Thunk x => ret x
-  end.
-
-(* To "build a thunk" in CV evaluation is to guess whether to evaluate the
-thunk right now. *)
-Definition thunk {a} (u : M a) : M (T a) :=
-  fun t n =>
-    match t with
-    | Discarded => n = 0
-    | Thunk x => u x n
-    end.
-
-(** Nicer for fixpoints *)
-Definition forcing {a b} (t : T a) (k : a -> M b) : M b :=
-  match t with
-  | Discarded => fun _ _ => False
-  | Thunk x => k x
-  end.
-
-
-Theorem optim_bind {a b} (t : M a) (k : a -> M b) (r : b -> nat -> Prop)
-  : optim t (fun x n1 => optim (k x) (fun y n2 => r y (n1 + n2))) ->
-    optim (bind t k) r.
-Proof. firstorder eauto. Qed.
-
-Theorem optim_ret {a} (x : a) (r : a -> nat -> Prop)
-  : r x 0 -> optim (ret x) r.
-Proof. firstorder. Qed.
-
-Theorem optim_tick (r : unit -> nat -> Prop)
-  : r tt 1 -> optim tick r.
-Proof. firstorder. Qed.
-
-Theorem optim_thunk_skip {a} (t : M a) (r : T a -> nat -> Prop)
-  : r Discarded 0 -> optim (thunk t) r.
-Proof. firstorder. Qed.
-
-Theorem optim_thunk_eval {a} (t : M a) (r : T a -> nat -> Prop)
-  : optim t (fun x => r (Thunk x)) -> optim (thunk t) r.
-Proof. firstorder. Qed.
-
-Theorem optim_force {a} (x : a) (r : a -> nat -> Prop)
-  : r x 0 -> optim (force (Thunk x)) r.
-Proof. firstorder. Qed.
-
-Theorem optim_mon {a} (t : M a) (r r' : a -> nat -> Prop)
-  : (forall x n, r x n -> r' x n) -> optim t r -> optim t r'.
-Proof. firstorder. Qed.
-
-Theorem pessim_bind {a b} (t : M a) (k : a -> M b) (r : b -> nat -> Prop)
-  : pessim t (fun x n1 => pessim (k x) (fun y n2 => r y (n1 + n2))) ->
-    pessim (bind t k) r.
-Proof.
-  intros Kt x n (y & nx & ny & Ht & Hk & Hn).
-  specialize (Kt _ _ Ht _ _ Hk). rewrite Hn; apply Kt.
-Qed.
-
-Theorem pessim_ret {a} (x : a) (r : a -> nat -> Prop)
-  : r x 0 -> pessim (ret x) r.
-Proof. intros Kt x0 n []; congruence. Qed.
-
-Theorem pessim_tick (r : unit -> nat -> Prop)
-  : r tt 1 -> pessim tick r.
-Proof. intros Kt [] n ->; auto. Qed.
-
-Theorem pessim_thunk {a} (t : M a) (r : T a -> nat -> Prop)
-  : r Discarded 0 ->
-    pessim t (fun x => r (Thunk x)) ->
-    pessim (thunk t) r.
-Proof.
-  intros K0 KT [] n Ht; eauto. congruence.
-Qed.
-
-Theorem pessim_force_Thunk {a} (x : a) (r : a -> nat -> Prop)
-  : r x 0 -> pessim (force (Thunk x)) r.
-Proof. apply pessim_ret. Qed.
-
-Theorem pessim_force_Discarded {a} (r : a -> nat -> Prop)
-  : pessim (force Discarded) r.
-Proof. intros ? ? []. Qed.
-
-Theorem pessim_force {a} (x : T a) (r : a -> nat -> Prop)
-  : (forall v, x = Thunk v -> r v 0) -> pessim (force x) r.
-Proof.
-  intros; destruct x; cbn; [ intros ? ? [] | apply pessim_ret; auto ].
-Qed.
-
-Theorem pessim_forcing {a b} (x : T a) (k : a -> M b) (r : b -> nat -> Prop)
-  : (forall v, x = Thunk v -> pessim (k v) r) -> pessim (forcing x k) r.
-Proof.
-  intros; destruct x; cbn; [ intros ? ? [] | apply H; reflexivity ].
-Qed.
-
-Theorem pessim_mon {a} (t : M a) (r r' : a -> nat -> Prop)
-  : (forall x n, r x n -> r' x n) -> pessim t r -> pessim t r'.
-Proof. firstorder. Qed.
-
-Ltac forward1 :=
-  lazymatch goal with
-  | [ |- runM _ _ _ ] => unfold runM at 1
-  | [ |- optim (bind _ _) _ ] => apply optim_bind
-  | [ |- optim (ret _) _ ] => apply optim_ret
-  | [ |- optim tick _ ] => apply optim_tick
-  | [ |- pessim (bind _ _) _ ] => apply pessim_bind
-  | [ |- pessim (ret _) _ ] => apply pessim_ret
-  | [ |- pessim tick _ ] => apply pessim_tick
-  | [ |- pessim (thunk _) _ ] => apply pessim_thunk
-  (* | [ |- pessim (forcing _ _) _ ] => apply pessim_forcing; intros ? ? *)
-  end.
-
-Ltac forward := repeat forward1.
+        end.
 
 Definition le_M {a} (t t' : M a) : Prop :=
   forall x n, t' x n -> exists n', t x n' /\ n' <= n.
@@ -286,13 +130,13 @@ Qed.
 Lemma thunk_le {a} (u1 u2 : M a)
   : (u1 <= u2)%M -> (thunk u1 <= thunk u2)%M.
 Proof.
-  intros H [ | y] n; cbn; eauto.
+  intros H [y | ] n; cbn; eauto.
 Qed.
 
 Lemma forcing_le {a b} (x : T a) (k1 k2 : a -> M b)
   : T_prop (fun x => k1 x <= k2 x)%M x -> (forcing x k1 <= forcing x k2)%M.
 Proof.
-  destruct x; cbn; [ | auto ].
+  destruct x; cbn; [ auto | ].
   unfold le_M. contradiction.
 Qed.
 
@@ -311,15 +155,10 @@ Lemma thunk_tick {a} (u : M a)
 Proof.
   unfold thunk, bind, tick, le_M; firstorder.
   destruct x.
-  - exists 0; split; auto. lia.
   - eexists; split; [ | constructor ]. exists tt. eauto.
+  - exists 0; split; auto. lia.
 Qed.
 
-End Cv.
-
-Notation "t >> s" := (Cv.bind t (fun _ => s)) (at level 60, right associativity).
-Notation "'let!' x ':=' u 'in' v" := (Cv.bind u (fun x => v)) (x as pattern, at level 90). 
-Infix ">>=!" := Cv.forcing (at level 61, left associativity).
 
 Module Lambda.
 
@@ -375,7 +214,7 @@ Definition ListA_ind {a} (P : ListA a -> Prop)
 Proof.
   fix SELF 1; intros [].
   - apply H_NilA.
-  - apply H_ConsA; destruct t0; cbn; [ auto | apply SELF ].
+  - apply H_ConsA; destruct t0; cbn; [ apply SELF | auto].
 Qed.
 
 Set Elimination Schemes.
@@ -406,13 +245,13 @@ Fixpoint foldrA' {a b} (n : M b) (c : T a -> T b -> M b) (x' : ListA a)
   match x' with
   | NilA => n
   | ConsA x1 x2 =>
-    let! y2 := thunk (x2 >>=! foldrA' n c) in
+    let! y2 := thunk (foldrA' n c $! x2) in
     c x1 y2
   end.
 
 Definition foldrA {a b} (n : M b) (c : T a -> T b -> M b)
     (x : T (ListA a)) : M b :=
-  x >>=! foldrA' n c.
+  foldrA' n c $! x.
 
 Fixpoint eval {g u} (t : Tm g u) : env g -> M (toType u) := fun e =>
   match t with
@@ -457,12 +296,12 @@ Fixpoint appendA_ {a} (xs : ListA a) (ys : T (ListA a)) : M (ListA a) :=
   match xs with
   | NilA => force ys
   | ConsA x xs =>
-    let! zs := thunk (xs >>=! fun xs => appendA_ xs ys) in
+    let! zs := thunk ((fun xs => appendA_ xs ys) $! xs) in
     ret (ConsA x zs)
   end.
 
 Definition appendA {a} (xs ys : T (ListA a)) : M (ListA a) :=
-  xs >>=! fun xs => appendA_ xs ys.
+  (fun xs => appendA_ xs ys) $! xs.
 
 (** The costs of [append] and [appendA] are asymptotically equivalent. Informally:
 cost(appendA) <= cost(append) <= 2 * cost(appendA)
@@ -484,7 +323,7 @@ Qed.
 Theorem appendA_le_append {a} (xs ys : T (ListA (toType a)))
   : (appendA xs ys <= eval append (tt, xs, ys))%M.
 Proof.
-  apply forcing_le; destruct xs; cbn; [ auto | ].
+  apply forcing_le; destruct xs; cbn; [ | auto ].
   eapply appendA_le_append_.
 Qed.
 
@@ -492,7 +331,7 @@ Definition costMul {a} (c : nat) (u : M a) : M a :=
   fun x n => exists m, u x m /\ c * m = n.
 
 Definition le_costMul {a} (c : nat) (u1 u2 : M a)
-  : pessim u2 (fun x2 n2 => optim u1 (fun x1 n1 => x2 = x1 /\ n1 <= c * n2)) ->
+  : u2 {{ fun x2 n2 => u1 [[ fun x1 n1 => x2 = x1 /\ n1 <= c * n2 ]] }} ->
     (u1 <= costMul c u2)%M.
 Proof.
   intros H x n (ndiv & Hx & Hn).
@@ -501,19 +340,18 @@ Proof.
 Qed.
 
 Lemma append_le_appendA_ {a} (xs : ListA (toType a)) (ys : T (ListA (toType a)))
-  : pessim (appendA_ xs ys) (fun x2 n2 =>
-    optim (eval (Foldr (g := NilCtx :,: _ :,: _) (Var V0) (Cons V1 V0) V1) (tt, Thunk xs, ys)) (fun x1 n1 =>
-    x2 = x1 /\ n1 <= 2 * n2)).
+  : (appendA_ xs ys)
+      {{ fun x2 n2 =>
+           (eval (Foldr (g := NilCtx :,: _ :,: _) (Var V0) (Cons V1 V0) V1) (tt, Thunk xs, ys))
+             [[ fun x1 n1 => x2 = x1 /\ n1 <= 2 * n2 ]] }}.
 Proof.
-  induction xs as [ | x xs IH]; cbn; intros.
-  - forward. apply pessim_force; intros. forward. rewrite H; apply optim_force. split; auto.
-  - forward.
-    + apply optim_thunk_skip. forward. split; auto.
-    + destruct xs; cbn in *; forward.
-      * intros ? ? [].
-      * revert IH; apply pessim_mon; intros. forward.
-        apply optim_thunk_eval; revert H; apply optim_mon; intros ? ? [<- ?]; forward.
-        split; auto. lia.
+  induction xs as [ | x xs IH]; cbn; intros; mgo'.
+  - destruct x0; cbn in *.
+    + mgo'. apply optimistic_thunk_go. mgo'.
+    + intros ? ?. inversion 1; subst. mgo'.
+      apply optimistic_thunk_go. relax. apply (IH x0 n). apply H.
+      intros; mgo'. destruct H1; subst. intuition.
+  - apply optimistic_skip. mgo'.
 Qed.
 
 Theorem append_le_appendA {a} (xs ys : T (ListA (toType a)))
@@ -522,8 +360,8 @@ Proof.
   apply le_costMul.
   unfold appendA; cbn; unfold foldrA.
   destruct xs.
-  - intros ? ? [].
   - cbn. apply append_le_appendA_.
+  - intros ? ? [].
 Qed.
 
 (** Operational semantics (from the paper, Figure 3) *)
@@ -667,7 +505,7 @@ Definition lookup' {g u} (v : V g u) : Env g -> T (Vl g u) :=
 
 Inductive LazyStep g u (e : Env g) (BigStep_ : forall g', Rnm g g' -> Env g' -> Vl g' u -> nat -> Prop)
   : forall g', Rnm g g' -> Env g' -> T (Vl g' u) -> nat -> Prop :=
-| LazyStep_SKIP : LazyStep e BigStep_ id_Rnm e Discarded 0
+| LazyStep_SKIP : LazyStep e BigStep_ id_Rnm e Undefined 0
 | LazyStep_STEP g' (s' : Rnm g g') e' r n
   : BigStep_ g' s' e' r n ->
     LazyStep e BigStep_ s' e' (Thunk r) n
@@ -701,7 +539,7 @@ which we have to rename to evaluate under a modified heap/env.
  *)
 Inductive BigStep : forall g u, Tm g u -> Env g -> forall g', Rnm g g' -> Env g' -> Vl g' u -> nat -> Prop :=
 | BigStep_Let_SKIP g a b (t1 : Tm g a) (t2 : Tm (g :,: a) b) (e : Env g) g' (s' : Rnm _ g') e' r n
-  : BigStep t2 (e :*: Discarded) (g' := g') s' e' r n ->
+  : BigStep t2 (e :*: Undefined) (g' := g') s' e' r n ->
     BigStep (Let t1 t2) e (restr s') e' r (S n)
 | BigStep_Let_STEP g a b (t1 : Tm g a) (t2 : Tm (g :,: a) b) (e : Env g)
     g1 (s1 : Rnm _ g1) e1 r1 n1
@@ -758,8 +596,8 @@ forall
 (forall (g : Ctx) (a b : Ty) (t1 : Tm g a) (t2 : Tm (g :,: a) b)
    (e : Env g) (g' : Ctx) (s' : Rnm (g :,: a) g')
    (e' : Env g') (r : Vl g' b) (n : nat),
- BigStep t2 (e :*: Discarded) s' e' r n ->
- P (g :,: a) b t2 (e :*: Discarded) g' s' e' r n ->
+ BigStep t2 (e :*: Undefined) s' e' r n ->
+ P (g :,: a) b t2 (e :*: Undefined) g' s' e' r n ->
  P g b (Let t1 t2) e g' (restr s') e' r (S n)) ->
 (forall (g : Ctx) (a b : Ty) (t1 : Tm g a) (t2 : Tm (g :,: a) b)
    (e : Env g) (g1 : Ctx) (s1 : Rnm g g1) (e1 : Env g1)
@@ -865,19 +703,18 @@ Fixpoint evalEnv {g} (e : Env g) : env g :=
 (** Proof (soundness, then adequacy). *)
 
 Inductive eq_T {a b} (r : a -> b -> Prop) : T a -> T b -> Prop :=
-| eq_T_Discarded : eq_T r Discarded Discarded
+| eq_T_Discarded : eq_T r Undefined Undefined
 | eq_T_Thunk x y : r x y -> eq_T r (Thunk x) (Thunk y)
 .
 
 Ltac lucky_forward1 :=
   lazymatch goal with
-  | [ H : optim (?t _) _ |- optim (?t _) _ ] => eapply optim_mon with (2 := H); intros ? ? [<- ->]
-  | [ H : forall _ _, optim (?t _) _ |- optim (?t _) _ ] => eapply optim_mon with (2 := H _ _); intros ? ? []
-  (* | [ H : forall _, pessim (?t _) _ |- pessim (?t _) _ ] => eapply pessim_mon with (2 := H _) *)
+  | [ H : optimistic (?t _) _ |- optimistic (?t _) _ ] => eapply optimistic_mon with (1 := H); intros ? ? [<- ->]
+  | [ H : forall _ _, optimistic (?t _) _ |- optimistic (?t _) _ ] => eapply optimistic_mon with (1 := H _ _); intros ? ? []
   end.
 
 Ltac lucky_forward :=
-  repeat (forward1 + lucky_forward1).
+  repeat (mforward idtac + lucky_forward1).
 
 Lemma eta_Env g a (e : Env (g :,: a))
   : e = ECons (there e) (here e).
@@ -1009,8 +846,8 @@ Proof.
   - apply (f_equal fst) in IHBigStep; cbn in IHBigStep.
     destruct H0 as [ | ? ? ? ? ? [] ]; cbn in IHBigStep.
     + assumption.
-    + rewrite H2. rewrite !renameCtx_cat. f_equal.
-      assumption.
+    + rewrite H2.
+      rewrite renameCtx_cat. f_equal. assumption.
 Qed.
 
 Theorem BigStep_heap_increasing : forall g u (t : Tm g u) (e : Env g) g' (s' : Rnm g g') (e' : Env g') (v : Vl g' u) (n : nat),
@@ -1032,7 +869,7 @@ Proof.
   - apply eq_M_bind; [ apply Reflexive_eq_M | intros _ ].
     apply eq_M_bind; [ | auto ].
     apply eq_M_thunk.
-    destruct xs; cbn; [ apply Reflexive_eq_M | ].
+    destruct xs; cbn; [ | apply Reflexive_eq_M ].
     apply H.
 Qed.
 
@@ -1042,7 +879,7 @@ Lemma eq_M_foldrA {a b} (fnil fnil' : M b) (fcons fcons' : T a -> T b -> M b)
     (forall x y, eq_M (fcons x y) (fcons' x y)) ->
     eq_M (foldrA fnil fcons xs) (foldrA fnil' fcons' xs).
 Proof.
-  intros J1 J2; destruct xs; cbn; [ apply Reflexive_eq_M | apply eq_M_foldrA'; auto ].
+  intros J1 J2; destruct xs; cbn; [ apply eq_M_foldrA'; auto | apply Reflexive_eq_M ].
 Qed.
 
 Lemma evalRnm {g g'} u (t : Tm g u) (s : Rnm g g') (e : env g) (e' : env g')
@@ -1080,9 +917,9 @@ Proof.
 Qed.
 
 Lemma eq_M_optim {a} (u1 u2 : M a) r
-  : eq_M u1 u2 -> optim u1 r -> optim u2 r.
+  : eq_M u1 u2 -> u1 [[ r ]] -> u2 [[ r ]].
 Proof.
-  unfold optim, eq_M. firstorder eauto.
+  unfold optimistic, eq_M. firstorder eauto.
 Qed.
 
 Lemma evalVl_renameVl g a (e : Env g) (v : Vl g a) g' (s : Rnm g g') (e' : Env g')
@@ -1107,7 +944,7 @@ Proof.
   revert e g' s e' H; induction v; cbn; intros.
   - rewrite eta_Env in *; cbn. destruct (here e); cbn; f_equal.
     apply evalVl_renameVl.
-    intros ? x0. apply H.
+    intros ? ?. apply H.
   - rewrite eta_Env; cbn. apply IHv.
     intros ? vv. specialize (H _ (There vv)). cbn in H. rewrite eta_Env in H; apply H.
 Qed.
@@ -1125,14 +962,13 @@ in the [eval] semantics.
 (Recall [optim m r] means "there exists a pair in [m] satisfying the postcondition [r]") *)
 Theorem soundness : forall g u (t : Tm g u) (e : Env g) g' (s' : Rnm g g') (e' : Env g') (v : Vl g' u) (n : nat),
   BigStep t e s' e' v n ->
-  optim (eval t (evalEnv e)) (fun x0 n0 => evalVl (evalEnv e') v = x0 /\ n = n0).
+  (eval t (evalEnv e)) [[ fun x0 n0 => evalVl (evalEnv e') v = x0 /\ n = n0 ]].
 Proof.
   intros * H; induction H; cbn [eval evalEnv] in *; intros; lucky_forward.
-  - apply optim_thunk_skip.
+  - apply optimistic_skip.
     lucky_forward. firstorder.
-  - apply optim_thunk_eval.
-    lucky_forward.
-    eapply eq_M_optim; [ | eapply optim_mon; [ | eapply IHBigStep2 ] ].
+  - apply optimistic_thunk_go. lucky_forward.
+    eapply eq_M_optim; [ | relax; [ eapply IHBigStep2 | ] ].
     + apply Symmetric_eq_M, evalRnm.
       apply V_split; cbn.
       { revert H. apply BigStep_heap_increasing. }
@@ -1143,7 +979,7 @@ Proof.
     rewrite lookup_evalEnv. cbn.
     lucky_forward. firstorder.
   - rewrite lookup_evalEnv, <- H; cbn.
-    forward; firstorder.
+    mforward idtac; firstorder.
   - firstorder.
   - cbn. firstorder.
   - rewrite lookup_evalEnv, <- H.
@@ -1159,16 +995,16 @@ Proof.
   - rewrite lookup_evalEnv, <- H; cbn. lucky_forward. firstorder.
   - rewrite lookup_evalEnv, <- H; cbn. lucky_forward.
     destruct H0 as [ | ? ? ? ? ? [] ].
-    + apply optim_thunk_skip.
-      eapply eq_M_optim; [ | eapply optim_mon; [ | eapply IHBigStep ] ].
+    + apply optimistic_skip.
+      eapply eq_M_optim; [ | relax; [ eapply IHBigStep | ] ].
       * eapply Symmetric_eq_M, evalRnm.
         apply V_split; cbn; auto.
         apply V_split; cbn; auto.
       * cbn. intros ? ? []; auto.
-    + apply optim_thunk_eval.
-      revert H2; apply optim_mon.
+    + apply optimistic_thunk_go.
+      relax. apply H2.
       intros ? ? [].
-      eapply eq_M_optim; [ | eapply optim_mon; [ | eapply IHBigStep ]].
+      eapply eq_M_optim; [ | relax; [ eapply IHBigStep | ] ].
       * eapply Symmetric_eq_M, evalRnm.
         apply V_split; cbn; [ | f_equal; auto ].
         apply V_split; cbn; auto.
@@ -1268,7 +1104,7 @@ Qed.
 
 Definition eq_T' {a b : Type} (r : a -> b -> Prop) (x : T a) (y : T b) : Prop :=
   match x, y with
-  | Discarded, Discarded => True
+  | Undefined, Undefined => True
   | Thunk x, Thunk y => r x y
   | _, _ => False
   end.
@@ -1293,21 +1129,15 @@ Qed.
 (** Proof by induction on cost, which is luckily available already (otherwise we'd have
 to redefine the interpreter with fuel). *)
 Theorem adequacy_ : forall n g u (t : Tm g u) (f : env g),
-    pessim (eval t f) (fun (x0 : toType u) n0 =>
+    (eval t f) {{ fun (x0 : toType u) n0 =>
       n = n0 ->
       forall g0 (s0 : Rnm g g0) (e0 : Env g0),
         f = renameCtx s0 (evalEnv e0) ->
         exists g' (s' : Rnm g0 g') (e' : Env g') (v' : Vl g' u),
           evalVl (evalEnv e') v' = x0 /\
-          BigStep (rename s0 t) e0 s' e' v' n0).
+          BigStep (rename s0 t) e0 s' e' v' n0 }}.
 Proof.
   induction n as [n IH] using lt_wf_ind; intros *; destruct t; cbn; lucky_forward.
-  - intros y2 n2 Hy2 -> * Hf.
-    specialize (IH n2 ltac:(lia) _ _ _ _ _ _ Hy2 eq_refl _ (shift s0) (e0 :*: Discarded)).
-    prove_assum IH; [ cbn; f_equal; subst f; solve [auto using renameCtx_restr_shift] | ].
-    decomp IH.
-    eexists _, _, _, _. split; [ eassumption | ].
-    constructor; eassumption.
   - intros y1 n1 Hy1 y2 n2 Hy2 -> * Hf.
     assert (IH1 := IH n1 ltac:(lia) _ _ _ _ _ _ Hy1 eq_refl _ s0 e0 Hf).
     decomp IH1.
@@ -1328,6 +1158,13 @@ Proof.
     end.
     { etransitivity; [ apply Proper_rename, shift_cat_Rnm | apply rename_cat_Rnm]. }
     eassumption.
+  - intros y2 n2 Hy2 -> * Hf.
+    (* For unknown reasons, [lia] gets stuck here. *)
+    specialize (IH n2 ltac:(omega)  _ _ _ _ _ _ Hy2 eq_refl _ (shift s0) (e0 :*: Undefined)).
+    prove_assum IH; [ cbn; f_equal; subst f; solve [auto using renameCtx_restr_shift] | ].
+    decomp IH.
+    eexists _, _, _, _. split; [ eassumption | ].
+    constructor; eassumption.
   - intros y1 n1 Hy1 y2 n2 Hy2 -> * Hf.
     assert (IH1 := IH n1 ltac:(lia) _ _ _ _ _ _ Hy1 eq_refl _ s0 e0 Hf).
     decomp IH1.
@@ -1343,10 +1180,10 @@ Proof.
     rewrite rename_id in IH2.
     eexists _, _, _, _. split; [ eassumption | ].
     econstructor; try eassumption.
-  - apply pessim_force; intros ? H -> * Hf.
+  - intros ? H -> * Hf.
     rewrite Hf in H.
     rewrite lookup_renameCtx, lookup_evalEnv in H.
-    destruct (lookup' _ _) eqn:Elookup in H; cbn in H; [ discriminate | ].
+    destruct (lookup' _ _) eqn:Elookup in H; cbn in H; [ | discriminate ].
     injection H; intros J.
     eexists _, _, _, _. split; [ eassumption | ].
     constructor; auto.
@@ -1364,32 +1201,30 @@ Proof.
     split.
     { cbn. rewrite Hf, 2 lookup_renameCtx; reflexivity. }
     constructor.
-  - apply pessim_force; intros ? Hv.
-    apply pessim_force; intros ? Hfst.
+  - intros ? Hv. mforward idtac. intros ? Hfst.
     intros -> * Hf.
     rewrite Hf, lookup_renameCtx, lookup_evalEnv in Hv.
-    destruct (lookup' _ _) eqn:Hlookup in Hv; cbn in Hv; [ discriminate | ].
+    destruct (lookup' _ _) eqn:Hlookup in Hv; cbn in Hv; [ | discriminate ].
     injection Hv; clear Hv; intros Hv.
-    assert (Hv' := inv_Vl v2); cbn in Hv'; destruct Hv' as (x1 & X2 & ->).
+    assert (Hv' := inv_Vl x1); cbn in Hv'; destruct Hv' as (X1 & X2 & ->).
     cbn in Hv; rewrite <- Hv in Hfst; cbn in Hfst.
     rewrite lookup_evalEnv in Hfst.
-    destruct (lookup' _ _) eqn:Hlookup2 in Hfst; cbn in Hfst; [ discriminate |].
+    destruct (lookup' _ _) eqn:Hlookup2 in Hfst; cbn in Hfst; [ | discriminate ].
     injection Hfst; clear Hfst; intros Hfst.
-    eexists _, _, _, v2.
+    eexists _, _, _, x1.
     split; [ eassumption | ].
     econstructor; try eauto.
-  - apply pessim_force; intros ? Hv.
-    apply pessim_force; intros ? Hfst.
+  - intros ? Hv. mforward idtac. intros ? Hfst.
     intros -> * Hf.
     rewrite Hf, lookup_renameCtx, lookup_evalEnv in Hv.
-    destruct (lookup' _ _) eqn:Hlookup in Hv; cbn in Hv; [ discriminate | ].
+    destruct (lookup' _ _) eqn:Hlookup in Hv; cbn in Hv; [ | discriminate ].
     injection Hv; clear Hv; intros Hv.
-    assert (Hv' := inv_Vl v2); cbn in Hv'; destruct Hv' as (x1 & X2 & ->).
+    assert (Hv' := inv_Vl x1); cbn in Hv'; destruct Hv' as (X1 & X2 & ->).
     cbn in Hv; rewrite <- Hv in Hfst; cbn in Hfst.
     rewrite lookup_evalEnv in Hfst.
-    destruct (lookup' _ _) eqn:Hlookup2 in Hfst; cbn in Hfst; [ discriminate |].
+    destruct (lookup' _ _) eqn:Hlookup2 in Hfst; cbn in Hfst; [ | discriminate ].
     injection Hfst; clear Hfst; intros Hfst.
-    eexists _, _, _, v2.
+    eexists _, _, _, x1.
     split; [ eassumption | ].
     econstructor; try eauto.
   - intros -> * Hf.
@@ -1401,21 +1236,20 @@ Proof.
     split.
     { cbn. rewrite Hf, 2 lookup_renameCtx; reflexivity. }
     constructor.
-  - destruct (lookup v f) eqn:Hvf; cbn.
-    { apply pessim_force_Discarded. }
+  - destruct (lookup v f) eqn:Hvf; cbn; [ | mforward idtac].
     intros y1 n1 Hy1 En * Hf.
     rewrite Hf in Hvf.
     rewrite lookup_renameCtx, lookup_evalEnv in Hvf.
-    destruct (lookup' _ _) eqn:Hvf' in Hvf; cbn in Hvf; [ discriminate | ].
+    destruct (lookup' _ _) eqn:Hvf' in Hvf; cbn in Hvf; [ | discriminate ].
     injection Hvf; clear Hvf; intros Hvf.
-    assert (Hv := inv_Vl v1); cbn in Hv;
+    assert (Hv := inv_Vl x0); cbn in Hv;
       destruct Hv as [-> | (? & ? & ->)]; cbn in Hvf; rewrite <- Hvf in Hy1; cbn in Hy1.
     all: revert y1 n1 Hy1 En.
     all: lazymatch goal with
       | [ |- forall (_ : ?u) (_ : nat), ?t _ _ -> _ ] =>
         let r := fresh "r" in
         evar (r : u -> nat -> Prop);
-        enough (pessim t r); subst r; [ exact H | ]
+        enough (t {{ r }}); subst r; [ exact H | ]
       end.
     all: lucky_forward.
     + intros y1 n1 Hy1 ->.
@@ -1424,35 +1258,20 @@ Proof.
       eexists _, _, _, _.
       split; [ eassumption |].
       constructor; eauto.
-    + intros y1 n1 Hy1 ->.
-      assert (IH1 := IH n1 ltac:(lia) _ _ _ _ _ _ Hy1 eq_refl).
-      specialize (IH1 _ (shift (shift s0) >>> shiftAlgCons x id_Rnm) (e0 :*: Discarded)).
+    + intros. intros y1 n1 Hy1. intros y2 n2 Hy2 ->.
+      assert (IH1 := IH n1 ltac:(lia) _ _ (Foldr (rename s0 t1) (rename (shift (shift s0)) t2) x2) (evalEnv e0) y1 n1).
       prove_assum IH1.
-      { symmetry; apply renameCtx_ext; apply V_split; [ apply V_split | ]; intros; cbn.
-        - rewrite Hf, lookup_renameCtx. reflexivity.
-        - reflexivity.
-        - reflexivity. }
-      decomp IH1.
-      eexists _, _, _, _.
-      split; [ eassumption |].
-      eapply BigStep_Foldr_Node; eauto.
-      { constructor. }
-      { rewrite rename_cat_Rnm in IH1. eassumption. }
-    + intros y1 n1 Hy1. intros y2 n2 Hy2 ->.
-      assert (IH1 := IH n1 ltac:(lia) _ _ (Foldr (rename s0 t1) (rename (shift (shift s0)) t2) x0) (evalEnv e0) y1 n1).
-      prove_assum IH1.
-      { cbn; unfold foldrA.
-        revert Hy1. apply eq_M_forcing; [ reflexivity | intros ].
+      { cbn; unfold foldrA. rewrite H. cbn. revert Hy1. subst.
         apply eq_M_foldrA'.
-        + apply Symmetric_eq_M. apply evalRnm. intros; rewrite Hf; rewrite lookup_renameCtx.
+        + apply Symmetric_eq_M. apply evalRnm. intros. rewrite lookup_renameCtx.
           reflexivity.
         + intros. apply Symmetric_eq_M, evalRnm.
           apply V_split; [ apply V_split | ]; intros; cbn; try reflexivity.
-          rewrite Hf, lookup_renameCtx. reflexivity. }
+          rewrite lookup_renameCtx. reflexivity. }
       specialize (IH1 eq_refl _ id_Rnm e0).
       prove_assum IH1; [ rewrite renameCtx_id; reflexivity | ].
       decomp IH1; rewrite rename_id in IH1.
-      specialize (IH n2 ltac:(lia) _ _ t2 _ _ _ Hy2 eq_refl _ (shift (shift s0) >>> shiftAlgCons x s')).
+      specialize (IH n2 ltac:(lia) _ _ t2 _ _ _ Hy2 eq_refl _ (shift (shift s0) >>> shiftAlgCons x1 s')).
       specialize (IH (e' :*: Thunk v')).
       prove_assum IH.
       { symmetry; apply renameCtx_ext. apply V_split; [ apply V_split |]; cbn.
@@ -1465,6 +1284,20 @@ Proof.
       eapply BigStep_Foldr_Node; eauto.
       { constructor. eassumption. }
       { rewrite rename_cat_Rnm in IH. eassumption. }
+    + intros y1 n1 Hy1 ->.
+      assert (IH1 := IH n1 ltac:(omega) _ _ _ _ _ _ Hy1 eq_refl).
+      specialize (IH1 _ (shift (shift s0) >>> shiftAlgCons x1 id_Rnm) (e0 :*: Undefined)).
+      prove_assum IH1.
+      { symmetry; apply renameCtx_ext; apply V_split; [ apply V_split | ]; intros; cbn.
+        - rewrite Hf, lookup_renameCtx. reflexivity.
+        - reflexivity.
+        - reflexivity. }
+      decomp IH1.
+      eexists _, _, _, _.
+      split; [ eassumption |].
+      eapply BigStep_Foldr_Node; eauto.
+      { constructor. }
+      { rewrite rename_cat_Rnm in IH1. eassumption. }
   - intros -> * Hf.
     eexists _, _, _, (VBas _). split; [ reflexivity |].
     constructor.
@@ -1475,10 +1308,10 @@ of [t] corresponds to a pair [(v', n')] in the [BigStep] semantics,
 where [v'] is a (syntactic) value which evaluates to [x'].
 (Recall [pessim m r] means "all pairs in [m] satisfy the postcondition [r]".) *)
 Theorem adequacy g u (t : Tm g u) (e : Env g)
-  : pessim (eval t (evalEnv e)) (fun (x' : toType u) n' =>
-        exists g' (s' : Rnm g g') (e' : Env g') (v' : Vl g' u),
-          evalVl (evalEnv e') v' = x' /\
-          BigStep t e s' e' v' n').
+  : (eval t (evalEnv e))
+      {{ fun (x' : toType u) n' => exists g' (s' : Rnm g g') (e' : Env g') (v' : Vl g' u),
+             evalVl (evalEnv e') v' = x' /\
+             BigStep t e s' e' v' n' }}.
 Proof.
   intros y0 n0 Hy0.
   assert (AQ := adequacy_ t Hy0 eq_refl id_Rnm ltac:(rewrite renameCtx_id; reflexivity)).
