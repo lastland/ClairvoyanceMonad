@@ -1,0 +1,42 @@
+name: ClairvoyanceMonad
+
+on: [push, pull_request]
+
+jobs:
+  checking-coq:
+    name: Building ClairvoyanceMonad
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        ocaml: [4.07.1]
+        coq: [8.10.2, 8.11.2, 8.12.2, 8.13.2]
+    steps:
+      - name: Caching OPAM
+        id: caching-opam
+        uses: actions/cache@v2
+        with:
+          path: ~/.opam
+          key: opam-${{ runner.os }}-coq${{ matrix.coq }}
+      - name: Set up OCaml
+        uses: avsm/setup-ocaml@v1
+        with:
+          ocaml-version: ${{ matrix.ocaml }}
+      - name: Initialize OPAM
+        if: steps.caching-opam.outputs.cache-hit != 'true'
+        run: |
+          opam init -j 2 -n -y
+      - name: Set up Coq
+        run: |
+          opam repo add coq-released http://coq.inria.fr/opam/released || true
+          opam update
+          opam install -v -y -j 1 --unlock-base coq.${{ matrix.coq }}
+          opam pin coq ${{ matrix.coq }}
+          opam install -y coq-equations
+      - name: Checkout the repository
+        uses: actions/checkout@v2
+      - name: Compiling Coq files
+        run: |
+          eval $(opam config env)
+          coq_makefile -f _CoqProject -o Makefile
+          make -j
