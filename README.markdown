@@ -29,4 +29,4 @@ opam repo add coq-released https://coq.inria.fr/opam/released
 opam install coq-equations
 ```
 
-The code works with Coq versions 8.10.2 and 8.12.0.
+The code works with Coq versions 8.10.2, 8.11.2, 8.12.2, and 8.13.2.
