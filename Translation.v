@@ -23,7 +23,7 @@ Axiom prop_ext : forall P Q, (P <-> Q) -> P = Q.
 (**)
 
 From Coq Require Import
-     Arith Psatz Omega Setoid Morphisms.
+     Arith Psatz Setoid Morphisms.
 
 Require Import Clairvoyance.
 
@@ -1118,8 +1118,7 @@ Proof.
     { etransitivity; [ apply Proper_rename, shift_cat_Rnm | apply rename_cat_Rnm]. }
     eassumption.
   - intros y2 n2 Hy2 -> * Hf.
-    (* For unknown reasons, [lia] gets stuck here. *)
-    specialize (IH n2 ltac:(omega)  _ _ _ _ _ _ Hy2 eq_refl _ (shift s0) (e0 :*: Undefined)).
+    specialize (IH n2 ltac:(simpl; lia)  _ _ _ _ _ _ Hy2 eq_refl _ (shift s0) (e0 :*: Undefined)).
     prove_assum IH; [ cbn; f_equal; subst f; solve [auto using renameCtx_restr_shift] | ].
     decomp IH.
     eexists _, _, _, _. split; [ eassumption | ].
@@ -1244,7 +1243,7 @@ Proof.
       { constructor. eassumption. }
       { rewrite rename_cat_Rnm in IH. eassumption. }
     + intros y1 n1 Hy1 ->.
-      assert (IH1 := IH n1 ltac:(omega) _ _ _ _ _ _ Hy1 eq_refl).
+      assert (IH1 := IH n1 ltac:(simpl; lia) _ _ _ _ _ _ Hy1 eq_refl).
       specialize (IH1 _ (shift (shift s0) >>> shiftAlgCons x1 id_Rnm) (e0 :*: Undefined)).
       prove_assum IH1.
       { symmetry; apply renameCtx_ext; apply V_split; [ apply V_split | ]; intros; cbn.
