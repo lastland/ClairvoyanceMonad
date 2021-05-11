@@ -341,7 +341,7 @@ Proof.
   induction xs; cbn; intros; lia.
 Qed.
 
-Hint Resolve sizeX'_ge_1 : core.
+#[global] Hint Resolve sizeX'_ge_1 : core.
 
 Lemma sizeX_ge_1 {a} : forall (xs : listA a),
     1 <= sizeX 1 (Thunk xs).
@@ -349,7 +349,7 @@ Proof.
   simpl; auto.
 Qed.
 
-Hint Resolve sizeX_ge_1 : core.
+#[global] Hint Resolve sizeX_ge_1 : core.
 
 Definition is_defined {a} (t : T a) : Prop :=
   match t with
@@ -361,7 +361,7 @@ Definition is_defined {a} (t : T a) : Prop :=
 
 Class Exact a b : Type := exact : a -> b.
 
-Hint Unfold exact : core.
+#[global] Hint Unfold exact : core.
 
 Instance Exact_T_Instance {a b} {r: Exact a b } : Exact a (T b) 
   := fun x => Thunk (exact x).
@@ -373,8 +373,8 @@ exact_listA (cons y ys) := ConsA (Thunk (exact y)) (Thunk (exact_listA ys)).
 Instance Exact_list_Instance {a b} `{Exact a b} : Exact (list a) (listA b) :=
   exact_listA.
 
-Hint Unfold Exact_T_Instance : core.
-Hint Unfold Exact_list_Instance : core.
+#[global] Hint Unfold Exact_T_Instance : core.
+#[global] Hint Unfold Exact_list_Instance : core.
 
 Instance Exact_fun {a1 b1 a2 b2} `{Exact b1 a1} `{Exact a2 b2} 
   : Exact (a1 -> a2) (b1 -> b2) 
@@ -383,7 +383,7 @@ Instance Exact_fun {a1 b1 a2 b2} `{Exact b1 a1} `{Exact a2 b2}
 Class LessDefined a := less_defined : a -> a -> Prop.
 Infix "`less_defined`" := less_defined (at level 42).
 
-Hint Unfold less_defined : core.
+#[global] Hint Unfold less_defined : core.
 
 Class LessDefinedOrder a (H: LessDefined a) :=
   { less_defined_preorder : PreOrder H ;
@@ -399,11 +399,11 @@ Inductive LessDefined_T {a : Type} `{LessDefined a} : relation (T a) :=
 | LessDefined_Thunk :
     forall x y, x `less_defined` y -> LessDefined_T (Thunk x) (Thunk y).
 
-Hint Constructors LessDefined_T : core.
+#[global] Hint Constructors LessDefined_T : core.
 
 Instance Lift_T {a} `{LessDefined a} : LessDefined (T a) := LessDefined_T.
 
-Hint Unfold Lift_T : core.
+#[global] Hint Unfold Lift_T : core.
 
 Instance PreOrder_Lift_T {a : Type} `{Ho : LessDefinedOrder a} : PreOrder Lift_T.
 Proof.
@@ -459,7 +459,7 @@ Inductive LessDefined_list {a : Type} `{LessDefined a} : listA a -> listA a -> P
     @Lift_T _ LessDefined_list xs ys ->
     LessDefined_list (ConsA x xs) (ConsA y ys).
 
-Hint Constructors LessDefined_list : core.
+#[global] Hint Constructors LessDefined_list : core.
 
 (** We need our own induction principle because of nested inductive types. *)
 Lemma LessDefined_list_ind :
@@ -489,7 +489,7 @@ Set Elimination Schemes.
 Instance Lift_list {a : Type} `{LessDefined a} : LessDefined (listA a) :=
   LessDefined_list.
 
-Hint Unfold Lift_list : core.
+#[global] Hint Unfold Lift_list : core.
 
 Instance PreOrder_Lift_list {a : Type} `{Ho : LessDefinedOrder a} : PreOrder Lift_list.
 Proof.
@@ -557,7 +557,7 @@ Definition is_approx {a b} { _ : Exact b a} {_:LessDefined a} (xA : a) (x : b) :
   xA `less_defined` exact x.
 Infix "`is_approx`" := is_approx (at level 42).
 
-Hint Unfold is_approx : core.
+#[global] Hint Unfold is_approx : core.
 
 (* This is a consequence of transitivity. *)
 Lemma approx_down {a b} `{Hld : LessDefined a} `{Exact b a} {_ : LessDefinedOrder Hld}:
@@ -572,8 +572,8 @@ Instance Exact_id {a} : Exact a a := id.
 (** Set a very low priority for the following: *)
 Instance LessDefined_id {a} : LessDefined a | 100 := eq.
 
-Hint Unfold Exact_id : core.
-Hint Unfold LessDefined_id : core.
+#[global] Hint Unfold Exact_id : core.
+#[global] Hint Unfold LessDefined_id : core.
 
 (* Tactics for working with optimistic and pessimistic specs *)
 Ltac relax :=

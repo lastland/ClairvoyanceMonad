@@ -1,6 +1,8 @@
 .lia.cache
 .coqdeps.d
 *.vo
+*.vos
+*.vok
 *.glob
 *.aux
 Makefile
