@@ -25,7 +25,8 @@ Axiom prop_ext : forall P Q, (P <-> Q) -> P = Q.
 From Coq Require Import
      Arith Psatz Setoid Morphisms.
 
-Require Import Clairvoyance.
+From Clairvoyance Require Import
+     Clairvoyance.
 
 Set Implicit Arguments.
 Set Contextual Implicit.
