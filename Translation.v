@@ -12,10 +12,6 @@ Putting those together, the equivalence is made explicit in
 [soundness_and_adequacy].
  *)
 
-(** Many of the definitions here duplicate with those in
-    [Clairvoyance.v]. To skip to the part related to Section 4 of the
-    paper, skip to the [Lambda] module. *)
-
 (* AXIOMS: We use functional and propositional extensionality.
 We can probably avoid them with more setoid-based reasoning. *)
 
@@ -67,15 +63,6 @@ Proof.
   unfold eq_M. firstorder.
   repeat eexists; eauto. apply H; eauto. apply H0; eauto.
   repeat eexists; eauto. apply H; eauto. apply H0; eauto.
-Qed.
-
-Lemma eq_M_forcing {a b} (x1 x2 : T a) (k1 k2 : a -> M b)
-  : x1 = x2 ->
-    (forall x, eq_M (k1 x) (k2 x)) ->
-    eq_M (forcing x1 k1) (forcing x2 k2).
-Proof.
-  intros <- H; destruct x1; cbn; auto.
-  firstorder.
 Qed.
 
 Lemma eq_M_thunk {a} (u1 u2 : M a) : eq_M u1 u2 -> eq_M (thunk u1) (thunk u2).
@@ -376,24 +363,6 @@ Inductive Vl (g : Ctx) : Ty -> Type :=
 | VCons a : V g a -> V g (List a) -> Vl g (List a)
 | VBas b : b -> Vl g (Base b)
 .
-
-(*
-Definition Vl_ind {g} (P : forall a, Vl g a -> Prop)
-  : (forall a b t1, P (Arr a b) (VLam t1)) ->
-    (forall a b t1 t2, T_prop (P a) t1 -> T_prop (P b) t2 -> P (Prod a b) (VPair t1 t2)) ->
-    P Tree VLeaf ->
-    (forall t1 t2, T_prop (P Tree) t1 -> T_prop (P Tree) t2 -> P Tree (VNode t1 t2)) ->
-    (forall b x, P (Base b) (VBas x)) ->
-    (forall a v, P a v).
-Proof.
-  intros A B Lf Nd C. fix SELF 2; intros ? [].
-  - apply A.
-  - apply B; lazymatch goal with [ |- _ _ ?t ] => destruct t end; cbn; constructor + auto.
-  - apply Lf.
-  - apply Nd; lazymatch goal with [ |- _ _ ?t ] => destruct t end; cbn; constructor + auto.
-  - apply C.
-Qed.
-*)
 
 Set Elimination Schemes.
 
@@ -1012,16 +981,6 @@ Proof.
       * cbn. intros ? ? []; auto.
   - firstorder.
 Qed.
-
-(*
-Fixpoint eq_by_Ty (u : Ty) : toType u -> toType u -> Prop :=
-  match u return toType u -> toType u -> Prop with
-  | Arr u1 u2 => fun f g => forall x, eq_M eq_by_Ty (f x) (g x)
-  | Prod u1 u2 => _
-  | List u0 => _
-  | Base b => _
-  end.
-*)
 
 Ltac decomp H :=
   lazymatch type of H with
