@@ -1005,18 +1005,18 @@ Qed.
 Definition foldr_pessim {a b bA} `{LessDefined bA} `{LessDefined (T bA)} `{Exact b bA} :
 (** The pessimistic specification of [foldrA]. *)
 forall f (xs : list a) (xsA : T (listA a)) (v : b) (vA : T bA),
-  xsA `is_approx` xs ->  vA `is_approx` v ->
   (forall x y, (f x y) {{ fun bA cost => cost = 1 }}) ->
+  xsA `is_approx` xs ->  vA `is_approx` v ->
   (foldrA f vA xsA)
     {{ fun zsA cost => cost >= 1 /\ cost <= 2 * sizeX 0 xsA + 1 }}.
 (* end foldr_pessim *)
 Proof.
-  intros f xs xsA v vA Hxs. revert v vA.
+  intros f xs xsA v vA Hf Hxs. revert v vA.
   unfold foldrA. funelim (exact_listA xs); mgo_list.
   - specialize (H0 _ _ _ _ _ f (Thunk x)).
     relax. eapply H0; try eassumption.
-    mgo_list. relax_apply H4. mgo_list.
-  - relax_apply H4. cbn. intros. subst.
+    mgo_list. relax_apply Hf. mgo_list.
+  - relax_apply Hf. cbn. intros. subst.
     destruct xs; cbn; lia.
     (* Without [cbn], [lia] would take a very long time simply on [1 <=
        2 <= 3]. I don't know why. *)
