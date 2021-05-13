@@ -892,7 +892,7 @@ Definition take'A {a : Type} (n : nat) (xs : T (listA a)) : M (listA a) :=
   forcing xs (fun xs' => take'A_ n xs' (Thunk NilA)).
 
 Theorem take'A__pessim {a} : 
-forall (n : nat) (xs : list a) (xsA : listA a) (acc : list a) (accA : T (listA a)) ,
+forall (n : nat) (xs : list a) (xsA : listA a) (acc : list a) (accA : T (listA a)),
   xsA `is_approx` xs ->  accA `is_approx` acc ->
   (take'A_ n xsA accA) {{ fun zsA cost => cost = min n (length xs) + 1 }}.
 Proof.
@@ -911,7 +911,7 @@ Proof.
 Qed.
   
 Definition takeA__pessim {a} : 
-forall (n : nat) (xs : list a) (xsA : T (listA a)) ,
+forall (n : nat) (xs : list a) (xsA : T (listA a)),
   xsA `is_approx` xs ->
   (takeA n xsA) {{ fun zsA cost => cost <= min n (sizeX 0 xsA) + 1 }}.
 Proof.
@@ -924,7 +924,7 @@ Proof.
 Qed.
 
 Definition takeA__optim {a} : 
-forall (n m : nat) (xs : list a) (xsA : T (listA a)) ,
+forall (n m : nat) (xs : list a) (xsA : T (listA a)),
   1 <= m ->  m <= min (n + 1) (sizeX 1 xsA) ->
   xsA `is_approx` xs ->
   (takeA n xsA) [[ fun zsA cost => cost = m ]].
