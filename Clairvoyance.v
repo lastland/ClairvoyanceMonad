@@ -31,6 +31,7 @@ Definition p {a} (n : nat) (xs ys : list a) : list a :=
 
 (* ---------------------- Section 3: The Clairvoyance Monad ---------------------- *)
 
+Section ClairvoyanceMonad.
 
 (* Figure 4 *)
 
@@ -71,6 +72,7 @@ Definition forcing {a b} (t : T a) (f : a -> M b) : M b :=
 (* Force a thunk. *)
 Definition force {a} (t : T a) : M a := forcing t ret.
 
+End ClairvoyanceMonad.
 
 (* Notation for working with the Monad *)
 
@@ -79,7 +81,6 @@ Notation "t >> s" := (bind t (fun _ => s)) (at level 61, left associativity).
 Notation "'let!' x' ':=' t 'in' s" := (bind t (fun x' => s)) (x' as pattern, at level 90).
 Notation "'let~' x  ':=' t 'in' s" := (bind (thunk t) (fun x => s)) (x as pattern, at level 90).
 Notation "f $! x" := (forcing x f) (at level 61, left associativity).
-
 
 (* ---------------------- Section 4: Translation ---------------------- *)
 
@@ -113,6 +114,8 @@ Set Elimination Schemes.
 
 
 (* Fig 9. Definition of the foldrA function used in the translation of foldr *)
+
+Section TranslationExample.
 
 Fixpoint foldrA' {a b} (n : M b) (c : T a -> T b -> M b) (x' : listA a) : M b :=
   tick >>
@@ -158,6 +161,8 @@ Definition pA {a} (n : nat) (xs ys : T (listA a)) : M (listA a) :=
   let~ t := appendA xs ys in
   takeA n t.
 
+End TranslationExample.
+
 (* ---------------------- Section 5: Formal Reasoning ----------------- *)
 
 
@@ -179,6 +184,9 @@ Notation " u [[ r ]] " := (optimistic  u r) (at level 42).
 (** During proof, we almost always use [eapply] with this theorem, and in those
     cases, it is more useful to prove [u {{ r }}] first (usually by applying an
     existing lemma) than proving the logical implication. *)
+
+Section InferenceRules.
+
 Lemma pessimistic_mon {a} (u : M a) (r r' : a -> nat -> Prop)
   : u {{ r }} ->
     (forall x n, r x n -> r' x n) ->
@@ -319,6 +327,8 @@ Proof.
   intros ? ?. destruct H0 as (? & ? & ? & ?).
   exists x, x0. auto.
 Qed.
+
+End InferenceRules.
 
 (* ----------------- Section 5.3 ----------------- *)
 

@@ -150,6 +150,8 @@ Qed.
 
 Module Lambda.
 
+(** * The calculus with folds. *)
+
 (** Syntax *)
 
 Inductive Ty : Type :=
@@ -207,6 +209,8 @@ Qed.
 
 Set Elimination Schemes.
 
+(** * The type translation. *)
+
 Fixpoint toType (u : Ty) : Type :=
   match u with
   | Arr u1 u2 => T (toType u1) -> M (toType u2)
@@ -227,6 +231,8 @@ Fixpoint lookup {g u} (v : V g u) : env g -> T (toType u) :=
   | There v1 => fun ex => lookup v1 (fst ex)
   end.
 
+(** * Definitions of [foldrA]. *)
+
 Fixpoint foldrA' {a b} (n : M b) (c : T a -> T b -> M b) (x' : ListA a)
   : M b :=
   let! _ := tick in
@@ -240,6 +246,8 @@ Fixpoint foldrA' {a b} (n : M b) (c : T a -> T b -> M b) (x' : ListA a)
 Definition foldrA {a b} (n : M b) (c : T a -> T b -> M b)
     (x : T (ListA a)) : M b :=
   foldrA' n c $! x.
+
+(** * The term translation. *)
 
 Fixpoint eval {g u} (t : Tm g u) : env g -> M (toType u) := fun e =>
   match t with
