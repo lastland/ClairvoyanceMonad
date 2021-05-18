@@ -54,7 +54,8 @@ This will invoke Coq to check the proofs in files `Clairvoyance.v` and
 `Translation.v`.
 
 On the author's laptop, the command takes around 10 seconds. The actual
-execution time may vary depending on the machine you are using.
+execution time may vary depending on the machine and the Coq version you are
+using.
 
 ### Checking axioms
 

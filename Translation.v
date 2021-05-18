@@ -1,4 +1,5 @@
-(** A formalization of "Call-by-need is Clairvoyant Call-by-value".
+(** A formalization of the Section 4 of the paper [Reasoning about the
+garden of forking paths].
 
 Semantics:
 - [BigStep]: Hackett & Hutton's Clairvoyant CBV (operational semantics)
@@ -12,38 +13,41 @@ Putting those together, the equivalence is made explicit in
 [soundness_and_adequacy].
  *)
 
-(* AXIOMS: We use functional and propositional extensionality.
-We can probably avoid them with more setoid-based reasoning. *)
+Set Implicit Arguments.
+Set Contextual Implicit.
+
+From Coq Require Import Arith Psatz Setoid Morphisms.
+
+From Clairvoyance Require Import Clairvoyance.
+
+(** * Axioms
+
+We use functional and propositional extensionality. *)
 
 From Coq Require Import FunctionalExtensionality.
 
 (* Propositional extensionality *)
 Axiom prop_ext : forall P Q, (P <-> Q) -> P = Q.
 
-(**)
-
-From Coq Require Import
-     Arith Psatz Setoid Morphisms.
-
-From Clairvoyance Require Import
-     Clairvoyance.
-
-Set Implicit Arguments.
-Set Contextual Implicit.
 
 Declare Scope ctx_scope.
 
+(** * Helper functions. *)
+
+(** The [fmap] function for the thunk datatype [T]. *)
 Definition mapT {a b} (f : a -> b) (t : T a) : T b :=
   match t with
   | Undefined => Undefined
   | Thunk x => Thunk (f x)
   end.
 
-Definition T_prop {a} (f : a -> Prop) : T a -> Prop :=
-  fun t => match t with
-           | Undefined => True
-           | Thunk x => f x
-        end.
+Definition T_prop {a} (f : a -> Prop) (t : T a) : Prop :=
+  match t with
+  | Undefined => True
+  | Thunk x => f x
+  end.
+
+(** * Extensional equality and inequality on [M]. *)
 
 Definition le_M {a} (t t' : M a) : Prop :=
   forall x n, t' x n -> exists n', t x n' /\ n' <= n.
@@ -56,36 +60,50 @@ Delimit Scope M_scope with M.
 Infix "<=" := le_M : M_scope.
 Infix "=" := eq_M : M_scope.
 
+(** The extensional equality [eq_M] is reflexive. *)
+Lemma Reflexive_eq_M {a} (u : M a) : eq_M u u.
+Proof. firstorder. Qed.
+
+(** The extensional equality [eq_M] is symmetric. *)
+Lemma Symmetric_eq_M {a} (u v : M a) : eq_M u v -> eq_M v u.
+Proof. firstorder. Qed.
+
+(** [le_M] is reflexive. *)
+Lemma Reflexive_le_M {a} (u : M a) : (u <= u)%M.
+Proof.
+  red; firstorder.
+Qed.
+
+(** * Lemmas for [eq_M]. *)
+
+(** A reasoning rule for extensional equality on [M]: if [u1] and [u2] are
+    equal, and [k1] and [k2] are equal, then [bind u1 k1] and [bind u2 k2] are
+    also equal. *)
 Lemma eq_M_bind {a b} (u1 u2 : M a) (k1 k2 : a -> M b)
-  : eq_M u1 u2 ->
-    (forall x, eq_M (k1 x) (k2 x)) ->
-    eq_M (bind u1 k1) (bind u2 k2).
+  : (u1 = u2)%M ->
+    (forall x, (k1 x = k2 x)%M) ->
+    (bind u1 k1 =bind u2 k2)%M.
 Proof.
   unfold eq_M. firstorder.
   repeat eexists; eauto. apply H; eauto. apply H0; eauto.
   repeat eexists; eauto. apply H; eauto. apply H0; eauto.
 Qed.
 
-Lemma eq_M_thunk {a} (u1 u2 : M a) : eq_M u1 u2 -> eq_M (thunk u1) (thunk u2).
+(** Similar to the above theorem but for [thunk]s. *)
+Lemma eq_M_thunk {a} (u1 u2 : M a) :
+  (u1 = u2)%M -> (thunk u1 = thunk u2)%M.
 Proof.
   intros H [] ?; cbn; auto. reflexivity.
 Qed.
 
-Lemma eq_M_ret {a} (x1 x2 : a) : x1 = x2 -> eq_M (ret x1) (ret x2).
+(** Similar to the above theorem but for [ret]s. *)
+Lemma eq_M_ret {a} (x1 x2 : a) :
+  x1 = x2 -> (ret x1 = ret x2)%M.
 Proof.
   unfold eq_M. firstorder congruence.
 Qed.
 
-Lemma Reflexive_eq_M {a} (u : M a) : eq_M u u.
-Proof. firstorder. Qed.
-
-Lemma Symmetric_eq_M {a} (u v : M a) : eq_M u v -> eq_M v u.
-Proof. firstorder. Qed.
-
-Lemma Reflexive_le_M {a} (u : M a) : (u <= u)%M.
-Proof.
-  red; firstorder.
-Qed.
+(** * Lemmas for [le_M]. *)
 
 Lemma bind_le {a b} (u1 u2 : M a) (k1 k2 : a -> M b)
   : (u1 <= u2)%M ->
@@ -128,8 +146,12 @@ Proof.
   unfold le_M. contradiction.
 Qed.
 
-Lemma bind_tick {a b} (u : M a) (k : a -> M b)
-  : (bind u (fun x => bind tick (fun _ => k x)) = bind tick (fun _ => bind u k))%M.
+(** * Simplifying ticks.
+    
+    The theorems justify the rewrite rules discussed in Section 4.4. *)
+
+Lemma bind_tick {a b} (t : M a) (k : a -> M b)
+  : (bind t (fun x => tick >> k x) = tick >> bind t k)%M.
 Proof.
   unfold bind, tick, eq_M. firstorder.
   - eexists tt, 1, _. split; auto.
@@ -139,7 +161,7 @@ Proof.
 Qed.
 
 Lemma thunk_tick {a} (u : M a)
-  : (thunk (bind tick (fun _ => u)) <= bind tick (fun _ => thunk u))%M.
+  : (thunk (tick >> u) <= tick >> thunk u)%M.
 Proof.
   unfold thunk, bind, tick, le_M; firstorder.
   destruct x.
@@ -152,7 +174,9 @@ Module Lambda.
 
 (** * The calculus with folds. *)
 
-(** Syntax *)
+(** * Fig. 6. *)  
+
+(** Types. *)
 
 Inductive Ty : Type :=
 | Arr  : Ty -> Ty -> Ty  (* Functions *)
@@ -160,6 +184,8 @@ Inductive Ty : Type :=
 | List : Ty -> Ty  (* A basic recursive data type: List a = Unit + a * List a *)
 | Base : Type -> Ty  (* Base types are arbitrary types of the host language (Coq) *)
 .
+
+(** Context. *)
 
 Inductive Ctx : Type :=
 | NilCtx
@@ -173,7 +199,7 @@ Inductive V : Ctx -> Ty -> Type :=
 | There g x y : V g y -> V (g :,: x) y
 .
 
-(* A lambda calculus with primitive fold. *)
+(** Terms. *)
 
 Inductive Tm (g : Ctx) : Ty -> Type :=
 | Let a b : Tm g a -> Tm (g :,: a) b -> Tm g b
