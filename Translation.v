@@ -176,8 +176,12 @@ Module Lambda.
 
 (** * Fig. 6. *)  
 
-(** Types. *)
-
+(** Types.
+    
+    Our formalization of the calculus contains generalizes what we present in
+    the paper. In particular, (1) we add a product type, and (2) we generalize
+    the [unit] type of Fig. 6 to a base type of arbitrary types of the host
+    language (Coq). *)
 Inductive Ty : Type :=
 | Arr  : Ty -> Ty -> Ty  (* Functions *)
 | Prod : Ty -> Ty -> Ty  (* Products *)
@@ -185,8 +189,17 @@ Inductive Ty : Type :=
 | Base : Type -> Ty  (* Base types are arbitrary types of the host language (Coq) *)
 .
 
-(** Context. *)
+(** Context.
 
+    We are using a nameless representation adapted from de Bruijn indices here.
+    
+    Learn more about de Bruijn indices here:
+    [https://en.wikipedia.org/wiki/De_Bruijn_index]
+
+    Instead of using natural numbers as in de Bruijn indices, we use an index to
+    lists. [Ctx] is a list of types representing the context. And the variable
+    representation [V] is an index to that list, which is essentially a natural
+    number but with type information embedded in it. *)
 Inductive Ctx : Type :=
 | NilCtx
 | ConsCtx : Ctx -> Ty -> Ctx
@@ -194,6 +207,8 @@ Inductive Ctx : Type :=
 
 Infix ":,:" := ConsCtx (at level 50).
 
+(** The variable representation. See explanations above in the comments of the
+    [Ctx] data type. *)
 Inductive V : Ctx -> Ty -> Type :=
 | Here g x : V (g :,: x) x
 | There g x y : V g y -> V (g :,: x) y
@@ -215,14 +230,21 @@ Inductive Tm (g : Ctx) : Ty -> Type :=
 | Bas (b : Type) : b -> Tm g (Base b)
 .
 
-(** Denotational semantics (our contribution) *)
+(* ---------------------- Denotational semantics (our contribution) ---------------------- *)
 
+(** * The approximation of [List]s. *)
 Unset Elimination Schemes.
+
 Inductive ListA (a : Type) : Type :=
 | NilA : ListA a
 | ConsA : T a -> T (ListA a) -> ListA a
 .
 
+(* For [ListA], we need to define our own induction principle because Coq cannot
+   generate the correct induction principles for nested inductive datatypes.
+
+   See the [Nested Inductive Types] section in CPDT
+   (http://adam.chlipala.net/cpdt/html/Cpdt.InductiveTypes.html). *)
 Definition ListA_ind {a} (P : ListA a -> Prop)
     (H_NilA : P NilA)
     (H_ConsA : forall x xs, T_prop P xs -> P (ConsA x xs))
@@ -237,6 +259,10 @@ Set Elimination Schemes.
 
 (** * The type translation. *)
 
+(** * Fig. 7 *)
+
+(** We translate the types in the calculus with folds to the types in
+    Gallina. *)
 Fixpoint toType (u : Ty) : Type :=
   match u with
   | Arr u1 u2 => T (toType u1) -> M (toType u2)
@@ -245,17 +271,22 @@ Fixpoint toType (u : Ty) : Type :=
   | Base b => b
   end.
 
+(** Traslating the context [Ctx] to a left-associated nested product type. *)
 Fixpoint env (g : Ctx) : Type :=
   match g with
   | NilCtx => unit
   | ConsCtx g1 u => env g1 * T (toType u)
   end.
 
+(** Use the variable representation [V] to find the type of a variable from the
+    context. *)
 Fixpoint lookup {g u} (v : V g u) : env g -> T (toType u) :=
   match v with
   | Here => fun ex => snd ex
   | There v1 => fun ex => lookup v1 (fst ex)
   end.
+
+(** * Fig. 9 *)
 
 (** * Definitions of [foldrA]. *)
 
@@ -273,8 +304,12 @@ Definition foldrA {a b} (n : M b) (c : T a -> T b -> M b)
     (x : T (ListA a)) : M b :=
   foldrA' n c $! x.
 
-(** * The term translation. *)
+(** * Fig. 8 *)
 
+(** * The term translation.
+
+    We are denoting the calculus with folds using Gallina here, so we call the
+    denotation [eval].  *)
 Fixpoint eval {g u} (t : Tm g u) : env g -> M (toType u) := fun e =>
   match t with
   | Let t1 t2 => fun e =>
@@ -303,8 +338,11 @@ Fixpoint eval {g u} (t : Tm g u) : env g -> M (toType u) := fun e =>
   | Bas b => fun _ => ret b
   end e.
 
-(** Example: append *)
+(** Example: append
 
+    This is an [appendA] we translate from [append] written in the calculus with
+    folds. For code presented in Fig. 10, which is a translation from the code
+    written in Gallina in Fig. 1, refer to the [Clairvoyance.v] file. *)
 Notation V0 := Here.
 Notation V1 := (There Here).
 
@@ -326,11 +364,10 @@ Definition appendA {a} (xs ys : T (ListA a)) : M (ListA a) :=
   (fun xs => appendA_ xs ys) $! xs.
 
 (** The costs of [append] and [appendA] are asymptotically equivalent. Informally:
-cost(appendA) <= cost(append) <= 2 * cost(appendA)
+    cost(appendA) <= cost(append) <= 2 * cost(appendA)
 
-The two main theorems are [appendA_le_append] and [append_le_appendA].
+    The two main theorems are [appendA_le_append] and [append_le_appendA].
 *)
-
 Lemma appendA_le_append_ {a} (xs : ListA (toType a)) (ys : T (ListA (toType a)))
   : (appendA_ xs ys <= eval (Foldr (g := NilCtx :,: _ :,: _) (Var V0) (Cons V1 V0) V1) (tt, Thunk xs, ys))%M.
 Proof.
@@ -386,20 +423,22 @@ Proof.
   - intros ? ? [].
 Qed.
 
-(** Operational semantics (from the paper, Figure 3) *)
+(** * Operational semantics of Hackett & Hutton (2019).
 
-Unset Elimination Schemes.
+    In this part, we formalize the operational semantics presented in Fig. 3 of
+    Hackett & Hutton (2019). The paper can be found at:
+    [https://dl.acm.org/doi/10.1145/3341718] *)
 
-(* Syntactic values are closures and base values. *)
-Inductive Vl (g : Ctx) : Ty -> Type :=
+(** Syntactic values.
+
+    Syntactic values are closures and base values. *)
+Variant Vl (g : Ctx) : Ty -> Type :=
 | VLam a b : Tm (g :,: a) b -> Vl g (Arr a b)
 | VPair a b : V g a -> V g b -> Vl g (Prod a b)
 | VNil a : Vl g (List a)
 | VCons a : V g a -> V g (List a) -> Vl g (List a)
 | VBas b : b -> Vl g (Base b)
 .
-
-Set Elimination Schemes.
 
 Inductive Env : Ctx -> Type :=
 | ENil : Env NilCtx
@@ -685,7 +724,7 @@ Proof.
   - eapply H11; eauto.
 Qed.
 
-(** Correspondence between the two semantics *)
+(** * Correspondence between the two semantics *)
 
 (** Auxiliary evaluation functions. *)
 
@@ -704,7 +743,7 @@ Fixpoint evalEnv {g} (e : Env g) : env g :=
   | ECons e1 v => (evalEnv e1, mapT (evalVl (evalEnv e1)) v)
   end.
 
-(** Proof (soundness, then adequacy). *)
+(** Proofs (soundness, then adequacy). *)
 
 Inductive eq_T {a b} (r : a -> b -> Prop) : T a -> T b -> Prop :=
 | eq_T_Discarded : eq_T r Undefined Undefined
@@ -960,6 +999,10 @@ Proof.
   reflexivity.
 Qed.
 
+(** * Theorem 4.1
+
+    The backward direction: (2) -> (1). *)
+
 (** If [t] evaluates to value-cost pair [(v, n)] in the [BigStep] simantics
 (Hacket & Hutton's Clairvoyant CBV), then [t] evaluates to [(evalVl _ v, n)]
 in the [eval] semantics.
@@ -1119,6 +1162,10 @@ Lemma inv_Vl g u (v : Vl g u)
 Proof.
   destruct v; cbn; eauto.
 Qed.
+
+(** * Theorem 4.1
+
+    The forward direction: (1) -> (2). *)
 
 (** Proof by induction on cost, which is luckily available already (otherwise we'd have
 to redefine the interpreter with fuel). *)
