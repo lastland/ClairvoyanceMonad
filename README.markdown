@@ -65,17 +65,19 @@ extensionality.
 The artifact does not contain any unfinished/admitted proofs. There are two ways
 to check the axioms our proofs rely on:
 
-(1) You can search keywords such as `admit` or `Axiom`, etc.:
+(1) You can search keywords such as `admit` or `Axiom`:
 
 ``` shell
-grep -i admit .
-grep -i Axiom .
+grep -i admit ./*.v
+grep -i axiom ./*.v
 ```
 
-(2) You can use the `Print Assumptions` command [provided by
-Coq](https://coq.inria.fr/refman/proof-engine/vernacular-commands.html#coq:cmd.Print-Assumptions).
+(The `-i` option ignores the cases. By searching `admit` with this option, both
+the `admit` and `Admitted` keywords are covered.)
 
-For example:
+(2) You can use the `Print Assumptions` command [provided by
+Coq](https://coq.inria.fr/refman/proof-engine/vernacular-commands.html#coq:cmd.Print-Assumptions). For
+example:
 
 ``` coq
 Require Import Clairvoyance.Translation.
