@@ -1,7 +1,7 @@
 # Reasoning about the garden of forking paths
 
-This artifact contains the Coq formalization of the paper [Reasoning about the
-garden of forking paths](https://arxiv.org/abs/2103.07543).
+This artifact contains the Coq formalization of the paper _Reasoning about the
+garden of forking paths_.
 
 The paper presents a novel and simple framework for formally reasoning about
 lazy computation costs based on a recent model of lazy evaluation: clairvoyant
@@ -38,7 +38,7 @@ opam repo add coq-released https://coq.inria.fr/opam/released
 opam install coq-equations
 ```
 
-If you are accessing the artifact via the VM image we provided, you should have
+If you are accessing the artifact via the VM image we provide, you should have
 all the dependencies installed already.
 
 ### Proof check
@@ -53,9 +53,9 @@ make
 This will invoke Coq to check the proofs in files `Clairvoyance.v` and
 `Translation.v`.
 
-On the author's laptop, the command takes around 10 seconds. The actual
-execution time may vary depending on the machine and the Coq version you are
-using.
+The actual execution time may vary depending on the machine and the Coq version
+you are using. We have seen the process takes 8-20 seconds on different
+computers with different Coq versions.
 
 ### Checking axioms
 
@@ -78,13 +78,14 @@ the `admit` and `Admitted` keywords are covered.)
 
 (2) You can use the `Print Assumptions` command [provided by
 Coq](https://coq.inria.fr/refman/proof-engine/vernacular-commands.html#coq:cmd.Print-Assumptions). For
-example:
+example, you can add the following line to the end of the [Translation.v] file:
 
 ``` coq
-Require Import Clairvoyance.Translation.
-
 Print Assumptions Lambda.soundess_and_adequacy.
 ```
+
+You should see that the `soundness_and_adequacy` theorem relies on two axioms:
+they are functional and propositional extensionality.
 
 ### Check main claims of the paper
 
@@ -95,6 +96,11 @@ illustration. You can cross check the claims of the paper with what's
 implemented in the Coq files.
 
 ## Main claims of the paper
+
+If you are looking for the code corresponds to a figure, you can usually find it
+by searching the figure in one of the two files. For example, if you are looking
+for the formalization of the monadic translation presented in Figure 8, you can
+find it by searching "Figure 8" in the `Translation.v` file.
 
 ### The clairvoyance monad
 
@@ -125,7 +131,10 @@ programs.
   `soundness_and_adequacy` in the `Translation.v` file. We prove the theorem by
   utilizing two lemmas: `soundness` and `adequacy`. Both lemmas can be found in
   the same Coq file.
-- The Definitions presented in Fig. 10 can be found in the `TranslationExample`
+- The Definitions presented in Fig. 10 can be found in the end of the file
+  `Clairvoyance.v` (note that they are in a different file than the previous
+  definitions).
+- The Definitions presented in Fig. 11 can be found in the `TranslationExample`
   section of `Clairvoyance.v` (note that they are in a different file than the
   previous definitions).
 - The two rewrite rules presented in Section 4.4 are proved in the
@@ -139,7 +148,7 @@ optimistic and pessimistic specifications. In section 6, we demonstrate the
 formal reasoning methodology in some example related to tail recursions.
 
 - All the code snippets shown in these two sections can be found in the file
-  `Clairvoyant.v`. They are marked explicitly by the section numbers in the
+  `Clairvoyance.v`. They are marked explicitly by the section numbers in the
   comments of the file.
-- The inference rules presented in Fig. 12 and Fig. 13 can be found in the
-  `InferenceRules` section of the file.
+- The inference rules presented in Fig. 13 and Fig. 14 can be found in the
+  `InferenceRules` section of the file `Clairvoyance.v`.

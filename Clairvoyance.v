@@ -32,7 +32,7 @@ Definition p {a} (n : nat) (xs ys : list a) : list a :=
 
 Section ClairvoyanceMonad.
 
-(** * Figure 4 *)
+(** * Figure 4. *)
 
 (* A computation that produces a value of type "a" after some number of ticks. *)
 Definition M (a : Type) : Type := a -> nat -> Prop.
@@ -115,11 +115,11 @@ Defined.
 Set Elimination Schemes.
 
 
-(** * Fig 9.
-
-    Definition of the [foldrA] function used in the translation of [foldr]. *)
 Section TranslationExample.
 
+(** * Figure 9.
+
+    Definition of the [foldrA] function used in the translation of [foldr]. *)
 Fixpoint foldrA' {a b} (n : M b) (c : T a -> T b -> M b) (x' : listA a) : M b :=
   tick >>
   match x' with
@@ -132,7 +132,7 @@ Fixpoint foldrA' {a b} (n : M b) (c : T a -> T b -> M b) (x' : listA a) : M b :=
 Definition foldrA {a b} (n : M b) (c : T a -> T b -> M b) (x : T (listA a)) : M b :=
   foldrA' n c $! x.
 
-(** * Fig 10.
+(** * Figure 11.
 
     The translated code of append and take from the pure version of Fig. 1. *)
 Fixpoint append_ {a : Type} (xs' : listA a) (ys : T (listA a)) : M (listA a) :=
@@ -170,7 +170,7 @@ End TranslationExample.
 (* ---------------------- Section 5: Formal Reasoning ----------------- *)
 
 
-(** * Fig. 11.
+(** * Figure 12.
 
     The definitions of the pessimistic and optimistic specifications *)
 
@@ -190,7 +190,7 @@ Notation " u [[ r ]] " := (optimistic  u r) (at level 42).
 
 Section InferenceRules.
 
-(** * Fig. 12 *)
+(** * Figure 13. *)
 
 Lemma pessimistic_mon {a} (u : M a) (r r' : a -> nat -> Prop)
   : u {{ r }} ->
@@ -260,7 +260,7 @@ Proof.
   intros. eapply pessimistic_ret. auto.
 Qed.
 
-(** * Fig. 13 *)
+(** * Figure 14. *)
 
 Lemma optimistic_mon {a} (u : M a) (r r' : a -> nat -> Prop)
   : u [[ r ]] ->
@@ -346,7 +346,7 @@ End InferenceRules.
 
 (* ----------------- Section 5.3 ----------------- *)
 
-(** * Fig. 15
+(** * Figure 16.
     
     As pointed out by the footnote of the figure, [T (listA A)] is not a
     recursive type, so we need to define a separate helper function [sizeX']
@@ -720,7 +720,7 @@ Ltac mgo_list := mgo ltac:(simp exact_listA).
 
 (* ----------------- Section 5.4 ----------------- *)
 
-(** * Fig. 14
+(** * Figure 15.
 
     The partial functional correctness and pure functional correctness theorems
     and their proofs. *)
@@ -1160,8 +1160,9 @@ Qed.
 
 End CaseStudyFolds.
 
-(* ----------------------- Section 7: Discussion ------------------------- *)
+(* ----------------------- Section 4.2 ------------------------- *)
 
+(** * Figure 10. *)
 Definition impl3 {a b c} (P P' : a -> b -> c -> Prop) : Prop :=
   forall x y z, P x y z -> P' x y z.
 

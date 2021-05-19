@@ -1,17 +1,23 @@
-(** A formalization of the Section 4 of the paper [Reasoning about the
-garden of forking paths].
+(** A formalization of the Section 4 of the paper [Reasoning about the garden of
+forking paths].
+
+The main results of the file are (1) a formalization of our monadic translation
+and the operational semantic presented in Hackett & Hutton (2019); (2) a proof
+of equivalence between the two semantics.
+
+The Hackett & Hutton (2019) paper can be found at:
+[https://dl.acm.org/doi/10.1145/3341718] (The paper is open access.)
 
 Semantics:
 - [BigStep]: Hackett & Hutton's Clairvoyant CBV (operational semantics)
-- [eval]: our monadic semantics
+- [eval]: our monadic translation
 
 Equivalence:
 - [soundness]: [BigStep] semantics are a subset of [eval] semantics.
 - [adequacy]: [eval] semantics are a subset of [BigStep] semantics.
 
 Putting those together, the equivalence is made explicit in
-[soundness_and_adequacy].
- *)
+[soundness_and_adequacy].  *)
 
 Set Implicit Arguments.
 Set Contextual Implicit.
@@ -191,7 +197,7 @@ Module Lambda.
 
 (** * The calculus with folds. *)
 
-(** * Fig. 6. *)  
+(** * Figure 6. *)  
 
 (** Types.
     
@@ -279,7 +285,7 @@ Set Elimination Schemes.
 
 (** * The type translation. *)
 
-(** * Fig. 7 *)
+(** * Figure 7. *)
 
 (** We translate the types in the calculus with folds to the types in
     Gallina. *)
@@ -310,7 +316,7 @@ Fixpoint lookup {g u} (v : V g u) : env g -> T (toType u) :=
   | There v1 => fun ex => lookup v1 (fst ex)
   end.
 
-(** * Fig. 9 *)
+(** * Figure 9. *)
 
 (** * Definitions of [foldrA]. *)
 
@@ -328,7 +334,7 @@ Definition foldrA {a b} (n : M b) (c : T a -> T b -> M b)
     (x : T (ListA a)) : M b :=
   foldrA' n c $! x.
 
-(** * Fig. 8 *)
+(** * Figure 8. *)
 
 (** * The term translation, aka. a denotational semantics.
 
