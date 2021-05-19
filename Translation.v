@@ -1110,8 +1110,9 @@ Qed.
 
 (** Next, we will prove adequacy *)
 
-(** More preliminaries *)
+(** More preliminaries, facts about renamings. *)
 
+(* Decompose existentials and conjunctions. *)
 Ltac decomp H :=
   lazymatch type of H with
   | (exists x_, _) => let x := fresh x_ in destruct H as [x H]; decomp H
@@ -1121,6 +1122,7 @@ Ltac decomp H :=
   | _ => idtac
   end.
 
+(* Prove the premise of an implication. *)
 Ltac prove_assum H :=
   lazymatch type of H with
   | (?T -> _) =>
