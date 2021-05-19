@@ -1,4 +1,4 @@
-# Reasoning about the garden of forking paths
+# Reasoning about the garden of forking paths (artifact)
 
 This artifact contains the Coq formalization of the paper _Reasoning about the
 garden of forking paths_.
@@ -78,7 +78,7 @@ the `admit` and `Admitted` keywords are covered.)
 
 (2) You can use the `Print Assumptions` command [provided by
 Coq](https://coq.inria.fr/refman/proof-engine/vernacular-commands.html#coq:cmd.Print-Assumptions). For
-example, you can add the following line to the end of the [Translation.v] file:
+example, you can add the following line to the end of the `Translation.v` file:
 
 ``` coq
 Print Assumptions Lambda.soundess_and_adequacy.
@@ -87,7 +87,7 @@ Print Assumptions Lambda.soundess_and_adequacy.
 You should see that the `soundness_and_adequacy` theorem relies on two axioms:
 they are functional and propositional extensionality.
 
-### Check main claims of the paper
+### Checking main claims of the paper
 
 A paper draft has been provided together with the artifact. We have listed all
 the main claims of the paper and where to find them in the next section of this
