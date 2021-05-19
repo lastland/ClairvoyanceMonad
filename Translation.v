@@ -807,6 +807,18 @@ Fixpoint renameEnv {g g' : Ctx} : Rnm g g' -> env g' -> env g :=
 
 (** Proofs (soundness, then adequacy). *)
 
+(** The main theorems are [soundness], [adequacy], and
+    [soundness_and_adequacy], which is a trivial combination of the two.
+
+    A big intermediate lemma is [BigStep_heap_increasing], which says
+    that the heap only ever grows by adding new mappings (never by
+    mutating old ones).
+
+    The other lemmas are mostly small equations,
+    "commutative diagrams" equating different ways to obtain the same
+    result using the above functions.
+*)
+
 (** [T] is also a functor on relations. *)
 Inductive eq_T {a b} (r : a -> b -> Prop) : T a -> T b -> Prop :=
 | eq_T_Discarded : eq_T r Undefined Undefined
