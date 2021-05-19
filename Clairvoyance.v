@@ -2,14 +2,14 @@ Set Implicit Arguments.
 Set Maximal Implicit Insertion.
 Set Contextual Implicit.
 
-From Coq Require Import Arith List.
+From Coq Require Import Arith List Psatz.
 From Coq Require Import Relations.Relation_Definitions Classes.RelationClasses.
-Require Import Psatz.
 
 From Equations Require Import Equations.
 
 (* ---------------------- Section 2: Motivating Example ---------------------- *)
 
+(** * Figure 1. *)
 
 Fixpoint append {a} (xs ys : list a) : list a :=
   match xs with
@@ -31,8 +31,9 @@ Definition p {a} (n : nat) (xs ys : list a) : list a :=
 
 (* ---------------------- Section 3: The Clairvoyance Monad ---------------------- *)
 
+Section ClairvoyanceMonad.
 
-(* Figure 4 *)
+(** * Figure 4. *)
 
 (* A computation that produces a value of type "a" after some number of ticks. *)
 Definition M (a : Type) : Type := a -> nat -> Prop.
@@ -71,6 +72,7 @@ Definition forcing {a b} (t : T a) (f : a -> M b) : M b :=
 (* Force a thunk. *)
 Definition force {a} (t : T a) : M a := forcing t ret.
 
+End ClairvoyanceMonad.
 
 (* Notation for working with the Monad *)
 
@@ -80,19 +82,21 @@ Notation "'let!' x' ':=' t 'in' s" := (bind t (fun x' => s)) (x' as pattern, at 
 Notation "'let~' x  ':=' t 'in' s" := (bind (thunk t) (fun x => s)) (x as pattern, at level 90).
 Notation "f $! x" := (forcing x f) (at level 61, left associativity).
 
-
 (* ---------------------- Section 4: Translation ---------------------- *)
 
 (* Definitions needed for the by-hand translation of the examples from Section 2 *)
-(* Naming convention: primed identifiers (eg. xs') for unlifted values (no T) *)
 
 Unset Elimination Schemes.
 
-(* "Thunked" list type and specialized induction principle. *)
-
+(* The [listA] type discussed in Fig. 7 in Section 4. *)
 Inductive listA (a : Type) : Type :=
   NilA | ConsA (x1 : T a) (x2 : T (listA a)).
 
+(* For [listA], we need to define our own induction principle because Coq cannot
+   generate the correct induction principles for nested inductive datatypes.
+
+   See the [Nested Inductive Types] section in CPDT
+   (http://adam.chlipala.net/cpdt/html/Cpdt.InductiveTypes.html). *)
 Lemma listA_ind : forall (a : Type) (P : listA a -> Prop),
     P NilA ->
     (forall (x1 : T a),
@@ -112,8 +116,11 @@ Defined.
 Set Elimination Schemes.
 
 
-(* Fig 9. Definition of the foldrA function used in the translation of foldr *)
+Section TranslationExample.
 
+(** * Figure 9.
+
+    Definition of the [foldrA] function used in the translation of [foldr]. *)
 Fixpoint foldrA' {a b} (n : M b) (c : T a -> T b -> M b) (x' : listA a) : M b :=
   tick >>
   match x' with
@@ -126,8 +133,9 @@ Fixpoint foldrA' {a b} (n : M b) (c : T a -> T b -> M b) (x' : listA a) : M b :=
 Definition foldrA {a b} (n : M b) (c : T a -> T b -> M b) (x : T (listA a)) : M b :=
   foldrA' n c $! x.
 
-(* Fig 10. The translated code of append and take from the pure version of Fig. 1. *)
+(** * Figure 11.
 
+    The translated code of append and take from the pure version of Fig. 1. *)
 Fixpoint append_ {a : Type} (xs' : listA a) (ys : T (listA a)) : M (listA a) :=
   tick >>
   match xs' with
@@ -158,10 +166,14 @@ Definition pA {a} (n : nat) (xs ys : T (listA a)) : M (listA a) :=
   let~ t := appendA xs ys in
   takeA n t.
 
+End TranslationExample.
+
 (* ---------------------- Section 5: Formal Reasoning ----------------- *)
 
 
-(* Fig. 11. The definitions of the pessimistic and optimistic specifications *)
+(** * Figure 12.
+
+    The definitions of the pessimistic and optimistic specifications *)
 
 Definition pessimistic {a} (u : M a) (r : a -> nat -> Prop) : Prop :=
   forall x n, u x n -> r x n.
@@ -174,11 +186,13 @@ Notation " u [[ r ]] " := (optimistic  u r) (at level 42).
 
 
 (* ----------------- Section 5.2 ----------------- *)
+
 (** Reasoning rules for pessimistic and optimistic specifications. *)
 
-(** During proof, we almost always use [eapply] with this theorem, and in those
-    cases, it is more useful to prove [u {{ r }}] first (usually by applying an
-    existing lemma) than proving the logical implication. *)
+Section InferenceRules.
+
+(** * Figure 13. *)
+
 Lemma pessimistic_mon {a} (u : M a) (r r' : a -> nat -> Prop)
   : u {{ r }} ->
     (forall x n, r x n -> r' x n) ->
@@ -226,6 +240,19 @@ Proof.
   - inversion 1.
 Qed.
 
+Lemma pessimistic_conj {a} (u : M a) (r p : a -> nat -> Prop)
+  : u {{ r }} ->
+    u {{ p }} ->
+    u {{ fun x n => r x n /\ p x n }}.
+Proof.
+  intros ? ? ? ? Hu. split.
+  - apply H; auto.
+  - apply H0; auto.
+Qed.
+
+(** This rule is not in Fig. 12. Recall that [force t] is defined as [forcing t
+    ret], so this rule can be simply obtained by using the [pessimistic_forcing]
+    rule + the [pessimistic_ret] rule. *)
 Lemma pessimistic_force {a} (t : T a) (r : a -> nat -> Prop)
   : (forall x, t = Thunk x -> r x 0) ->
     (force t) {{ r }}.
@@ -233,6 +260,8 @@ Proof.
   intros. eapply pessimistic_forcing.
   intros. eapply pessimistic_ret. auto.
 Qed.
+
+(** * Figure 14. *)
 
 Lemma optimistic_mon {a} (u : M a) (r r' : a -> nat -> Prop)
   : u [[ r ]] ->
@@ -265,6 +294,8 @@ Proof.
   intros H. exists tt, 1. intuition. constructor.
 Qed.
 
+(** For proof engineering purposes, we divide the [thunk] rule of Fig. 13 to two
+    separate rules: [optimistic_thunk_go] and [optimistic_skip]. *)
 Lemma optimistic_thunk_go {a} (u : M a) (r : T a -> nat -> Prop)
   : u [[ fun x => r (Thunk x) ]] ->
     (thunk u) [[ r ]].
@@ -291,6 +322,17 @@ Proof.
   - congruence.
 Qed.
 
+Lemma optim_conj {a} (u : M a) (r p : a -> nat -> Prop)
+  : u {{ r }} ->
+    u [[ p ]] ->
+    u [[ fun x n => r x n /\ p x n ]].
+Proof.
+  intros ? ?. destruct H0 as (? & ? & ? & ?).
+  exists x, x0. auto.
+Qed.
+
+(** Same as [pessimistic_force], this is a consequence of [optimistic_forcing] +
+    [optimistic_bind]. *)
 Lemma optimistic_force {a} (t : T a) (r : a -> nat -> Prop) x
   : t = Thunk x ->
     r x 0 ->
@@ -301,27 +343,15 @@ Proof.
   - eapply optimistic_ret; auto.
 Qed.
 
-Lemma pessimistic_conj {a} (u : M a) (r p : a -> nat -> Prop)
-  : u {{ r }} ->
-    u {{ p }} ->
-    u {{ fun x n => r x n /\ p x n }}.
-Proof.
-  intros ? ? ? ? Hu. split.
-  - apply H; auto.
-  - apply H0; auto.
-Qed.
-
-Lemma optim_conj {a} (u : M a) (r p : a -> nat -> Prop)
-  : u {{ r }} ->
-    u [[ p ]] ->
-    u [[ fun x n => r x n /\ p x n ]].
-Proof.
-  intros ? ?. destruct H0 as (? & ? & ? & ?).
-  exists x, x0. auto.
-Qed.
+End InferenceRules.
 
 (* ----------------- Section 5.3 ----------------- *)
 
+(** * Figure 16.
+    
+    As pointed out by the footnote of the figure, [T (listA A)] is not a
+    recursive type, so we need to define a separate helper function [sizeX']
+    that recurses on [listA]. *)
 Fixpoint sizeX' {a} (n0 : nat) (xs : listA a) : nat :=
   match xs with
   | NilA => n0
@@ -335,6 +365,7 @@ Definition sizeX {a} (n0 : nat) (xs : T (listA a)) : nat :=
   | Undefined => 0
   end.
 
+(* Some useful lemmas. *)
 Lemma sizeX'_ge_1 {a} : forall (xs : listA a),
     1 <= sizeX' 1 xs.
 Proof.
@@ -359,6 +390,17 @@ Definition is_defined {a} (t : T a) : Prop :=
 
 (* --------------------------------------- *)
 
+(** * Approximations.
+    
+    This part is a reference implementation of the definitions discussed in
+    Section 5.3.  *)
+
+(** In the paper, we start by giving an [exact] function defined on lists. We
+    mention later in the section that we would also want to be able to overload
+    the [exact] function (and the [is_approx] and [less_defined] relations) for
+    other types. One way of doing that is using type classes, as we show here. *)
+
+(** * [exact] *)
 Class Exact a b : Type := exact : a -> b.
 
 #[global] Hint Unfold exact : core.
@@ -366,6 +408,10 @@ Class Exact a b : Type := exact : a -> b.
 Instance Exact_T_Instance {a b} {r: Exact a b } : Exact a (T b) 
   := fun x => Thunk (exact x).
 
+(** The function is defined with the help of the Equations library. Neither our
+    methodology nor our definitions have to rely on Equations, but the tactics
+    provided by Equations such as [funelim] makes our proofs slightly
+    simpler. *)
 Equations exact_listA {a b : Type} `{Exact a b} (xs : list a) : listA b :=
 exact_listA nil := NilA ;
 exact_listA (cons y ys) := ConsA (Thunk (exact y)) (Thunk (exact_listA ys)).
@@ -380,18 +426,11 @@ Instance Exact_fun {a1 b1 a2 b2} `{Exact b1 a1} `{Exact a2 b2}
   : Exact (a1 -> a2) (b1 -> b2) 
   := fun f => fun x => exact (f (exact x)).
 
+(** * [less_defined] *)
 Class LessDefined a := less_defined : a -> a -> Prop.
 Infix "`less_defined`" := less_defined (at level 42).
 
 #[global] Hint Unfold less_defined : core.
-
-Class LessDefinedOrder a (H: LessDefined a) :=
-  { less_defined_preorder : PreOrder H ;
-    less_defined_partial_order : PartialOrder eq H }.
-
-Class LessDefinedExact {a b} {Hless : LessDefined a}
-      (Horder : LessDefinedOrder Hless) (Hexact : Exact b a) :=
-  { exact_max : forall (xA : a) (x : b), exact x `less_defined` xA -> exact x = xA }.
 
 Inductive LessDefined_T {a : Type} `{LessDefined a} : relation (T a) :=
 | LessDefined_Undefined :
@@ -404,6 +443,16 @@ Inductive LessDefined_T {a : Type} `{LessDefined a} : relation (T a) :=
 Instance Lift_T {a} `{LessDefined a} : LessDefined (T a) := LessDefined_T.
 
 #[global] Hint Unfold Lift_T : core.
+
+(** * This corresponds to the proposition [less_defined_order] in Section 5.3. *)
+Class LessDefinedOrder a (H: LessDefined a) :=
+  { less_defined_preorder : PreOrder H ;
+    less_defined_partial_order : PartialOrder eq H }.
+
+(** * This corresponds to the proposition [exact_max] in Section 5.3. *)
+Class LessDefinedExact {a b} {Hless : LessDefined a}
+      (Horder : LessDefinedOrder Hless) (Hexact : Exact b a) :=
+  { exact_max : forall (xA : a) (x : b), exact x `less_defined` xA -> exact x = xA }.
 
 Instance PreOrder_Lift_T {a : Type} `{Ho : LessDefinedOrder a} : PreOrder Lift_T.
 Proof.
@@ -446,10 +495,7 @@ Instance LessDefinedExact_T {a b} {Hless : LessDefined a} {Horder : LessDefinedO
   LessDefinedExact Lift_T_Order Exact_T_Instance :=
   {| exact_max := @exact_max_T a b _ _ _ _ |}.
 
-
-
 Unset Elimination Schemes.
-
 
 Inductive LessDefined_list {a : Type} `{LessDefined a} : listA a -> listA a -> Prop :=
 | LessDefined_NilA :
@@ -553,13 +599,31 @@ Instance LessDefined_Fun {a b} {_ : LessDefined a} {_:LessDefined b}
   : LessDefined (a -> b) :=
   fun f g => forall x y, x `less_defined` y -> f x `less_defined` g y.
 
+(** * [is_approx]
+    
+    In our paper, the definition of [is_approx] can be anything as long as it
+    satisfies the [approx_exact] proposition. In this file, we choose the most
+    direct definition that satisfies the [approx_exact] law. *)
 Definition is_approx {a b} { _ : Exact b a} {_:LessDefined a} (xA : a) (x : b) : Prop := 
   xA `less_defined` exact x.
 Infix "`is_approx`" := is_approx (at level 42).
 
+(** * This corresponds to the proposition [approx_exact] in Section 5.3.
+
+    And because of our particular definition, this is true by
+    definition. However, this cannot be proved generically if the definition of
+    [is_approx] can be anything. *)
+Theorem approx_exact {a b} `{Exact b a} `{LessDefined a} :
+  forall (x : b) (xA : a),
+    xA `is_approx` x <-> xA `less_defined` (exact x).
+Proof. reflexivity. Qed.
+  
 #[global] Hint Unfold is_approx : core.
 
-(* This is a consequence of transitivity. *)
+(** * This corresponds to the proposition [approx_down] in Section 5.3.
+
+    Again, because of the particular definition of [is_approx] we use here, this
+    can be proved simply by the law of transitivity. *)
 Lemma approx_down {a b} `{Hld : LessDefined a} `{Exact b a} {_ : LessDefinedOrder Hld}:
   forall (x : b) (xA yA : a),
     xA `less_defined` yA -> yA `is_approx` x -> xA `is_approx` x.
@@ -568,14 +632,27 @@ Proof.
   transitivity yA; assumption.
 Qed.
 
+(** In this part, we prove that any type [a] is also an [exact] of itself. We
+    define this instance so that [listA a] would be an approximation of [list
+    a]---so that we do not need to consider the approximation of [a]. A useful
+    simplification. *)
 Instance Exact_id {a} : Exact a a := id.
-(** Set a very low priority for the following: *)
+
+(** However, if we are not careful, the [LessDefined_id] instance might be used
+    everywhere. To prevent that, we give [LessDefined_id] a very low priority
+    here.
+
+    Learn more about the priority of Coq's type classes in the [Controlling
+    Instantiation] section of
+    [https://softwarefoundations.cis.upenn.edu/qc-current/Typeclasses.html]. *)
 Instance LessDefined_id {a} : LessDefined a | 100 := eq.
 
 #[global] Hint Unfold Exact_id : core.
 #[global] Hint Unfold LessDefined_id : core.
 
-(* Tactics for working with optimistic and pessimistic specs *)
+(** * Tactics for working with optimistic and pessimistic specs. *)
+
+(** Use the monotonicity laws. *)
 Ltac relax :=
   match goal with
   | [ |- _ {{ _ }} ] => eapply pessimistic_mon
@@ -587,7 +664,8 @@ Ltac relax_apply lem :=
   | _ => apply lem
   | _ => relax; [apply lem|]
   end.
-      
+
+(** Automatically apply the inference rules. *)
 Ltac mforward tac :=
   lazymatch goal with
   | [ |- (ret _) {{ _ }} ] => relax_apply pessimistic_ret
@@ -607,6 +685,7 @@ Ltac mforward tac :=
   | [ |- _ [[ _ ]] ] => autounfold; tac
   end.
 
+(** Heuristics for dealing with approximations. *)
 Ltac invert_approx :=
   match goal with
   | [H : _ `is_approx` _ |- _] =>
@@ -632,6 +711,7 @@ Ltac solve_approx tac :=
             reflexivity
           end).
 
+(** Heuristics for reasoning about pessimistic/optimistic specs. *)
 Ltac mgo tac := repeat (intros;
                         repeat invert_eq; repeat invert_approx;
                         cbn in *; (mforward tac + solve_approx tac + lia)).
@@ -639,7 +719,12 @@ Ltac mgo' := mgo idtac.
 
 Ltac mgo_list := mgo ltac:(simp exact_listA).
 
+(* ----------------- Section 5.4 ----------------- *)
 
+(** * Figure 15.
+
+    The partial functional correctness and pure functional correctness theorems
+    and their proofs. *)
 Theorem appendA_correct_partial {a} :
   forall (xs ys : list a) (xsA ysA : T (listA a)),
     xsA `is_approx` xs -> ysA `is_approx` ys ->
@@ -664,6 +749,9 @@ Proof.
   mgo_list.
 Qed.
 
+(* ----------------- Section 5.5 ----------------- *)
+
+(** The pessimistic specification for the cost of [appendA]. *)
 Theorem appendA_cost_interval {a} : forall (xsA ysA : T (listA a)),
     (appendA xsA ysA)
     {{ fun zsA cost => 1 <= cost <= sizeX 1 xsA }}.
@@ -673,6 +761,8 @@ Proof.
   relax_apply IHx. mgo_list.
 Qed.
 
+(** The pessimistic specification for the cost + functional correctness of
+    [appendA] can be obtained using the conjunction rule. *)
 Theorem appendA_spec {a} :  
   forall (xs ys : list a) (xsA ysA : T (listA a)),
     xsA `is_approx` xs ->
@@ -694,11 +784,8 @@ Proof.
     [appendA_prefix_cost] and [appendA_full_cost].  *)
 Abort.  
 
-Definition appendA_undefined {a : Type} :
-forall (ysA : T (listA a)), (appendA Undefined ysA) {{ fun _ _ => False }}.
-Proof. mgo_list. Defined.
-
-
+(** [appendA_prefix_cost] as described in the paper. This is the case when the
+    execution of [appendA] does not reach the end of [xsA]. *)
 Theorem appendA_prefix_cost {a} : forall n (xsA ysA : T (listA a)),
     1 <= n <= sizeX 0 xsA ->
     (appendA xsA ysA) [[ fun zsA cost => n = sizeX 0 (Thunk zsA) /\ cost <= n ]].
@@ -714,6 +801,8 @@ Proof.
       mgo_list.
 Qed.
   
+(** [appendA_full_cost] as described in the paper. This is the case when the
+    execution of [appendA] does reach the end of [xsA]. *)
 Theorem appendA_full_cost {a} : forall (xs : list a) (xsA := exact xs) ysA,
     is_defined ysA ->
     (appendA xsA ysA) [[ fun zsA cost =>
@@ -724,57 +813,155 @@ Proof.
   relax_apply IHxs; mgo_list.
 Qed.
 
-Theorem takeA_cost_interval {a} : forall n (xsA : T (listA a)),
-    (takeA n xsA)
-    {{ fun zsA cost => 1 <= cost <= min (n + 1) (sizeX 1 xsA) }}.
-Proof.
-  unfold takeA; induction n; mgo_list.
-  - destruct (sizeX' 1 x) eqn:Hsx; try lia.
-    pose (sizeX'_ge_1 x). lia.
-  - destruct x; mgo_list.
-    + specialize (IHn (Thunk x)). simpl in IHn.
-      relax_apply IHn. mgo_list.
-    + destruct x2; lia. 
-Qed.
-
 (* ----------------------------- Section 6: Tail Recursion ------------------- *)
 
+(** * Tail recursive [take].
+    
+    The first case study shown in Section 6. *)
+Module TakeCompare.
+
+(** The original [take'_] and [take'] functions shown in the paper.  *)
+Fixpoint take'_ {a} (n : nat) (xs : list a) (acc : list a) : list a :=
+match n with
+| O => rev acc
+| S n' => match xs with
+          | nil => rev acc
+          | cons x xs' => take'_ n' xs' (x :: acc)
+          end
+end.
+
+Definition take' {a} (n : nat) (xs : list a) : list a := take'_ n xs nil.
+
+(** From here, we study the approximations of [take] and [take']. *)
+
+(** Before studying [takeA]s, we first define the [revA] function that is used
+    by [take'A]. Note that we did not insert any [tick]s in this definition. As
+    discussed by the paper, this is because we would like to assign a cost of 0
+    to [revA]. One way of doing that is axiomatizing the cost---but introducing
+    axioms can be dangerous if we don't do it correctly. This is a safer
+    alternative that ensures we don't introduce any potential unsoundness. *)
+Fixpoint revA_ {a : Type} (xs' : listA a) (ys : T (listA a)) : M (listA a) :=
+  match xs' with
+  | NilA => force ys
+  | ConsA x xs1 =>
+    let~ ys1 := ret (ConsA x ys) in
+    (fun xs1' => revA_ xs1' ys1) $! xs1
+  end.
+
+Definition revA {a : Type} (xs : T (listA a)) : M (listA a) :=
+  let~ ys := ret NilA in
+  (fun xs' => revA_ xs' ys) $! xs.
+
+Lemma revA_cost : forall {a} (xsA : T (listA a)),
+    (revA xsA) {{ fun _ cost => cost = 0 }}.
+Proof.
+  unfold revA. destruct xsA; [|mgo_list].
+  assert (forall y, revA_ x y {{fun (_ : listA a) (m : nat) => m = 0}}).
+  { induction x; mgo_list. }
+  mgo_list.
+Qed.
+
+(** This is the approximation of [take'_]. *)
+Fixpoint take'A_ {a : Type} (n : nat) (xs : listA a) (acc : T (listA a)) : M (listA a) :=
+  tick >> (match n with
+        | O => revA acc
+        | S n' => match xs with
+                 | NilA => revA acc
+                 | ConsA x xs' => 
+                   (fun xs'' =>
+                      let~ acc' := ret (ConsA x acc) in
+                      take'A_ n' xs'' acc') $! xs'
+                 end
+           end).
+
+(** This is the approximation of [take']. *)
+Definition take'A {a : Type} (n : nat) (xs : T (listA a)) : M (listA a) :=
+  forcing xs (fun xs' => take'A_ n xs' (Thunk NilA)).
+
+(** The pessimistic specification for [take'A] and the proof that [take'A]
+    satisfies the spec, as stated in the paper. *)
+Theorem take'A__pessim {a} : 
+forall (n : nat) (xs : list a) (xsA : listA a) (acc : list a) (accA : T (listA a)),
+  xsA `is_approx` xs ->  accA `is_approx` acc ->
+  (take'A_ n xsA accA) {{ fun zsA cost => cost = min n (length xs) + 1 }}.
+Proof.
+  induction n.
+  - mgo_list. relax_apply @revA_cost. cbn; intros. lia.
+  - intros xs. funelim (exact_listA xs); mgo_list.
+    + relax_apply @revA_cost. cbn; intros; lia.
+    + inversion H6; subst. relax.
+      eapply IHn with (acc:=a0 :: acc); try eassumption.
+      constructor. repeat autounfold. simp exact_listA.
+      constructor; assumption.
+      cbn; intros. lia.
+    + inversion H6; subst. relax.
+      eapply IHn with (acc:=a0 :: acc); try eassumption. constructor.
+      cbn; intros. lia.
+Qed.
+  
+(** The pessimistic specification for [takeA] and the proof that [takeA]
+    satisfies the spec, as stated in the paper. *)
+Definition takeA__pessim {a} : 
+forall (n : nat) (xs : list a) (xsA : T (listA a)),
+  xsA `is_approx` xs ->
+  (takeA n xsA) {{ fun zsA cost => cost <= min n (sizeX 0 xsA) + 1 }}.
+Proof.
+  unfold takeA. induction n; [mgo_list|].
+  intros xs. funelim (exact_listA xs); mgo_list.
+  inversion H5; subst.
+  specialize (IHn l (Thunk x)). cbn in IHn.
+  relax_apply IHn; try assumption.
+  mgo_list.
+Qed.
+
+(** The optimistic specification for [takeA] and the proof that [takeA]
+    satisfies the spec, as stated in the paper. This shows that there _exists_ a
+    cost of [takeA] that is indeed smaller. *)
+Definition takeA__optim {a} : 
+forall (n m : nat) (xs : list a) (xsA : T (listA a)),
+  1 <= m ->  m <= min (n + 1) (sizeX 1 xsA) ->
+  xsA `is_approx` xs ->
+  (takeA n xsA) [[ fun zsA cost => cost = m ]].
+Proof.
+  destruct xsA; [| cbn; intros; lia].
+  revert m xs x. induction n.
+  - mgo_list. destruct (sizeX' 1 x); lia.
+  - mgo_list. funelim (exact_listA xs); mgo_list.
+    destruct (dec_eq_nat m 1); subst.
+    + apply optimistic_skip. mgo_list.
+    + apply optimistic_thunk_go.
+      inversion H7; subst; [lia|].
+      cbn. relax. eapply IHn with (m:=m-1); try lia; try eassumption.
+      mgo_list.
+Qed.
+
+End TakeCompare.
+
+(** * List reversal. *)
+
+Module RevCompare.
+
+(** [rev'], as shown in the paper. *)
 Definition rev' {a} (xs : list a) : list a :=
   match xs with
   | nil => nil
   | x :: xs' => append (rev' xs') (cons x nil)
   end.
 
-Fixpoint take'_ {a} (n : nat) (xs : list a) (acc : list a) : list a :=
-  match n with
-  | O => rev acc
-  | S n' => match xs with
-            | nil => rev acc
-            | cons x xs' => take'_ n' xs' (x :: acc)
-            end
-  end.
-
-Definition take' {a} (n : nat) (xs : list a) : list a := take'_ n xs nil.
-
-
-
-
-
-Module RevCompare.
-
-(** * Another version of [appendA] that does not cost time.
-    We can also axiomatize this but this version makes sure we don't introduce inconsistency.
-*)
-Fixpoint append'_ {a : Type} (xs' : listA a) (ys : T (listA a)) : M (listA a) :=
+(** Another version of [appendA] that does not cost time. We can also axiomatize
+    this but this version makes sure we don't introduce inconsistency. We use
+    the same technique as the one we used with [revA] in the [TakeCompare]
+    module. Find out more in the comments there. *)
+Fixpoint appendA'_ {a : Type} (xs' : listA a) (ys : T (listA a)) : M (listA a) :=
   match xs' with
   | NilA => force ys
   | ConsA x xs1 =>
-    let~ t := (fun xs1' => append'_ xs1' ys) $! xs1 in
+    let~ t := (fun xs1' => appendA'_ xs1' ys) $! xs1 in
     ret (ConsA x t)    
   end.
 
 Definition appendA' {a : Type} (xs ys : T (listA a)) : M (listA a) :=
-  (fun xs' => append'_ xs' ys) $! xs.
+  (fun xs' => appendA'_ xs' ys) $! xs.
 
 Lemma appendA'_cost {a} : forall (xsA ysA : T (listA a)),
     (appendA' xsA ysA) {{ fun _ cost => cost = 0 }}.
@@ -784,7 +971,7 @@ Proof.
   relax_apply IHx. mgo_list.
 Qed.
 
-(** * Definitions of [rev]s. *)
+(** The approximations of [rev_] and [rev]. *)
 
 Fixpoint revA_ {a : Type} (xs' : listA a) (ys : T (listA a)) : M (listA a) :=
   tick >>
@@ -799,6 +986,8 @@ Definition revA {a : Type} (xs : T (listA a)) : M (listA a) :=
   let~ ys := ret NilA in
   (fun xs' => revA_ xs' ys) $! xs.
 
+(** The approximations of [rev']. *)
+
 Fixpoint rev'A_ {a : Type} (xs : listA a) : M (listA a) :=
   tick >>
   match xs with
@@ -809,6 +998,8 @@ Fixpoint rev'A_ {a : Type} (xs : listA a) : M (listA a) :=
   end.
 
 Definition rev'A {a} (xs : T (listA a)) : M (listA a) := rev'A_ $! xs.
+
+(** The pessimistic specification about [revA]. *)
 
 Lemma revA_pessim_ {a} :
 forall (xs : list a) (xsA : listA a) (ysA : T (listA a)),
@@ -830,6 +1021,8 @@ Proof.
   unfold revA. destruct xsA; [|mgo_list].
   mgo_list; apply revA_pessim_; assumption.
 Qed.
+
+(** The pessimistic specification about [rev'A]. *)
 
 Lemma rev'A_pessim_ {a} :
 forall (xs : list a) (xsA : listA a),
@@ -854,98 +1047,11 @@ Qed.
 
 End RevCompare.
 
-Module TakeCompare.
-
-Fixpoint revA_ {a : Type} (xs' : listA a) (ys : T (listA a)) : M (listA a) :=
-  match xs' with
-  | NilA => force ys
-  | ConsA x xs1 =>
-    let~ ys1 := ret (ConsA x ys) in
-    (fun xs1' => revA_ xs1' ys1) $! xs1
-  end.
-
-Definition revA {a : Type} (xs : T (listA a)) : M (listA a) :=
-  let~ ys := ret NilA in
-  (fun xs' => revA_ xs' ys) $! xs.
-
-Lemma revA_cost : forall {a} (xsA : T (listA a)),
-    (revA xsA) {{ fun _ cost => cost = 0 }}.
-Proof.
-  unfold revA. destruct xsA; [|mgo_list].
-  assert (forall y, revA_ x y {{fun (_ : listA a) (m : nat) => m = 0}}).
-  { induction x; mgo_list. }
-  mgo_list.
-Qed.
-  
-Fixpoint take'A_ {a : Type} (n : nat) (xs : listA a) (acc : T (listA a)) : M (listA a) :=
-  tick >> (match n with
-        | O => revA acc
-        | S n' => match xs with
-                 | NilA => revA acc
-                 | ConsA x xs' => 
-                   (fun xs'' =>
-                      let~ acc' := ret (ConsA x acc) in
-                      take'A_ n' xs'' acc') $! xs'
-                 end
-        end).
-Definition take'A {a : Type} (n : nat) (xs : T (listA a)) : M (listA a) :=
-  forcing xs (fun xs' => take'A_ n xs' (Thunk NilA)).
-
-Theorem take'A__pessim {a} : 
-forall (n : nat) (xs : list a) (xsA : listA a) (acc : list a) (accA : T (listA a)),
-  xsA `is_approx` xs ->  accA `is_approx` acc ->
-  (take'A_ n xsA accA) {{ fun zsA cost => cost = min n (length xs) + 1 }}.
-Proof.
-  induction n.
-  - mgo_list. relax_apply @revA_cost. cbn; intros. lia.
-  - intros xs. funelim (exact_listA xs); mgo_list.
-    + relax_apply @revA_cost. cbn; intros; lia.
-    + inversion H6; subst. relax.
-      eapply IHn with (acc:=a0 :: acc); try eassumption.
-      constructor. repeat autounfold. simp exact_listA.
-      constructor; assumption.
-      cbn; intros. lia.
-    + inversion H6; subst. relax.
-      eapply IHn with (acc:=a0 :: acc); try eassumption. constructor.
-      cbn; intros. lia.
-Qed.
-  
-Definition takeA__pessim {a} : 
-forall (n : nat) (xs : list a) (xsA : T (listA a)),
-  xsA `is_approx` xs ->
-  (takeA n xsA) {{ fun zsA cost => cost <= min n (sizeX 0 xsA) + 1 }}.
-Proof.
-  unfold takeA. induction n; [mgo_list|].
-  intros xs. funelim (exact_listA xs); mgo_list.
-  inversion H5; subst.
-  specialize (IHn l (Thunk x)). cbn in IHn.
-  relax_apply IHn; try assumption.
-  mgo_list.
-Qed.
-
-Definition takeA__optim {a} : 
-forall (n m : nat) (xs : list a) (xsA : T (listA a)),
-  1 <= m ->  m <= min (n + 1) (sizeX 1 xsA) ->
-  xsA `is_approx` xs ->
-  (takeA n xsA) [[ fun zsA cost => cost = m ]].
-Proof.
-  destruct xsA; [| cbn; intros; lia].
-  revert m xs x. induction n.
-  - mgo_list. destruct (sizeX' 1 x); lia.
-  - mgo_list. funelim (exact_listA xs); mgo_list.
-    destruct (dec_eq_nat m 1); subst.
-    + apply optimistic_skip. mgo_list.
-    + apply optimistic_thunk_go.
-      inversion H7; subst; [lia|].
-      cbn. relax. eapply IHn with (m:=m-1); try lia; try eassumption.
-      mgo_list.
-Qed.
-
-End TakeCompare.
-
-
+(** * Left and right folds. *)
 
 Module CaseStudyFolds.
+
+(** The definitions of [foldl] and [foldr]. *)
 
 Fixpoint foldl {a b} (f : b -> a -> b) (v : b) (xs : list a) : b :=
   match xs with
@@ -958,6 +1064,8 @@ Fixpoint foldr {a b} (v : b) (f : a -> b -> b)  (xs : list a) : b :=
   | nil => v
   | cons x xs => f x (foldr v f xs)
   end.
+
+(** The approximations of [foldl] and [foldr]. *)
 
 Fixpoint foldlA_ {a b} (f : T b -> T a -> M b) (v : T b) (xs : listA a) : M b :=
   tick >>
@@ -1009,7 +1117,6 @@ forall f (xs : list a) (xsA : T (listA a)) (v : b) (vA : T bA),
   xsA `is_approx` xs ->  vA `is_approx` v ->
   (foldrA f vA xsA)
     {{ fun zsA cost => cost >= 1 /\ cost <= 2 * sizeX 0 xsA + 1 }}.
-(* end foldr_pessim *)
 Proof.
   intros f xs xsA v vA Hf Hxs. revert v vA.
   unfold foldrA. funelim (exact_listA xs); mgo_list.
@@ -1017,9 +1124,7 @@ Proof.
     relax. eapply H0; try eassumption.
     mgo_list. relax_apply Hf. mgo_list.
   - relax_apply Hf. cbn. intros. subst.
-    destruct xs; cbn; lia.
-    (* Without [cbn], [lia] would take a very long time simply on [1 <=
-       2 <= 3]. I don't know why. *)
+    destruct xs; simpl; lia.
 Qed.
 
 Definition foldr_optim1 {a b bA} `{LessDefined bA} `{LessDefined (T bA)} `{Exact b bA} :
@@ -1056,14 +1161,14 @@ Qed.
 
 End CaseStudyFolds.
 
-(* ----------------------- Section 7: Discussion ------------------------- *)
+(* ----------------------- Section 4.2 ------------------------- *)
 
+(** * Figure 10. *)
 Definition impl3 {a b c} (P P' : a -> b -> c -> Prop) : Prop :=
   forall x y z, P x y z -> P' x y z.
 
 Inductive Fix {a b} (gf : (a -> M b) -> (a -> M b)) x y n : Prop :=
 | MkFix (self : a -> M b) : impl3 self (Fix gf) -> gf self x y n -> Fix gf x y n.
-(* end Fix *)
 
 Lemma unfold_Fix {a b} (gf : (a -> M b) -> _)
   : (forall P P', impl3 P P' -> impl3 (gf P) (gf P')) ->
