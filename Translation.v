@@ -791,8 +791,19 @@ Fixpoint evalHeap {g} (e : Heap g) : env g :=
   | HCons e1 v => (evalHeap e1, mapT (evalVl (evalHeap e1)) v)
   end.
 
+(** Rename an environment. Environment are (heterogeneous) lists,
+    which are mappings from indices to values, whereas renamings
+    are mappings between indices, hence they act contravariantly
+    on environments. *)
+Fixpoint renameEnv {g g' : Ctx} : Rnm g g' -> env g' -> env g :=
+  match g with
+  | NilCtx => fun _ _ => tt
+  | ConsCtx g a => fun s e => (renameEnv (restr s) e, lookup (s _ Here) e)
+  end.
+
 (** Proofs (soundness, then adequacy). *)
 
+(** [T] is also a functor on relations. *)
 Inductive eq_T {a b} (r : a -> b -> Prop) : T a -> T b -> Prop :=
 | eq_T_Discarded : eq_T r Undefined Undefined
 | eq_T_Thunk x y : r x y -> eq_T r (Thunk x) (Thunk y)
@@ -807,6 +818,7 @@ Ltac lucky_forward1 :=
 Ltac lucky_forward :=
   repeat (mforward idtac + lucky_forward1).
 
+(** Eta rule for heaps. *)
 Lemma eta_Heap g a (e : Heap (g :,: a))
   : e = HCons (there e) (here e).
 Proof.
@@ -819,6 +831,7 @@ Proof.
    end. reflexivity.
 Qed.
 
+(** Elimination principle for variables. *)
 Lemma V_split {g a} (P : forall b, V (g :,: a) b -> Prop)
   : (forall b v, P b (There v)) -> P a Here ->
     forall b (v : V (g :,: a) b), P b v.
@@ -835,77 +848,41 @@ Proof.
     end; eauto.
 Qed.
 
+(** Extensional equality is Leibniz equality (assuming functional and
+    propositional extensionality). *)
 Lemma eq_M_eq {a} (u1 u2 : M a) : eq_M u1 u2 -> u1 = u2.
 Proof.
   intros H. do 2 (apply functional_extensionality; intros). apply prop_ext. auto.
 Qed.
 
-Fixpoint renameCtx {g g' : Ctx} : Rnm g g' -> env g' -> env g :=
-  match g with
-  | NilCtx => fun _ _ => tt
-  | ConsCtx g a => fun s e => (renameCtx (restr s) e, lookup (s _ Here) e)
-  end.
-
-Fixpoint forCtx (g : Ctx) : (forall a : Ty, V g a -> T (toType a)) -> env g :=
-  match g return (forall a, V g a -> T _)  -> env g with
-  | NilCtx => fun _ => tt
-  | ConsCtx g a => fun f => (forCtx (fun b v => f b (There v)), f a Here)
-  end.
-
-Lemma Proper_forCtx {g} (f f' : forall a : Ty, V g a -> T (toType a))
-  : (forall a v, f a v = f' a v) ->
-    forCtx f = forCtx f'.
-Proof.
-  induction g; cbn; intros H.
-  - reflexivity.
-  - f_equal; [ apply IHg; auto | apply H ].
-Qed.
-
-Lemma lookup_renameCtx {g g'} (s : Rnm g g') (e : env g') {a} (v : V g a)
-  : lookup v (renameCtx s e) = lookup (s _ v) e.
+(** Indexing into a renamed environment is equivalent to
+    renaming the index first then indexing into the original environment. *)
+Lemma lookup_renameEnv {g g'} (s : Rnm g g') (e : env g') {a} (v : V g a)
+  : lookup v (renameEnv s e) = lookup (s _ v) e.
 Proof.
   induction v; cbn.
   - reflexivity.
   - apply IHv.
 Qed.
 
-Lemma renameCtx_cat {g g' g''} (s : Rnm g g') (s' : Rnm g' g'') (e : env g'')
-  : renameCtx (s >>> s') e = renameCtx s (renameCtx s' e).
+(** [renameEnv] commutes with composition (of renamings vs of functions). *)
+Lemma renameEnv_cat {g g' g''} (s : Rnm g g') (s' : Rnm g' g'') (e : env g'')
+  : renameEnv (s >>> s') e = renameEnv s (renameEnv s' e).
 Proof.
   induction g; cbn.
   - reflexivity.
   - f_equal.
     + apply (IHg (fun _ v => s _ (There v))).
-    + unfold cat_Rnm. symmetry; apply lookup_renameCtx.
+    + unfold cat_Rnm. symmetry; apply lookup_renameEnv.
 Qed.
 
-Fixpoint sub {g g'} : Rnm g (g ++ g') :=
-  match g' with
-  | NilCtx => id_Rnm
-  | ConsCtx g' _ => fun _ v => There (sub v)
-  end.
+(** The above two lemmas make [(env, renameEnv)] a functor... *)
 
-Fixpoint dropCtx {g g'} : env (g ++ g') -> env g :=
-  match g' with
-  | NilCtx => fun e => e
-  | ConsCtx g' _ => fun e => dropCtx (fst e)
-  end.
-
-Fixpoint mvCtx {g1 g2 g'} (f : env g1 -> env g2) : env (g1 ++ g') -> env (g2 ++ g') :=
-  match g' with
-  | NilCtx => f
-  | ConsCtx g' _ => fun e => (mvCtx f (fst e), snd e)
-  end.
-
-Lemma mv_dropCtx {g1 g2 g'} (f : env g1 -> env g2) (e : env (g1 ++ g'))
-  : f (dropCtx e) = dropCtx (mvCtx f e).
-Proof.
-  induction g'; cbn; auto.
-Qed.
-
-Lemma renameCtx_ext {g g'} (s : Rnm g g') e e'
+(** A specialized formulation of an extensionality principle environments ("two
+    environments are equal if they produce the same results by indexing/lookup"). *)
+Lemma renameEnv_ext {g g'} (s : Rnm g g') e e'
   : (forall a v, lookup (s a v) e = lookup v e') ->
-    renameCtx s e = e'.
+    renameEnv s e = e'.
 Proof.
   induction g; cbn; intros H.
   - destruct e'; reflexivity.
@@ -914,41 +891,50 @@ Proof.
     + apply H.
 Qed.
 
-Lemma renameCtx_id {g} (e : env g) : renameCtx id_Rnm e = e.
+(** Renaming with the identity renaming is the identity function on environments. *)
+Lemma renameEnv_id {g} (e : env g) : renameEnv id_Rnm e = e.
 Proof.
-  apply renameCtx_ext. reflexivity.
+  apply renameEnv_ext. reflexivity.
 Qed.
 
+(** The heap only ever grows by adding new bindings.
+    Existing bindings persist. So if we restrict the new heap to the domain
+    of the old heap, then it should coincide with the old heap.
+    We eventually only care about the denotations of the heap,
+    so that's what we compare here. (We could try to prove the actual
+    equality on heaps, but it's just more work.)  *)
 Theorem BigStep_heap_increasing' : forall g u (t : Tm g u) (e : Heap g) g' (s' : Rnm g g') (e' : Heap g') (v : Vl g' u) (n : nat),
   BigStep t e s' e' v n ->
-  evalHeap e = renameCtx s' (evalHeap e').
+  evalHeap e = renameEnv s' (evalHeap e').
 Proof.
-  intros * H; induction H; cbn [eval evalHeap renameCtx] in *; intros.
-  all: try solve [symmetry; apply renameCtx_id].
+  intros * H; induction H; cbn [eval evalHeap renameEnv] in *; intros.
+  all: try solve [symmetry; apply renameEnv_id].
   - apply (f_equal fst) in IHBigStep; cbn in IHBigStep.
     apply IHBigStep.
   - rewrite IHBigStep1.
     apply (f_equal fst) in IHBigStep2. cbn in IHBigStep2. rewrite IHBigStep2.
-    symmetry; apply renameCtx_cat.
+    symmetry; apply renameEnv_cat.
   - rewrite IHBigStep1.
     apply (f_equal fst) in IHBigStep2. cbn in IHBigStep2. rewrite IHBigStep2.
-    symmetry; apply renameCtx_cat.
+    symmetry; apply renameEnv_cat.
   - auto.
   - apply (f_equal fst) in IHBigStep; cbn in IHBigStep.
     destruct H0 as [ | ? ? ? ? ? [] ]; cbn in IHBigStep.
     + assumption.
     + rewrite H2.
-      rewrite renameCtx_cat. f_equal. assumption.
+      rewrite renameEnv_cat. f_equal. assumption.
 Qed.
 
+(** A variant of the previous lemma composed with applications of [lookup]. *)
 Theorem BigStep_heap_increasing : forall g u (t : Tm g u) (e : Heap g) g' (s' : Rnm g g') (e' : Heap g') (v : Vl g' u) (n : nat),
   BigStep t e s' e' v n ->
   forall a (v : _ a), lookup (s' _ v) (evalHeap e') = lookup v (evalHeap e).
 Proof.
   intros * W a v; apply BigStep_heap_increasing' in W.
-  rewrite W; auto using lookup_renameCtx.
+  rewrite W; auto using lookup_renameEnv.
 Qed.
 
+(** Respectfulness of [foldrA']. Helper for [eq_M_foldrA]. *)
 Lemma eq_M_foldrA' {a b} (fnil fnil' : M b) (fcons fcons' : T a -> T b -> M b)
     (xs : ListA a)
   : eq_M fnil fnil' ->
@@ -964,6 +950,7 @@ Proof.
     apply H.
 Qed.
 
+(** Respectfulness of [foldrA]. *)
 Lemma eq_M_foldrA {a b} (fnil fnil' : M b) (fcons fcons' : T a -> T b -> M b)
     (xs : T (ListA a))
   : eq_M fnil fnil' ->
@@ -973,6 +960,9 @@ Proof.
   intros J1 J2; destruct xs; cbn; [ apply eq_M_foldrA'; auto | apply Reflexive_eq_M ].
 Qed.
 
+(** Renaming lemma: denotations ([eval]) are invariant under renamings.
+    Environments must be renamed too, [e = renameEnv s e'],
+    but we use a more readily available phrasing of that equality. *)
 Lemma evalRnm {g g'} u (t : Tm g u) (s : Rnm g g') (e : env g) (e' : env g')
   : (forall a v, lookup (s a v) e' = lookup v e) ->
     eq_M (eval t e) (eval (rename s t) e').
@@ -1007,6 +997,7 @@ Proof.
   - apply Reflexive_eq_M.
 Qed.
 
+(** Equal computations satisfy the same specifications. *)
 Lemma eq_M_optim {a} (u1 u2 : M a) r
   : eq_M u1 u2 -> u1 [[ r ]] -> u2 [[ r ]].
 Proof.
@@ -1054,7 +1045,7 @@ Qed.
 (** If [t] evaluates to value-cost pair [(v, n)] in the [BigStep] simantics
 (Hacket & Hutton's Clairvoyant CBV), then [t] evaluates to [(evalVl _ v, n)]
 in the [eval] semantics.
-(Recall [optim m r] means "there exists a pair in [m] satisfying the postcondition [r]") *)
+(Recall [m [[ r ]]] means "there exists a pair [(x0, n0)] in [m] satisfying the postcondition [r]") *)
 Theorem soundness : forall g u (t : Tm g u) (e : Heap g) g' (s' : Rnm g g') (e' : Heap g') (v : Vl g' u) (n : nat),
   BigStep t e s' e' v n ->
   (eval t (evalHeap e)) [[ fun x0 n0 => evalVl (evalHeap e') v = x0 /\ n = n0 ]].
@@ -1181,10 +1172,10 @@ Proof.
   etransitivity; [ apply Proper_shift |]; apply shift_id.
 Qed.
 
-Lemma renameCtx_restr_shift g g' (s : Rnm g g') e a (v : T (toType a))
-  : renameCtx (restr (shift s)) (e, v) = renameCtx s e.
+Lemma renameEnv_restr_shift g g' (s : Rnm g g') e a (v : T (toType a))
+  : renameEnv (restr (shift s)) (e, v) = renameEnv s e.
 Proof.
-  apply renameCtx_ext; intros; rewrite lookup_renameCtx; reflexivity.
+  apply renameEnv_ext; intros; rewrite lookup_renameEnv; reflexivity.
 Qed.
 
 Definition eq_T' {a b : Type} (r : a -> b -> Prop) (x : T a) (y : T b) : Prop :=
@@ -1221,7 +1212,7 @@ Theorem adequacy_ : forall n g u (t : Tm g u) (f : env g),
     (eval t f) {{ fun (x0 : toType u) n0 =>
       n = n0 ->
       forall g0 (s0 : Rnm g g0) (e0 : Heap g0),
-        f = renameCtx s0 (evalHeap e0) ->
+        f = renameEnv s0 (evalHeap e0) ->
         exists g' (s' : Rnm g0 g') (e' : Heap g') (v' : Vl g' u),
           evalVl (evalHeap e') v' = x0 /\
           BigStep (rename s0 t) e0 s' e' v' n0 }}.
@@ -1234,7 +1225,7 @@ Proof.
     prove_assum IH2.
     { cbn; f_equal; [ | f_equal; auto].
       rewrite Hf.
-      apply renameCtx_ext; intros; rewrite lookup_renameCtx.
+      apply renameEnv_ext; intros; rewrite lookup_renameEnv.
       apply symmetry, (BigStep_heap_increasing IH1). }
     decomp IH2.
     eexists _, _, _, _. split; [ eassumption | ].
@@ -1249,7 +1240,7 @@ Proof.
     eassumption.
   - intros y2 n2 Hy2 -> * Hf.
     specialize (IH n2 ltac:(simpl; lia)  _ _ _ _ _ _ Hy2 eq_refl _ (shift s0) (e0 :*: Undefined)).
-    prove_assum IH; [ cbn; f_equal; subst f; solve [auto using renameCtx_restr_shift] | ].
+    prove_assum IH; [ cbn; f_equal; subst f; solve [auto using renameEnv_restr_shift] | ].
     decomp IH.
     eexists _, _, _, _. split; [ eassumption | ].
     constructor; eassumption.
@@ -1260,8 +1251,8 @@ Proof.
     rewrite <- IH0 in Hy2; cbn in Hy2.
     assert (IH2 := IH n2 ltac:(lia) _ _ _ _ _ _ Hy2 eq_refl _ id_Rnm (e' :*: lookup' (s' _ (s0 _ v)) e') ).
     prove_assum IH2.
-    { rewrite renameCtx_id. cbn. f_equal.
-      rewrite Hf. rewrite lookup_renameCtx, <- lookup_evalHeap.
+    { rewrite renameEnv_id. cbn. f_equal.
+      rewrite Hf. rewrite lookup_renameEnv, <- lookup_evalHeap.
       rewrite (BigStep_heap_increasing IH1).
       reflexivity. }
     decomp IH2.
@@ -1270,7 +1261,7 @@ Proof.
     econstructor; try eassumption.
   - intros ? H -> * Hf.
     rewrite Hf in H.
-    rewrite lookup_renameCtx, lookup_evalHeap in H.
+    rewrite lookup_renameEnv, lookup_evalHeap in H.
     destruct (lookup' _ _) eqn:Elookup in H; cbn in H; [ | discriminate ].
     injection H; intros J.
     eexists _, _, _, _. split; [ eassumption | ].
@@ -1282,16 +1273,16 @@ Proof.
       symmetry; apply eq_M_eq.
       apply evalRnm.
       apply V_split; cbn; intros; [ | reflexivity ].
-      { rewrite Hf, lookup_renameCtx; reflexivity. } }
+      { rewrite Hf, lookup_renameEnv; reflexivity. } }
     constructor.
   - intros -> * Hf.
     eexists _, _, _, (VPair (s0 _ v) (s0 _ v0)).
     split.
-    { cbn. rewrite Hf, 2 lookup_renameCtx; reflexivity. }
+    { cbn. rewrite Hf, 2 lookup_renameEnv; reflexivity. }
     constructor.
   - intros ? Hv. mforward idtac. intros ? Hfst.
     intros -> * Hf.
-    rewrite Hf, lookup_renameCtx, lookup_evalHeap in Hv.
+    rewrite Hf, lookup_renameEnv, lookup_evalHeap in Hv.
     destruct (lookup' _ _) eqn:Hlookup in Hv; cbn in Hv; [ | discriminate ].
     injection Hv; clear Hv; intros Hv.
     assert (Hv' := inv_Vl x1); cbn in Hv'; destruct Hv' as (X1 & X2 & ->).
@@ -1304,7 +1295,7 @@ Proof.
     econstructor; try eauto.
   - intros ? Hv. mforward idtac. intros ? Hfst.
     intros -> * Hf.
-    rewrite Hf, lookup_renameCtx, lookup_evalHeap in Hv.
+    rewrite Hf, lookup_renameEnv, lookup_evalHeap in Hv.
     destruct (lookup' _ _) eqn:Hlookup in Hv; cbn in Hv; [ | discriminate ].
     injection Hv; clear Hv; intros Hv.
     assert (Hv' := inv_Vl x1); cbn in Hv'; destruct Hv' as (X1 & X2 & ->).
@@ -1322,12 +1313,12 @@ Proof.
   - intros -> * Hf.
     eexists _, _, _, (VCons (s0 _ v) (s0 _ v0)).
     split.
-    { cbn. rewrite Hf, 2 lookup_renameCtx; reflexivity. }
+    { cbn. rewrite Hf, 2 lookup_renameEnv; reflexivity. }
     constructor.
   - destruct (lookup v f) eqn:Hvf; cbn; [ | mforward idtac].
     intros y1 n1 Hy1 En * Hf.
     rewrite Hf in Hvf.
-    rewrite lookup_renameCtx, lookup_evalHeap in Hvf.
+    rewrite lookup_renameEnv, lookup_evalHeap in Hvf.
     destruct (lookup' _ _) eqn:Hvf' in Hvf; cbn in Hvf; [ | discriminate ].
     injection Hvf; clear Hvf; intros Hvf.
     assert (Hv := inv_Vl x0); cbn in Hv;
@@ -1351,19 +1342,19 @@ Proof.
       prove_assum IH1.
       { cbn; unfold foldrA. rewrite H. cbn. revert Hy1. subst.
         apply eq_M_foldrA'.
-        + apply Symmetric_eq_M. apply evalRnm. intros. rewrite lookup_renameCtx.
+        + apply Symmetric_eq_M. apply evalRnm. intros. rewrite lookup_renameEnv.
           reflexivity.
         + intros. apply Symmetric_eq_M, evalRnm.
           apply V_split; [ apply V_split | ]; intros; cbn; try reflexivity.
-          rewrite lookup_renameCtx. reflexivity. }
+          rewrite lookup_renameEnv. reflexivity. }
       specialize (IH1 eq_refl _ id_Rnm e0).
-      prove_assum IH1; [ rewrite renameCtx_id; reflexivity | ].
+      prove_assum IH1; [ rewrite renameEnv_id; reflexivity | ].
       decomp IH1; rewrite rename_id in IH1.
       specialize (IH n2 ltac:(lia) _ _ t2 _ _ _ Hy2 eq_refl _ (shift (shift s0) >>> shiftAlgCons x1 s')).
       specialize (IH (e' :*: Thunk v')).
       prove_assum IH.
-      { symmetry; apply renameCtx_ext. apply V_split; [ apply V_split |]; cbn.
-        - intros; rewrite Hf, lookup_renameCtx; auto.
+      { symmetry; apply renameEnv_ext. apply V_split; [ apply V_split |]; cbn.
+        - intros; rewrite Hf, lookup_renameEnv; auto.
           rewrite (BigStep_heap_increasing IH1). reflexivity.
         - rewrite (BigStep_heap_increasing IH1). reflexivity.
         - f_equal; auto. }
@@ -1376,8 +1367,8 @@ Proof.
       assert (IH1 := IH n1 ltac:(simpl; lia) _ _ _ _ _ _ Hy1 eq_refl).
       specialize (IH1 _ (shift (shift s0) >>> shiftAlgCons x1 id_Rnm) (e0 :*: Undefined)).
       prove_assum IH1.
-      { symmetry; apply renameCtx_ext; apply V_split; [ apply V_split | ]; intros; cbn.
-        - rewrite Hf, lookup_renameCtx. reflexivity.
+      { symmetry; apply renameEnv_ext; apply V_split; [ apply V_split | ]; intros; cbn.
+        - rewrite Hf, lookup_renameEnv. reflexivity.
         - reflexivity.
         - reflexivity. }
       decomp IH1.
@@ -1402,7 +1393,7 @@ Theorem adequacy g u (t : Tm g u) (e : Heap g)
              BigStep t e s' e' v' n' }}.
 Proof.
   intros y0 n0 Hy0.
-  assert (AQ := adequacy_ t Hy0 eq_refl id_Rnm ltac:(rewrite renameCtx_id; reflexivity)).
+  assert (AQ := adequacy_ t Hy0 eq_refl id_Rnm ltac:(rewrite renameEnv_id; reflexivity)).
   rewrite rename_id in AQ. assumption.
 Qed.
 
