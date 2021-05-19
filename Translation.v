@@ -29,6 +29,10 @@ From Coq Require Import FunctionalExtensionality.
 (* Propositional extensionality *)
 Axiom prop_ext : forall P Q, (P <-> Q) -> P = Q.
 
+(* We spent some effort to minimize the dependency on axioms,
+   that's why you'll see us defining some extensional equality relations
+   explicitly, even though they're equivalent to Leibniz equality [eq]
+   under those two axioms. *)
 
 Declare Scope ctx_scope.
 
@@ -1004,6 +1008,8 @@ Proof.
   unfold optimistic, eq_M. firstorder eauto.
 Qed.
 
+(** Renaming lemma for syntactic values: their denotations are invariant under
+    renaming. *)
 Lemma evalVl_renameVl g a (e : Heap g) (v : Vl g a) g' (s : Rnm g g') (e' : Heap g')
   : (forall a v, lookup (s a v) (evalHeap e') = lookup v (evalHeap e)) ->
     evalVl (evalHeap e) v = evalVl (evalHeap e') (renameVl s v).
@@ -1018,6 +1024,7 @@ Proof.
   - f_equal; auto.
 Qed.
 
+(** Helper for [lookup_evalHeap]. *)
 Lemma lookup_evalHeap_ g a (e : Heap g) (v : V g a) g' (s : Rnm g g') (e' : Heap g')
   : (forall a v, lookup (s a v) (evalHeap e') = lookup v (evalHeap e)) ->
     lookup (s _ v) (evalHeap e') = mapT (evalVl (evalHeap e')) (lookup_' v s e).
@@ -1031,6 +1038,8 @@ Proof.
     intros ? vv. specialize (H _ (There vv)). cbn in H. rewrite eta_Heap in H; apply H.
 Qed.
 
+(** Evaluating the heap, then indexing it, is equivalent to
+    indexing it then evaluating the result. *)
 Lemma lookup_evalHeap g a (e : Heap g) (v : V g a)
   : lookup v (evalHeap e) = mapT (evalVl (evalHeap e)) (lookup' v e).
 Proof.
@@ -1099,6 +1108,10 @@ Proof.
   - firstorder.
 Qed.
 
+(** Next, we will prove adequacy *)
+
+(** More preliminaries *)
+
 Ltac decomp H :=
   lazymatch type of H with
   | (exists x_, _) => let x := fresh x_ in destruct H as [x H]; decomp H
@@ -1115,6 +1128,7 @@ Ltac prove_assum H :=
     assert (w : T); [ | specialize (H w); clear w ]
   end.
 
+(** Extensional equality of renamings. *)
 Definition eq_Rnm g g' (s1 s2 : Rnm g g') : Prop :=
   forall a v, s1 a v = s2 a v.
 
@@ -1122,15 +1136,19 @@ Declare Scope rnm_scope.
 Delimit Scope rnm_scope with rnm.
 Infix "=" := eq_Rnm : rnm_scope.
 
+(** Transitivity of [eq_Rnm]. *)
 Lemma Transitive_eq_Rnm g g' (s1 s2 s3 : Rnm g g')
   : (s1 = s2)%rnm -> (s2 = s3)%rnm -> (s1 = s3)%rnm.
 Proof. unfold eq_Rnm; etransitivity; eauto. Qed.
 
+(** [eq_Rnm] is an equivalence relation. *)
 Instance Equivalence_eq_Rnm g g' : Equivalence (@eq_Rnm g g').
 Proof.
   constructor; red; unfold eq_Rnm; [reflexivity | symmetry | etransitivity]; eauto.
 Qed.
 
+(** [shift] commutes with [>>>] (composition of renamings) and [id_Rnm].
+    (i.e., [shift] is a functor.) *)
 Lemma shift_cat_Rnm g1 g2 g3 (s1 : Rnm g1 g2) (s2 : Rnm g2 g3) (a : Ty)
   : (shift (a := a) (s1 >>> s2) = shift s1 >>> shift s2)%rnm.
 Proof.
@@ -1157,6 +1175,7 @@ Proof.
   revert g' s1 s2; induction t; intros * Es; cbn; f_equal; eauto using Proper_shift.
 Qed.
 
+(** [rename] commutes with composition (of renamings vs of functions) *)
 Lemma rename_cat_Rnm g1 g2 g3 (s1 : Rnm g1 g2) (s2 : Rnm g2 g3) (a : Ty) (t : Tm g1 a)
   : rename (s1 >>> s2) t = rename s2 (rename s1 t).
 Proof.
@@ -1165,6 +1184,7 @@ Proof.
   eapply Transitive_eq_Rnm; [ apply Proper_shift | ]; apply shift_cat_Rnm.
 Qed.
 
+(** Renaming with the identity renaming is the identity function on terms. *)
 Lemma rename_id g a (t : Tm g a) : rename id_Rnm t = t.
 Proof.
   induction t; cbn; intros; f_equal; auto.
@@ -1172,6 +1192,7 @@ Proof.
   etransitivity; [ apply Proper_shift |]; apply shift_id.
 Qed.
 
+(** [restr] is kinda the oopposite of [shift]. *)
 Lemma renameEnv_restr_shift g g' (s : Rnm g g') e a (v : T (toType a))
   : renameEnv (restr (shift s)) (e, v) = renameEnv s e.
 Proof.
@@ -1191,6 +1212,7 @@ Proof.
   intros H [] []; cbn; auto.
 Qed.
 
+(** Inversion principle for [Vl] (a more predictable technique than using [inversion]). *)
 Lemma inv_Vl g u (v : Vl g u)
   : match u return Vl g u -> Prop with
     | Arr u1 u2 => fun v => exists t, v = VLam t
