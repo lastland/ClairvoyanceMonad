@@ -9,6 +9,7 @@ From Equations Require Import Equations.
 
 (* ---------------------- Section 2: Motivating Example ---------------------- *)
 
+(** * Figure 1. *)
 
 Fixpoint append {a} (xs ys : list a) : list a :=
   match xs with

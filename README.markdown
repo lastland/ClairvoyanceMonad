@@ -25,9 +25,11 @@ The artifact supports the claims in the paper in two ways:
 
 ### Dependencies
 
-The artifact requires [the Coq proof
-assistant](https://coq.inria.fr/). The artifact is known to work with
-Coq versions 8.10.2, 8.11.2, 8.12.2, and 8.13.2.
+If you are accessing the artifact via the VM image we provide, you should have
+all the dependencies installed already.
+
+The artifact requires [the Coq proof assistant](https://coq.inria.fr/). The
+artifact is known to work with Coq versions 8.10.2, 8.11.2, 8.12.2, and 8.13.2.
 
 The artifact also requires the [Equations
 library](https://github.com/mattam82/Coq-Equations). To install it via
@@ -37,9 +39,6 @@ OPAM:
 opam repo add coq-released https://coq.inria.fr/opam/released
 opam install coq-equations
 ```
-
-If you are accessing the artifact via the VM image we provide, you should have
-all the dependencies installed already.
 
 ### Proof check
 
@@ -89,27 +88,26 @@ they are functional and propositional extensionality.
 
 ### Checking main claims of the paper
 
-A paper draft has been provided together with the artifact. We have listed all
-the main claims of the paper and where to find them in the next section of this
+A paper draft has also been provided in the submission. We have listed all the
+main claims in the paper and where to find them in the next section of this
 file. We have also added comments to the definitions/theorems for
 illustration. You can cross check the claims of the paper with what's
 implemented in the Coq files.
 
 ## Main claims of the paper
 
-If you are looking for the code corresponds to a figure, you can usually find it
-by searching the figure in one of the two files. For example, if you are looking
-for the formalization of the monadic translation presented in Figure 8, you can
-find it by searching "Figure 8" in the `Translation.v` file.
+If you are looking for the code corresponding to a figure, you can search the
+figure label in one of the two files. For example, if you are looking for the
+formalization of the monadic translation presented in Fig. 8, you can find it by
+searching "Figure 8" in the `Translation.v` file.
 
 ### The clairvoyance monad
 
 In Section 3 of the paper, we introduce _the clairvoyance monad_.
 
-- The core definitions presented in Fig. 4 can be found in the
-  `ClairvoyanceMonad` section of the file `Clairvoyance.v`.
-- The notations presented in Fig. 5 are defined right after the
-  `ClairvoyanceMonad` section.
+The core definitions presented in Fig. 4 can be found in the `ClairvoyanceMonad`
+section of the file `Clairvoyance.v`. The notations defined in the paper can
+also be found right after the section.
 
 ### Translation
 
