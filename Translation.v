@@ -49,10 +49,18 @@ Definition T_prop {a} (f : a -> Prop) (t : T a) : Prop :=
 
 (** * Extensional equality and inequality on [M]. *)
 
+(** Two sets [u] and [v] are equal when they have the same elements.
+    Since we've assumed functional and propositional extensionality,
+    this is equivalent to Leibniz equality [eq]. Otherwise we would have
+    to sprinkle [eq_M] all over the place. *)
+Definition eq_M {a} (u v : M a) : Prop := forall x n, u x n <-> v x n.
+
+(** A set [t], viewed as a computation, "costs less" than another computation
+    [t'] when it can produce (at least) all same results as [t] for less.
+    This is only used for facts about "simplifying ticks" (Section 4.4),
+    unrelated to soundness and adequacy. *)
 Definition le_M {a} (t t' : M a) : Prop :=
   forall x n, t' x n -> exists n', t x n' /\ n' <= n.
-
-Definition eq_M {a} (u v : M a) : Prop := forall x n, u x n <-> v x n.
 
 Declare Scope M_scope.
 Delimit Scope M_scope with M.
@@ -76,13 +84,16 @@ Qed.
 
 (** * Lemmas for [eq_M]. *)
 
+(** Respectfulness lemmas: [eq_M] is preserved by the
+    various operations we've defined on [M]. *)
+
 (** A reasoning rule for extensional equality on [M]: if [u1] and [u2] are
     equal, and [k1] and [k2] are equal, then [bind u1 k1] and [bind u2 k2] are
     also equal. *)
 Lemma eq_M_bind {a b} (u1 u2 : M a) (k1 k2 : a -> M b)
   : (u1 = u2)%M ->
     (forall x, (k1 x = k2 x)%M) ->
-    (bind u1 k1 =bind u2 k2)%M.
+    (bind u1 k1 = bind u2 k2)%M.
 Proof.
   unfold eq_M. firstorder.
   repeat eexists; eauto. apply H; eauto. apply H0; eauto.
@@ -148,7 +159,9 @@ Qed.
 
 (** * Simplifying ticks.
     
-    The theorems justify the rewrite rules discussed in Section 4.4. *)
+    The theorems justify the rewrite rules discussed in Section 4.4.
+    This is unrelated to soundness and adequacy, which are
+    the main results of this file. *)
 
 Lemma bind_tick {a b} (t : M a) (k : a -> M b)
   : (bind t (fun x => tick >> k x) = tick >> bind t k)%M.
@@ -178,10 +191,9 @@ Module Lambda.
 
 (** Types.
     
-    Our formalization of the calculus contains generalizes what we present in
+    Our formalization of the calculus slightly generalizes what we present in
     the paper. In particular, (1) we add a product type, and (2) we generalize
-    the [unit] type of Fig. 6 to a base type of arbitrary types of the host
-    language (Coq). *)
+    the [unit] type of Fig. 6 to an arbitrary set of base types. *)
 Inductive Ty : Type :=
 | Arr  : Ty -> Ty -> Ty  (* Functions *)
 | Prod : Ty -> Ty -> Ty  (* Products *)
@@ -196,10 +208,11 @@ Inductive Ty : Type :=
     Learn more about de Bruijn indices here:
     [https://en.wikipedia.org/wiki/De_Bruijn_index]
 
-    Instead of using natural numbers as in de Bruijn indices, we use an index to
-    lists. [Ctx] is a list of types representing the context. And the variable
-    representation [V] is an index to that list, which is essentially a natural
-    number but with type information embedded in it. *)
+    Instead of using natural numbers as in de Bruijn indices, we index
+    variables by the context they belong to, ensuring that variables are
+    always well-scoped by construction. *)
+
+(** A context is a list of types. *)
 Inductive Ctx : Type :=
 | NilCtx
 | ConsCtx : Ctx -> Ty -> Ctx
@@ -207,8 +220,11 @@ Inductive Ctx : Type :=
 
 Infix ":,:" := ConsCtx (at level 50).
 
-(** The variable representation. See explanations above in the comments of the
-    [Ctx] data type. *)
+(** A variable is an index into a context.
+    Its type parameters associate it to the context it indexes into,
+    and the type it points to. It is essentially a natural number (de Bruijn
+    index) but with type information embedded in it.
+    [n : V g u] means that the [n]-th element in [g] is [u]. *)
 Inductive V : Ctx -> Ty -> Type :=
 | Here g x : V (g :,: x) x
 | There g x y : V g y -> V (g :,: x) y
@@ -271,15 +287,19 @@ Fixpoint toType (u : Ty) : Type :=
   | Base b => b
   end.
 
-(** Traslating the context [Ctx] to a left-associated nested product type. *)
+(** We translate contexts to environments, which are heterogeneous lists
+    of elements whose types are given by the context (a list of types).
+    Concretely, this heterogeneous list is represented by left-nested tuples.
+    The context binds thunks, hence each component is wrapped in [T]. *)
 Fixpoint env (g : Ctx) : Type :=
   match g with
   | NilCtx => unit
   | ConsCtx g1 u => env g1 * T (toType u)
   end.
 
-(** Use the variable representation [V] to find the type of a variable from the
-    context. *)
+(** As a variable [v : V g u] is an index into a context [g],
+    it can be used to look up the corresponding element in a heterogeneous list
+    indexed by [g], which must have type [T (toType u)] by definition of [env g]. *)
 Fixpoint lookup {g u} (v : V g u) : env g -> T (toType u) :=
   match v with
   | Here => fun ex => snd ex
@@ -306,10 +326,10 @@ Definition foldrA {a b} (n : M b) (c : T a -> T b -> M b)
 
 (** * Fig. 8 *)
 
-(** * The term translation.
+(** * The term translation, aka. a denotational semantics.
 
-    We are denoting the calculus with folds using Gallina here, so we call the
-    denotation [eval].  *)
+    The [eval]uation of a term [t] in some environment [e : env g]
+    is a computation (in the monad [M]) producing a value of type [toType u]. *)
 Fixpoint eval {g u} (t : Tm g u) : env g -> M (toType u) := fun e =>
   match t with
   | Let t1 t2 => fun e =>
@@ -379,6 +399,7 @@ Proof.
     + intros. apply Reflexive_le_M.
 Qed.
 
+(** [appendA] costs at most as much as the denotation of [append]. *)
 Theorem appendA_le_append {a} (xs ys : T (ListA (toType a)))
   : (appendA xs ys <= eval append (tt, xs, ys))%M.
 Proof.
@@ -386,6 +407,7 @@ Proof.
   eapply appendA_le_append_.
 Qed.
 
+(** Multiply the cost of a computation [u] by a constant [c]. *)
 Definition costMul {a} (c : nat) (u : M a) : M a :=
   fun x n => exists m, u x m /\ c * m = n.
 
@@ -413,6 +435,7 @@ Proof.
   - apply optimistic_skip. mgo'.
 Qed.
 
+(** The denotation of [append] costs at most twice as much as [appendA]. *)
 Theorem append_le_appendA {a} (xs ys : T (ListA (toType a)))
   : (eval append (tt, xs, ys) <= costMul 2 (appendA xs ys))%M.
 Proof.
@@ -440,15 +463,17 @@ Variant Vl (g : Ctx) : Ty -> Type :=
 | VBas b : b -> Vl g (Base b)
 .
 
-Inductive Env : Ctx -> Type :=
-| ENil : Env NilCtx
-| ECons g a : Env g -> T (Vl g a) -> Env (g :,: a)
+(** Heaps are lists of syntactic values. *)
+Inductive Heap : Ctx -> Type :=
+| HNil : Heap NilCtx
+| HCons g a : Heap g -> T (Vl g a) -> Heap (g :,: a)
 .
 
-Infix ":*:" := ECons (at level 40).
+Infix ":*:" := HCons (at level 40).
 
 (** General operations on syntax *)
 
+(** Append contexts *)
 Fixpoint app_Ctx (g g' : Ctx) : Ctx :=
   match g' with
   | NilCtx => g
@@ -459,29 +484,33 @@ Infix "++" := app_Ctx : ctx_scope.
 
 Bind Scope ctx_scope with Ctx.
 
-Definition here {g u} (e : Env (g :,: u)) : T (Vl g u) :=
-  match e in Env g0 return
+(** The first element of a non-empty heap. *)
+Definition here {g u} (e : Heap (g :,: u)) : T (Vl g u) :=
+  match e in Heap g0 return
     match g0 with
     | NilCtx => True
     | (_ :,: u) => T (Vl _ u)
     end with
-  | ENil => I
-  | ECons _ h => h
+  | HNil => I
+  | HCons _ h => h
   end.
 
-Definition there {g u} (e : Env (g :,: u)) : Env g :=
-  match e in Env g0 return
+(** The tail of a non-empty heap. *)
+Definition there {g u} (e : Heap (g :,: u)) : Heap g :=
+  match e in Heap g0 return
     match g0 with
     | NilCtx => True
-    | (g :,: _) => Env g
+    | (g :,: _) => Heap g
     end with
-  | ENil => I
-  | ECons t _ => t
+  | HNil => I
+  | HCons t _ => t
   end.
 
-(** Renaming from context [g] to context [g'] *)
+(** Renaming from context [g] to context [g'] (a substitution whose codomain is
+    variables). *)
 Definition Rnm (g g' : Ctx) := forall a, V g a -> V g' a.
 
+(** An eliminator for [V], when the context is explicitly of the form [g :,: a]. *)
 Definition elimV {g a b} (v : V (g :,: a) b) {r : Ty -> Type} : (V g b -> r b) -> r a -> r b :=
   match v in V g_ b_ return
     match g_ with
@@ -492,19 +521,23 @@ Definition elimV {g a b} (v : V (g :,: a) b) {r : Ty -> Type} : (V g b -> r b) -
   | There v => fun x _ => x v
   end.
 
+(** Extend a renaming with a variable (renamed to itself). *)
 Definition shift {g g' : Ctx} (s : Rnm g g') {a} : Rnm (g :,: a) (g' :,: a) :=
   fun _ v => elimV v (fun v => There (s _ v)) Here.
 
-(** Given [fcons] in context [g1 :,: a :,: b], we rename it by
-  1. looking up [a] in the context [g1];
-  2. applying some substitution on [g2]. *)
+(** Helper renaming for the operational semantics of [Foldr].
+    Given [fcons] in context [g1 :,: a :,: b], we rename it by
+    1. looking up [a] in the context [g1];
+    2. applying some substitution on [g2]. *)
 Definition shiftAlgCons {g1 g2 a b} (v1 : V g1 a) (s : Rnm g1 g2)
   : Rnm (g1 :,: a :,: b) (g2 :,: b) :=
   shift (fun _ v => s _ (elimV v (fun v => v) v1)).
 
+(** Restriction of a renaming, forgetting one variable in the original context. *)
 Definition restr {g g' : Ctx} {a} (s : Rnm (g :,: a) g') : Rnm g g' :=
   fun _ v => s _ (There v).
 
+(** Rename a term. *)
 Fixpoint rename {g g'} (s : Rnm g g') {a} (t : Tm g a) : Tm g' a :=
   match t with
   | Let t1 t2 => Let (rename s t1) (rename (shift s) t2)
@@ -520,6 +553,7 @@ Fixpoint rename {g g'} (s : Rnm g g') {a} (t : Tm g a) : Tm g' a :=
   | Bas b => Bas b
   end.
 
+(** Rename a value. *)
 Definition renameVl {g g'} (s : Rnm g g') {a} (t : Vl g a) : Vl g' a :=
   match t with
   | VLam t1 => VLam (rename (shift s) t1)
@@ -527,12 +561,6 @@ Definition renameVl {g g'} (s : Rnm g g') {a} (t : Vl g a) : Vl g' a :=
   | VNil => VNil
   | VCons v1 v2 => VCons (s _ v1) (s _ v2)
   | VBas b => VBas b
-  end.
-
-Fixpoint lookup_' {g g' u} (v : V g u) : Rnm g g' -> Env g -> T (Vl g' u) :=
-  match v with
-  | Here => fun s e => mapT (renameVl (restr s)) (here e)
-  | There v1 => fun s gx => lookup_' v1 (restr s) (there gx)
   end.
 
 Definition id_Rnm {g} : Rnm g g :=
@@ -543,11 +571,24 @@ Definition cat_Rnm {g g' g''} : Rnm g g' -> Rnm g' g'' -> Rnm g g'' :=
 
 Infix ">>>" := cat_Rnm (at level 40).
 
-Definition lookup' {g u} (v : V g u) : Env g -> T (Vl g u) :=
+(** Look up a value in a heap indexed by a variable [v] and rename the result.
+    This is equivalent to a composition of [lookup'] and [renameVl],
+    except this function is needed to define [lookup'] in the first place. *)
+Fixpoint lookup_' {g g' u} (v : V g u) : Rnm g g' -> Heap g -> T (Vl g' u) :=
+  match v with
+  | Here => fun s e => mapT (renameVl (restr s)) (here e)
+  | There v1 => fun s gx => lookup_' v1 (restr s) (there gx)
+  end.
+
+(** Look up a value in a heap indexed by a variable [v]. *)
+Definition lookup' {g u} (v : V g u) : Heap g -> T (Vl g u) :=
   lookup_' v id_Rnm.
 
-Inductive LazyStep g u (e : Env g) (BigStep_ : forall g', Rnm g g' -> Env g' -> Vl g' u -> nat -> Prop)
-  : forall g', Rnm g g' -> Env g' -> T (Vl g' u) -> nat -> Prop :=
+(** A helper for factoring the rules for [Foldr], which involves nondeterminism like [Let].
+    Either run a computation (according to the given [BigStep_] relation,
+    wrapping the result in a [Thunk]), or do nothing (returning [Undefined]). *)
+Inductive LazyStep g u (e : Heap g) (BigStep_ : forall g', Rnm g g' -> Heap g' -> Vl g' u -> nat -> Prop)
+  : forall g', Rnm g g' -> Heap g' -> T (Vl g' u) -> nat -> Prop :=
 | LazyStep_SKIP : LazyStep e BigStep_ id_Rnm e Undefined 0
 | LazyStep_STEP g' (s' : Rnm g g') e' r n
   : BigStep_ g' s' e' r n ->
@@ -556,12 +597,13 @@ Inductive LazyStep g u (e : Env g) (BigStep_ : forall g', Rnm g g' -> Env g' -> 
 
 Definition vthere {g a} : Rnm g (g :,: a) := fun _ v => There v.
 
-(* Must be Defined for the BigStep fixpoint... *)
-Lemma LazyStep_mon g u (e : Env g)
-    (BigStep_ BigStep_' : forall g', Rnm g g' -> Env g' -> Vl g' u -> nat -> Prop)
-  : (forall g' (s' : Rnm g g') (e' : Env g') (v : Vl g' u) (n : nat),
+(* A helper for [BigStep]'s induction principle.
+   Monotonicity of [LazyStep] as a function on relations. *)
+Lemma LazyStep_mon g u (e : Heap g)
+    (BigStep_ BigStep_' : forall g', Rnm g g' -> Heap g' -> Vl g' u -> nat -> Prop)
+  : (forall g' (s' : Rnm g g') (e' : Heap g') (v : Vl g' u) (n : nat),
        BigStep_ g' s' e' v n -> BigStep_' g' s' e' v n) ->
-    forall g' (s' : Rnm g g') (e' : Env g') (v : T (Vl g' u)) (n : nat),
+    forall g' (s' : Rnm g g') (e' : Heap g') (v : T (Vl g' u)) (n : nat),
       LazyStep e BigStep_ s' e' v n -> LazyStep e BigStep_' s' e' v n.
 Proof.
   intros H * []; constructor; [ apply H; assumption ].
@@ -569,8 +611,9 @@ Defined.
 
 Unset Elimination Schemes.
 
+(** [and] lifted to relations. *)
 Definition andBS {g u}
-    (BigStep_ BigStep_' : forall g', Rnm g g' -> Env g' -> Vl g' u -> nat -> Prop) :=
+    (BigStep_ BigStep_' : forall g', Rnm g g' -> Heap g' -> Vl g' u -> nat -> Prop) :=
   fun g' s' e' v n => BigStep_ g' s' e' v n /\ BigStep_' g' s' e' v n.
 
 (** [BigStep t1 e1 s2 e2 v2 n2]:
@@ -578,21 +621,20 @@ The term [t1] in heap [e1] evaluates to value [v2] in heap [e2] in time [n2],
 and [s2] is a mapping from locations in [e1] to locations in [e2].
 
 The extra complexity is mainly due to our intrinsically typed syntax,
-which we have to rename to evaluate under a modified heap/env.
- *)
-Inductive BigStep : forall g u, Tm g u -> Env g -> forall g', Rnm g g' -> Env g' -> Vl g' u -> nat -> Prop :=
-| BigStep_Let_SKIP g a b (t1 : Tm g a) (t2 : Tm (g :,: a) b) (e : Env g) g' (s' : Rnm _ g') e' r n
+for which we have to rename to evaluate some terms in a modified heap. *)
+Inductive BigStep : forall g u, Tm g u -> Heap g -> forall g', Rnm g g' -> Heap g' -> Vl g' u -> nat -> Prop :=
+| BigStep_Let_SKIP g a b (t1 : Tm g a) (t2 : Tm (g :,: a) b) (e : Heap g) g' (s' : Rnm _ g') e' r n
   : BigStep t2 (e :*: Undefined) (g' := g') s' e' r n ->
     BigStep (Let t1 t2) e (restr s') e' r (S n)
-| BigStep_Let_STEP g a b (t1 : Tm g a) (t2 : Tm (g :,: a) b) (e : Env g)
+| BigStep_Let_STEP g a b (t1 : Tm g a) (t2 : Tm (g :,: a) b) (e : Heap g)
     g1 (s1 : Rnm _ g1) e1 r1 n1
     g2 (s2 : Rnm _ g2) e2 r2 n2
   : BigStep t1 e s1 e1 r1 n1 ->
     BigStep (rename (shift s1) t2) (e1 :*: Thunk r1) s2 e2 r2 n2 ->
     BigStep (Let t1 t2) e (s1 >>> restr s2) e2 r2 (S (n1 + n2))
 | BigStep_App g a b (t : Tm g (Arr a b)) (v : V g a) e
-    g1 (s1 : Rnm _ g1) (e1 : Env g1) r1 n1
-    g2 (s2 : Rnm _ g2) (e2 : Env g2) r2 n2
+    g1 (s1 : Rnm _ g1) (e1 : Heap g1) r1 n1
+    g2 (s2 : Rnm _ g2) (e2 : Heap g2) r2 n2
   : BigStep t e s1 e1 (VLam r1) n1 ->
     BigStep r1 (e1 :*: lookup' (s1 _ v) e1) s2 e2 r2 n2 ->
     BigStep (App t v) e (s1 >>> restr s2) e2 r2 (S (n1 + n2))
@@ -611,18 +653,18 @@ Inductive BigStep : forall g u, Tm g u -> Env g -> forall g', Rnm g g' -> Env g'
   : Thunk (VPair v1 v2) = lookup' v e ->
     Thunk r2 = lookup' v2 e ->
     BigStep (Snd v) e id_Rnm e r2 1
-| BigStep_Nil g a (e : Env g)
+| BigStep_Nil g a (e : Heap g)
   : BigStep (@Nil _ a) e id_Rnm e VNil 0
 | BigStep_Cons g a (v1 : V g a) (v2 : V g (List a)) e
   : BigStep (Cons v1 v2) e id_Rnm e (VCons v1 v2) 0
 | BigStep_Foldr_Nil g a b (fnil : Tm g b) fcons (v : V g (List a)) e
-    g1 (s1 : Rnm _ g1) (e1 : Env g1) r1 n1
+    g1 (s1 : Rnm _ g1) (e1 : Heap g1) r1 n1
   : Thunk VNil = lookup' v e ->
     BigStep fnil e s1 e1 r1 n1 ->
     BigStep (Foldr fnil fcons v) e s1 e1 r1 (S n1)
 | BigStep_Foldr_Node g a b (fnil : Tm g b) (fcons : Tm (g :,: a :,: b) b) v e v1 v2
-    g1 (s1 : Rnm _ g1) (e1 : Env g1) r1 n1
-    g2 (s2 : Rnm _ g2) (e2 : Env g2) r2 n2
+    g1 (s1 : Rnm _ g1) (e1 : Heap g1) r1 n1
+    g2 (s2 : Rnm _ g2) (e2 : Heap g2) r2 n2
   : Thunk (VCons v1 v2) = lookup' v e ->
     LazyStep e (@BigStep g b (Foldr fnil fcons v2) e) s1 e1 r1 n1 ->
     BigStep (rename (shiftAlgCons v1 s1) fcons) (e1 :*: r1) s2 e2 r2 n2 ->
@@ -631,65 +673,68 @@ Inductive BigStep : forall g u, Tm g u -> Env g -> forall g', Rnm g g' -> Env g'
   : BigStep (Bas (g := g) x) e id_Rnm e (VBas x) 0
 .
 
+(** [BigStep] is a nested inductive type, so we must again define its
+induction principle by hand (this is mostly copy-pasted from the wrong
+induction principle generated by Coq, and fixing the [BigStep_Foldr_Node] case. *)
 Definition BigStep_ind :
 forall
   P : forall (g : Ctx) (u : Ty),
       Tm g u ->
-      Env g -> forall g' : Ctx, Rnm g g' -> Env g' -> Vl g' u -> nat -> Prop,
+      Heap g -> forall g' : Ctx, Rnm g g' -> Heap g' -> Vl g' u -> nat -> Prop,
 (forall (g : Ctx) (a b : Ty) (t1 : Tm g a) (t2 : Tm (g :,: a) b)
-   (e : Env g) (g' : Ctx) (s' : Rnm (g :,: a) g')
-   (e' : Env g') (r : Vl g' b) (n : nat),
+   (e : Heap g) (g' : Ctx) (s' : Rnm (g :,: a) g')
+   (e' : Heap g') (r : Vl g' b) (n : nat),
  BigStep t2 (e :*: Undefined) s' e' r n ->
  P (g :,: a) b t2 (e :*: Undefined) g' s' e' r n ->
  P g b (Let t1 t2) e g' (restr s') e' r (S n)) ->
 (forall (g : Ctx) (a b : Ty) (t1 : Tm g a) (t2 : Tm (g :,: a) b)
-   (e : Env g) (g1 : Ctx) (s1 : Rnm g g1) (e1 : Env g1)
+   (e : Heap g) (g1 : Ctx) (s1 : Rnm g g1) (e1 : Heap g1)
    (r1 : Vl g1 a) (n1 : nat) (g2 : Ctx) (s2 : Rnm (g1 :,: a) g2)
-   (e2 : Env g2) (r2 : Vl g2 b) (n2 : nat),
+   (e2 : Heap g2) (r2 : Vl g2 b) (n2 : nat),
  BigStep t1 e s1 e1 r1 n1 ->
  P g a t1 e g1 s1 e1 r1 n1 ->
  BigStep (rename (shift s1) t2) (e1 :*: Thunk r1) s2 e2 r2 n2 ->
  P (g1 :,: a) b (rename (shift s1) t2) (e1 :*: Thunk r1) g2 s2 e2 r2 n2 ->
  P g b (Let t1 t2) e g2 (s1 >>> restr s2) e2 r2 (S (n1 + n2))) ->
 (forall (g : Ctx) (a b : Ty) (t : Tm g (Arr a b))
-   (v : V g a) (e : Env g) (g1 : Ctx) (s1 : Rnm g g1)
-   (e1 : Env g1) (r1 : Tm (g1 :,: a) b) (n1 : nat)
-   (g2 : Ctx) (s2 : Rnm (g1 :,: a) g2) (e2 : Env g2)
+   (v : V g a) (e : Heap g) (g1 : Ctx) (s1 : Rnm g g1)
+   (e1 : Heap g1) (r1 : Tm (g1 :,: a) b) (n1 : nat)
+   (g2 : Ctx) (s2 : Rnm (g1 :,: a) g2) (e2 : Heap g2)
    (r2 : Vl g2 b) (n2 : nat),
  BigStep t e s1 e1 (VLam r1) n1 ->
  P g (Arr a b) t e g1 s1 e1 (VLam r1) n1 ->
  BigStep r1 (e1 :*: lookup' (s1 a v) e1) s2 e2 r2 n2 ->
  P (g1 :,: a) b r1 (e1 :*: lookup' (s1 a v) e1) g2 s2 e2 r2 n2 ->
  P g b (App t v) e g2 (s1 >>> restr s2) e2 r2 (S (n1 + n2))) ->
-(forall (g : Ctx) (a : Ty) (v : V g a) (e : Env g) (r : Vl g a),
+(forall (g : Ctx) (a : Ty) (v : V g a) (e : Heap g) (r : Vl g a),
  Thunk r = lookup' v e -> P g a (Var v) e g id_Rnm e r 1) ->
-(forall (g : Ctx) (a b : Ty) (t : Tm (g :,: a) b) (e : Env g),
+(forall (g : Ctx) (a b : Ty) (t : Tm (g :,: a) b) (e : Heap g),
  P g (Arr a b) (Fun t) e g id_Rnm e (VLam t) 0) ->
-(forall (g : Ctx) (a b : Ty) (v1 : V g a) (v2 : V g b) (e : Env g),
+(forall (g : Ctx) (a b : Ty) (v1 : V g a) (v2 : V g b) (e : Heap g),
  P g (Prod a b) (Pair v1 v2) e g id_Rnm e (VPair v1 v2) 0) ->
 (forall (g : Ctx) (a b : Ty) (v : V g (Prod a b))
-   (e : Env g) (v1 : V g a) (v2 : V g b) (r1 : Vl g a),
+   (e : Heap g) (v1 : V g a) (v2 : V g b) (r1 : Vl g a),
  Thunk (VPair v1 v2) = lookup' v e ->
  Thunk r1 = lookup' v1 e -> P g a (Fst v) e g id_Rnm e r1 1) ->
 (forall (g : Ctx) (a b : Ty) (v : V g (Prod a b))
-   (e : Env g) (v1 : V g a) (v2 : V g b) (r2 : Vl g b),
+   (e : Heap g) (v1 : V g a) (v2 : V g b) (r2 : Vl g b),
  Thunk (VPair v1 v2) = lookup' v e ->
  Thunk r2 = lookup' v2 e -> P g b (Snd v) e g id_Rnm e r2 1) ->
-(forall (g : Ctx) (a : Ty) (e : Env g), P g (List a) Nil e g id_Rnm e VNil 0) ->
-(forall (g : Ctx) (a : Ty) (v1 : V g a) (v2 : V g (List a)) (e : Env g),
+(forall (g : Ctx) (a : Ty) (e : Heap g), P g (List a) Nil e g id_Rnm e VNil 0) ->
+(forall (g : Ctx) (a : Ty) (v1 : V g a) (v2 : V g (List a)) (e : Heap g),
  P g (List a) (Cons v1 v2) e g id_Rnm e (VCons v1 v2) 0) ->
 (forall (g : Ctx) (a b : Ty) (fnil : Tm g b)
    (fcons : Tm ((g :,: a) :,: b) b)
-   (v : V g (List a)) (e : Env g) (g1 : Ctx) (s1 : Rnm g g1)
-   (e1 : Env g1) (r1 : Vl g1 b) (n1 : nat),
+   (v : V g (List a)) (e : Heap g) (g1 : Ctx) (s1 : Rnm g g1)
+   (e1 : Heap g1) (r1 : Vl g1 b) (n1 : nat),
  Thunk VNil = lookup' v e ->
  BigStep fnil e s1 e1 r1 n1 ->
  P g b fnil e g1 s1 e1 r1 n1 -> P g b (Foldr fnil fcons v) e g1 s1 e1 r1 (S n1)) ->
 (forall (g : Ctx) (a b : Ty) (fnil : Tm g b)
    (fcons : Tm ((g :,: a) :,: b) b)
-   (v : V g (List a)) (e : Env g) (v1 : V g a) (v2 : V g (List a)) (g1 : Ctx)
-   (s1 : Rnm g g1) (e1 : Env g1) (r1 : T (Vl g1 b))
-   (n1 : nat) (g2 : Ctx) (s2 : Rnm (g1 :,: b) g2) (e2 : Env g2)
+   (v : V g (List a)) (e : Heap g) (v1 : V g a) (v2 : V g (List a)) (g1 : Ctx)
+   (s1 : Rnm g g1) (e1 : Heap g1) (r1 : T (Vl g1 b))
+   (n1 : nat) (g2 : Ctx) (s2 : Rnm (g1 :,: b) g2) (e2 : Heap g2)
    (r2 : Vl g2 b) (n2 : nat),
  Thunk (VCons v1 v2) = lookup' v e ->
  LazyStep e (andBS (BigStep (Foldr fnil fcons v2) e) (P _ _ (Foldr fnil fcons v2) e)) s1 e1 r1 n1 ->
@@ -697,10 +742,10 @@ forall
  P (g1 :,: b) b (rename (shiftAlgCons v1 s1) fcons)
    (e1 :*: r1) g2 s2 e2 r2 n2 ->
  P g b (Foldr fnil fcons v) e g2 (s1 >>> restr s2) e2 r2 (S (n1 + n2))) ->
-(forall (g : Ctx) (b : Type) (x : b) (e : Env g),
+(forall (g : Ctx) (b : Type) (x : b) (e : Heap g),
  P g (Base b) (Bas x) e g id_Rnm e (VBas x) 0) ->
-forall (g : Ctx) (u : Ty) (t : Tm g u) (e : Env g)
-  (g' : Ctx) (r : Rnm g g') (e0 : Env g') (v : Vl g' u)
+forall (g : Ctx) (u : Ty) (t : Tm g u) (e : Heap g)
+  (g' : Ctx) (r : Rnm g g') (e0 : Heap g') (v : Vl g' u)
   (n : nat), BigStep t e r e0 v n -> P g u t e g' r e0 v n.
 Proof.
   intros P.
@@ -726,8 +771,10 @@ Qed.
 
 (** * Correspondence between the two semantics *)
 
-(** Auxiliary evaluation functions. *)
+(** Auxiliary evaluation functions on syntactic values and heaps. *)
 
+(** Evaluation of a syntactic value [t] in environment [e],
+    to a (semantic) value of type [toType u]. *)
 Definition evalVl {g u} (e : env g) (t : Vl g u) : toType u :=
   match t with
   | VLam t => fun (x : T (toType _)) => eval t (e, x)
@@ -737,10 +784,11 @@ Definition evalVl {g u} (e : env g) (t : Vl g u) : toType u :=
   | VBas b => b
   end.
 
-Fixpoint evalEnv {g} (e : Env g) : env g :=
+(** Evaluation of heap [e] to an environment. *)
+Fixpoint evalHeap {g} (e : Heap g) : env g :=
   match e with
-  | ENil => tt
-  | ECons e1 v => (evalEnv e1, mapT (evalVl (evalEnv e1)) v)
+  | HNil => tt
+  | HCons e1 v => (evalHeap e1, mapT (evalVl (evalHeap e1)) v)
   end.
 
 (** Proofs (soundness, then adequacy). *)
@@ -759,15 +807,15 @@ Ltac lucky_forward1 :=
 Ltac lucky_forward :=
   repeat (mforward idtac + lucky_forward1).
 
-Lemma eta_Env g a (e : Env (g :,: a))
-  : e = ECons (there e) (here e).
+Lemma eta_Heap g a (e : Heap (g :,: a))
+  : e = HCons (there e) (here e).
 Proof.
   refine
-   match e in Env g' return
+   match e in Heap g' return
      match g' with (_ :,: _) => fun e => _ | NilCtx => fun _ => True end e
    with
-   | ENil => I
-   | ECons _ _ => _
+   | HNil => I
+   | HCons _ _ => _
    end. reflexivity.
 Qed.
 
@@ -871,11 +919,11 @@ Proof.
   apply renameCtx_ext. reflexivity.
 Qed.
 
-Theorem BigStep_heap_increasing' : forall g u (t : Tm g u) (e : Env g) g' (s' : Rnm g g') (e' : Env g') (v : Vl g' u) (n : nat),
+Theorem BigStep_heap_increasing' : forall g u (t : Tm g u) (e : Heap g) g' (s' : Rnm g g') (e' : Heap g') (v : Vl g' u) (n : nat),
   BigStep t e s' e' v n ->
-  evalEnv e = renameCtx s' (evalEnv e').
+  evalHeap e = renameCtx s' (evalHeap e').
 Proof.
-  intros * H; induction H; cbn [eval evalEnv renameCtx] in *; intros.
+  intros * H; induction H; cbn [eval evalHeap renameCtx] in *; intros.
   all: try solve [symmetry; apply renameCtx_id].
   - apply (f_equal fst) in IHBigStep; cbn in IHBigStep.
     apply IHBigStep.
@@ -893,9 +941,9 @@ Proof.
       rewrite renameCtx_cat. f_equal. assumption.
 Qed.
 
-Theorem BigStep_heap_increasing : forall g u (t : Tm g u) (e : Env g) g' (s' : Rnm g g') (e' : Env g') (v : Vl g' u) (n : nat),
+Theorem BigStep_heap_increasing : forall g u (t : Tm g u) (e : Heap g) g' (s' : Rnm g g') (e' : Heap g') (v : Vl g' u) (n : nat),
   BigStep t e s' e' v n ->
-  forall a (v : _ a), lookup (s' _ v) (evalEnv e') = lookup v (evalEnv e).
+  forall a (v : _ a), lookup (s' _ v) (evalHeap e') = lookup v (evalHeap e).
 Proof.
   intros * W a v; apply BigStep_heap_increasing' in W.
   rewrite W; auto using lookup_renameCtx.
@@ -965,9 +1013,9 @@ Proof.
   unfold optimistic, eq_M. firstorder eauto.
 Qed.
 
-Lemma evalVl_renameVl g a (e : Env g) (v : Vl g a) g' (s : Rnm g g') (e' : Env g')
-  : (forall a v, lookup (s a v) (evalEnv e') = lookup v (evalEnv e)) ->
-    evalVl (evalEnv e) v = evalVl (evalEnv e') (renameVl s v).
+Lemma evalVl_renameVl g a (e : Heap g) (v : Vl g a) g' (s : Rnm g g') (e' : Heap g')
+  : (forall a v, lookup (s a v) (evalHeap e') = lookup v (evalHeap e)) ->
+    evalVl (evalHeap e) v = evalVl (evalHeap e') (renameVl s v).
 Proof.
   destruct v; cbn; intros; auto.
   - apply functional_extensionality; intros.
@@ -979,23 +1027,23 @@ Proof.
   - f_equal; auto.
 Qed.
 
-Lemma lookup_evalEnv_ g a (e : Env g) (v : V g a) g' (s : Rnm g g') (e' : Env g')
-  : (forall a v, lookup (s a v) (evalEnv e') = lookup v (evalEnv e)) ->
-    lookup (s _ v) (evalEnv e') = mapT (evalVl (evalEnv e')) (lookup_' v s e).
+Lemma lookup_evalHeap_ g a (e : Heap g) (v : V g a) g' (s : Rnm g g') (e' : Heap g')
+  : (forall a v, lookup (s a v) (evalHeap e') = lookup v (evalHeap e)) ->
+    lookup (s _ v) (evalHeap e') = mapT (evalVl (evalHeap e')) (lookup_' v s e).
 Proof.
   intros H; rewrite H.
   revert e g' s e' H; induction v; cbn; intros.
-  - rewrite eta_Env in *; cbn. destruct (here e); cbn; f_equal.
+  - rewrite eta_Heap in *; cbn. destruct (here e); cbn; f_equal.
     apply evalVl_renameVl.
     intros ? ?. apply H.
-  - rewrite eta_Env; cbn. apply IHv.
-    intros ? vv. specialize (H _ (There vv)). cbn in H. rewrite eta_Env in H; apply H.
+  - rewrite eta_Heap; cbn. apply IHv.
+    intros ? vv. specialize (H _ (There vv)). cbn in H. rewrite eta_Heap in H; apply H.
 Qed.
 
-Lemma lookup_evalEnv g a (e : Env g) (v : V g a)
-  : lookup v (evalEnv e) = mapT (evalVl (evalEnv e)) (lookup' v e).
+Lemma lookup_evalHeap g a (e : Heap g) (v : V g a)
+  : lookup v (evalHeap e) = mapT (evalVl (evalHeap e)) (lookup' v e).
 Proof.
-  apply lookup_evalEnv_ with (s := id_Rnm).
+  apply lookup_evalHeap_ with (s := id_Rnm).
   reflexivity.
 Qed.
 
@@ -1007,11 +1055,11 @@ Qed.
 (Hacket & Hutton's Clairvoyant CBV), then [t] evaluates to [(evalVl _ v, n)]
 in the [eval] semantics.
 (Recall [optim m r] means "there exists a pair in [m] satisfying the postcondition [r]") *)
-Theorem soundness : forall g u (t : Tm g u) (e : Env g) g' (s' : Rnm g g') (e' : Env g') (v : Vl g' u) (n : nat),
+Theorem soundness : forall g u (t : Tm g u) (e : Heap g) g' (s' : Rnm g g') (e' : Heap g') (v : Vl g' u) (n : nat),
   BigStep t e s' e' v n ->
-  (eval t (evalEnv e)) [[ fun x0 n0 => evalVl (evalEnv e') v = x0 /\ n = n0 ]].
+  (eval t (evalHeap e)) [[ fun x0 n0 => evalVl (evalHeap e') v = x0 /\ n = n0 ]].
 Proof.
-  intros * H; induction H; cbn [eval evalEnv] in *; intros; lucky_forward.
+  intros * H; induction H; cbn [eval evalHeap] in *; intros; lucky_forward.
   - apply optimistic_skip.
     lucky_forward. firstorder.
   - apply optimistic_thunk_go. lucky_forward.
@@ -1023,24 +1071,24 @@ Proof.
     + firstorder.
   - cbn [evalVl].
     rewrite <- (BigStep_heap_increasing H).
-    rewrite lookup_evalEnv. cbn.
+    rewrite lookup_evalHeap. cbn.
     lucky_forward. firstorder.
-  - rewrite lookup_evalEnv, <- H; cbn.
+  - rewrite lookup_evalHeap, <- H; cbn.
     mforward idtac; firstorder.
   - firstorder.
   - cbn. firstorder.
-  - rewrite lookup_evalEnv, <- H.
+  - rewrite lookup_evalHeap, <- H.
     cbn; lucky_forward.
-    rewrite 2 lookup_evalEnv, <- H0; cbn.
+    rewrite 2 lookup_evalHeap, <- H0; cbn.
     cbn; lucky_forward. firstorder.
-  - rewrite lookup_evalEnv, <- H.
+  - rewrite lookup_evalHeap, <- H.
     cbn. lucky_forward.
-    rewrite 2 lookup_evalEnv, <- H0; cbn.
+    rewrite 2 lookup_evalHeap, <- H0; cbn.
     cbn; lucky_forward. firstorder.
   - firstorder.
   - firstorder.
-  - rewrite lookup_evalEnv, <- H; cbn. lucky_forward. firstorder.
-  - rewrite lookup_evalEnv, <- H; cbn. lucky_forward.
+  - rewrite lookup_evalHeap, <- H; cbn. lucky_forward. firstorder.
+  - rewrite lookup_evalHeap, <- H; cbn. lucky_forward.
     destruct H0 as [ | ? ? ? ? ? [] ].
     + apply optimistic_skip.
       eapply eq_M_optim; [ | relax; [ eapply IHBigStep | ] ].
@@ -1172,17 +1220,17 @@ to redefine the interpreter with fuel). *)
 Theorem adequacy_ : forall n g u (t : Tm g u) (f : env g),
     (eval t f) {{ fun (x0 : toType u) n0 =>
       n = n0 ->
-      forall g0 (s0 : Rnm g g0) (e0 : Env g0),
-        f = renameCtx s0 (evalEnv e0) ->
-        exists g' (s' : Rnm g0 g') (e' : Env g') (v' : Vl g' u),
-          evalVl (evalEnv e') v' = x0 /\
+      forall g0 (s0 : Rnm g g0) (e0 : Heap g0),
+        f = renameCtx s0 (evalHeap e0) ->
+        exists g' (s' : Rnm g0 g') (e' : Heap g') (v' : Vl g' u),
+          evalVl (evalHeap e') v' = x0 /\
           BigStep (rename s0 t) e0 s' e' v' n0 }}.
 Proof.
   induction n as [n IH] using lt_wf_ind; intros *; destruct t; cbn; lucky_forward.
   - intros y1 n1 Hy1 y2 n2 Hy2 -> * Hf.
     assert (IH1 := IH n1 ltac:(lia) _ _ _ _ _ _ Hy1 eq_refl _ s0 e0 Hf).
     decomp IH1.
-    assert (IH2 := IH n2 ltac:(lia) _ _ _ _ _ _ Hy2 eq_refl _ (shift (cat_Rnm s0 s')) (ECons e' (Thunk v'))).
+    assert (IH2 := IH n2 ltac:(lia) _ _ _ _ _ _ Hy2 eq_refl _ (shift (cat_Rnm s0 s')) (HCons e' (Thunk v'))).
     prove_assum IH2.
     { cbn; f_equal; [ | f_equal; auto].
       rewrite Hf.
@@ -1213,7 +1261,7 @@ Proof.
     assert (IH2 := IH n2 ltac:(lia) _ _ _ _ _ _ Hy2 eq_refl _ id_Rnm (e' :*: lookup' (s' _ (s0 _ v)) e') ).
     prove_assum IH2.
     { rewrite renameCtx_id. cbn. f_equal.
-      rewrite Hf. rewrite lookup_renameCtx, <- lookup_evalEnv.
+      rewrite Hf. rewrite lookup_renameCtx, <- lookup_evalHeap.
       rewrite (BigStep_heap_increasing IH1).
       reflexivity. }
     decomp IH2.
@@ -1222,7 +1270,7 @@ Proof.
     econstructor; try eassumption.
   - intros ? H -> * Hf.
     rewrite Hf in H.
-    rewrite lookup_renameCtx, lookup_evalEnv in H.
+    rewrite lookup_renameCtx, lookup_evalHeap in H.
     destruct (lookup' _ _) eqn:Elookup in H; cbn in H; [ | discriminate ].
     injection H; intros J.
     eexists _, _, _, _. split; [ eassumption | ].
@@ -1243,12 +1291,12 @@ Proof.
     constructor.
   - intros ? Hv. mforward idtac. intros ? Hfst.
     intros -> * Hf.
-    rewrite Hf, lookup_renameCtx, lookup_evalEnv in Hv.
+    rewrite Hf, lookup_renameCtx, lookup_evalHeap in Hv.
     destruct (lookup' _ _) eqn:Hlookup in Hv; cbn in Hv; [ | discriminate ].
     injection Hv; clear Hv; intros Hv.
     assert (Hv' := inv_Vl x1); cbn in Hv'; destruct Hv' as (X1 & X2 & ->).
     cbn in Hv; rewrite <- Hv in Hfst; cbn in Hfst.
-    rewrite lookup_evalEnv in Hfst.
+    rewrite lookup_evalHeap in Hfst.
     destruct (lookup' _ _) eqn:Hlookup2 in Hfst; cbn in Hfst; [ | discriminate ].
     injection Hfst; clear Hfst; intros Hfst.
     eexists _, _, _, x1.
@@ -1256,12 +1304,12 @@ Proof.
     econstructor; try eauto.
   - intros ? Hv. mforward idtac. intros ? Hfst.
     intros -> * Hf.
-    rewrite Hf, lookup_renameCtx, lookup_evalEnv in Hv.
+    rewrite Hf, lookup_renameCtx, lookup_evalHeap in Hv.
     destruct (lookup' _ _) eqn:Hlookup in Hv; cbn in Hv; [ | discriminate ].
     injection Hv; clear Hv; intros Hv.
     assert (Hv' := inv_Vl x1); cbn in Hv'; destruct Hv' as (X1 & X2 & ->).
     cbn in Hv; rewrite <- Hv in Hfst; cbn in Hfst.
-    rewrite lookup_evalEnv in Hfst.
+    rewrite lookup_evalHeap in Hfst.
     destruct (lookup' _ _) eqn:Hlookup2 in Hfst; cbn in Hfst; [ | discriminate ].
     injection Hfst; clear Hfst; intros Hfst.
     eexists _, _, _, x1.
@@ -1279,7 +1327,7 @@ Proof.
   - destruct (lookup v f) eqn:Hvf; cbn; [ | mforward idtac].
     intros y1 n1 Hy1 En * Hf.
     rewrite Hf in Hvf.
-    rewrite lookup_renameCtx, lookup_evalEnv in Hvf.
+    rewrite lookup_renameCtx, lookup_evalHeap in Hvf.
     destruct (lookup' _ _) eqn:Hvf' in Hvf; cbn in Hvf; [ | discriminate ].
     injection Hvf; clear Hvf; intros Hvf.
     assert (Hv := inv_Vl x0); cbn in Hv;
@@ -1299,7 +1347,7 @@ Proof.
       split; [ eassumption |].
       constructor; eauto.
     + intros. intros y1 n1 Hy1. intros y2 n2 Hy2 ->.
-      assert (IH1 := IH n1 ltac:(lia) _ _ (Foldr (rename s0 t1) (rename (shift (shift s0)) t2) x2) (evalEnv e0) y1 n1).
+      assert (IH1 := IH n1 ltac:(lia) _ _ (Foldr (rename s0 t1) (rename (shift (shift s0)) t2) x2) (evalHeap e0) y1 n1).
       prove_assum IH1.
       { cbn; unfold foldrA. rewrite H. cbn. revert Hy1. subst.
         apply eq_M_foldrA'.
@@ -1347,10 +1395,10 @@ Qed.
 of [t] corresponds to a pair [(v', n')] in the [BigStep] semantics,
 where [v'] is a (syntactic) value which evaluates to [x'].
 (Recall [pessim m r] means "all pairs in [m] satisfy the postcondition [r]".) *)
-Theorem adequacy g u (t : Tm g u) (e : Env g)
-  : (eval t (evalEnv e))
-      {{ fun (x' : toType u) n' => exists g' (s' : Rnm g g') (e' : Env g') (v' : Vl g' u),
-             evalVl (evalEnv e') v' = x' /\
+Theorem adequacy g u (t : Tm g u) (e : Heap g)
+  : (eval t (evalHeap e))
+      {{ fun (x' : toType u) n' => exists g' (s' : Rnm g g') (e' : Heap g') (v' : Vl g' u),
+             evalVl (evalHeap e') v' = x' /\
              BigStep t e s' e' v' n' }}.
 Proof.
   intros y0 n0 Hy0.
@@ -1362,10 +1410,10 @@ Definition elem {a} (z : M a) (x : a) (n : nat) : Prop := z x n.
 
 (** This theorem combines soundness and adequacy to make the equivalence more
 explicit using [<->]. *)
-Theorem soundess_and_adequacy g u (t : Tm g u) (e : Env g) (x : toType u) (n : nat)
-  : elem (eval t (evalEnv e)) x n
-  <-> exists g' (s' : Rnm g g') (e' : Env g') (v' : Vl g' u),
-        evalVl (evalEnv e') v' = x /\
+Theorem soundess_and_adequacy g u (t : Tm g u) (e : Heap g) (x : toType u) (n : nat)
+  : elem (eval t (evalHeap e)) x n
+  <-> exists g' (s' : Rnm g g') (e' : Heap g') (v' : Vl g' u),
+        evalVl (evalHeap e') v' = x /\
         BigStep t e s' e' v' n.
 Proof.
   split; [ apply adequacy | ].
