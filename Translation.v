@@ -816,7 +816,9 @@ Fixpoint renameEnv {g g' : Ctx} : Rnm g g' -> env g' -> env g :=
 
     The other lemmas are mostly small equations,
     "commutative diagrams" equating different ways to obtain the same
-    result using the above functions.
+    result using the above functions. We mostly come up with them
+    as needed when trying to prove the big theorems mentioned just
+    above.
 *)
 
 (** [T] is also a functor on relations. *)
