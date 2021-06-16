@@ -39,6 +39,7 @@ OPAM:
 opam repo add coq-released https://coq.inria.fr/opam/released
 opam install coq-equations
 ```
+The artifact is known to work with Equations 1.2.4.
 
 ### Proof check
 

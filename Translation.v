@@ -322,11 +322,11 @@ Fixpoint lookup {g u} (v : V g u) : env g -> T (toType u) :=
 
 Fixpoint foldrA' {a b} (n : M b) (c : T a -> T b -> M b) (x' : ListA a)
   : M b :=
-  let! _ := tick in
+  tick >>
   match x' with
   | NilA => n
   | ConsA x1 x2 =>
-    let! y2 := thunk (foldrA' n c $! x2) in
+    let~ y2 := foldrA' n c $! x2 in
     c x1 y2
   end.
 
@@ -344,7 +344,7 @@ Fixpoint eval {g u} (t : Tm g u) : env g -> M (toType u) := fun e =>
   match t with
   | Let t1 t2 => fun e =>
     tick >>
-    let! x := thunk (eval t1 e) in
+    let~ x := eval t1 e in
     eval t2 (e, x)
   | App t1 v => fun e =>
     tick >>
@@ -386,7 +386,7 @@ Fixpoint appendA_ {a} (xs : ListA a) (ys : T (ListA a)) : M (ListA a) :=
   match xs with
   | NilA => force ys
   | ConsA x xs =>
-    let! zs := thunk ((fun xs => appendA_ xs ys) $! xs) in
+    let~ zs := (fun xs => appendA_ xs ys) $! xs in
     ret (ConsA x zs)
   end.
 

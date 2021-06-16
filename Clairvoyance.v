@@ -250,7 +250,7 @@ Proof.
   - apply H0; auto.
 Qed.
 
-(** This rule is not in Fig. 12. Recall that [force t] is defined as [forcing t
+(** This rule is not in Fig. 13. Recall that [force t] is defined as [forcing t
     ret], so this rule can be simply obtained by using the [pessimistic_forcing]
     rule + the [pessimistic_ret] rule. *)
 Lemma pessimistic_force {a} (t : T a) (r : a -> nat -> Prop)
@@ -294,7 +294,7 @@ Proof.
   intros H. exists tt, 1. intuition. constructor.
 Qed.
 
-(** For proof engineering purposes, we divide the [thunk] rule of Fig. 13 to two
+(** For proof engineering purposes, we divide the [thunk] rule of Fig. 14 to two
     separate rules: [optimistic_thunk_go] and [optimistic_skip]. *)
 Lemma optimistic_thunk_go {a} (u : M a) (r : T a -> nat -> Prop)
   : u [[ fun x => r (Thunk x) ]] ->
@@ -322,7 +322,7 @@ Proof.
   - congruence.
 Qed.
 
-Lemma optim_conj {a} (u : M a) (r p : a -> nat -> Prop)
+Lemma optimistic_conj {a} (u : M a) (r p : a -> nat -> Prop)
   : u {{ r }} ->
     u [[ p ]] ->
     u [[ fun x n => r x n /\ p x n ]].
