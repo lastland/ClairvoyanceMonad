@@ -1,7 +1,7 @@
 # Reasoning about the garden of forking paths (artifact)
 
-This artifact contains the Coq formalization of the paper _Reasoning about the
-garden of forking paths_.
+This artifact contains the Coq formalization of the paper [_Reasoning about the
+Garden of Forking Paths_](https://doi.org/10.1145/3473585).
 
 The paper presents a novel and simple framework for formally reasoning about
 lazy computation costs based on a recent model of lazy evaluation: clairvoyant
