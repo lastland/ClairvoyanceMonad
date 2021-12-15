@@ -446,8 +446,8 @@ Instance Lift_T {a} `{LessDefined a} : LessDefined (T a) := LessDefined_T.
 
 (** * This corresponds to the proposition [less_defined_order] in Section 5.3. *)
 Class LessDefinedOrder a (H: LessDefined a) :=
-  { less_defined_preorder : PreOrder H ;
-    less_defined_partial_order : PartialOrder eq H }.
+  { less_defined_preorder :> PreOrder less_defined ;
+    less_defined_partial_order :> PartialOrder eq less_defined }.
 
 (** * This corresponds to the proposition [exact_max] in Section 5.3. *)
 Class LessDefinedExact {a b} {Hless : LessDefined a}
@@ -645,7 +645,15 @@ Instance Exact_id {a} : Exact a a := id.
     Learn more about the priority of Coq's type classes in the [Controlling
     Instantiation] section of
     [https://softwarefoundations.cis.upenn.edu/qc-current/Typeclasses.html]. *)
-Instance LessDefined_id {a} : LessDefined a | 100 := eq.
+#[global] Instance LessDefined_id {a} : LessDefined a | 100 := eq.
+
+#[global] Instance LessDefinedOrder_id {a} : @LessDefinedOrder a _.
+Proof.
+Admitted.
+
+#[global] Instance LessDefinedExact_id {a} : @LessDefinedExact a a _ _ _.
+Proof.
+Admitted.
 
 #[global] Hint Unfold Exact_id : core.
 #[global] Hint Unfold LessDefined_id : core.

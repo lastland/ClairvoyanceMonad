@@ -96,6 +96,15 @@ Definition popA {a} (q : T (QueueA a)) : M (option (T a * T (QueueA a))) :=
 #[global] Instance Exact_Queue {a} : Exact (Queue a) (QueueA a) :=
   fun q => MkQueueA (nfront q) (exact (front q)) (nback q) (exact (back q)).
 
+#[global] Instance Exact_prod {a aA b bA} `{Exact a aA, Exact b bA} : Exact (a * b) (aA * bA) :=
+  fun xs => (exact (fst xs), exact (snd xs)).
+
+#[global] Instance Exact_option {a aA} `{Exact a aA} : Exact (option a) (option aA) := fun ox =>
+  match ox with
+  | None => None
+  | Some x => Some (exact x)
+  end.
+
 Inductive option_rel {a b} (r : a -> b -> Prop) : option a -> option b -> Prop :=
 | option_rel_None : option_rel r None None
 | option_rel_Some x y : r x y -> option_rel r (Some x) (Some y)
@@ -103,6 +112,16 @@ Inductive option_rel {a b} (r : a -> b -> Prop) : option a -> option b -> Prop :
 
 #[global] Instance LessDefined_option {a} `{LessDefined a} : LessDefined (option a) :=
   option_rel less_defined.
+
+#[global] Instance LessDefinedOrder_option {a} `{LessDefinedOrder a}
+  : @LessDefinedOrder (option a) _.
+Proof.
+Admitted.
+
+#[global] Instance LessDefinedExact_option {a aA} `{LessDefinedExact a aA}
+  : @LessDefinedExact (option a) (option aA) _ _ _.
+Proof.
+Admitted.
 
 Record pair_rel {a1 b1 a2 b2} (r1 : a1 -> b1 -> Prop) (r2 : a2 -> b2 -> Prop) (xs : a1 * a2) (ys : b1 * b2) : Prop :=
   { fst_rel : r1 (fst xs) (fst ys)
@@ -112,6 +131,16 @@ Record pair_rel {a1 b1 a2 b2} (r1 : a1 -> b1 -> Prop) (r2 : a2 -> b2 -> Prop) (x
 #[global] Instance LessDefined_prod {a b} `{LessDefined a, LessDefined b} : LessDefined (a * b) :=
   pair_rel less_defined less_defined.
 
+#[global] Instance LessDefinedOrder_prod {a b} `{LessDefinedOrder a, LessDefinedOrder b}
+  : @LessDefinedOrder (a * b) _.
+Proof.
+Admitted.
+
+#[global] Instance LessDefinedExact_prod {a aA b bA} `{LessDefinedExact a aA, LessDefinedExact b bA}
+  : @LessDefinedExact (a * b) (aA * bA) _ _ _.
+Proof.
+Admitted.
+
 Record less_defined_QueueA {a} (q1 q2 : QueueA a) : Prop :=
   { ld_front : less_defined (frontA q1) (frontA q2)
   ; ld_back : less_defined (backA q1) (backA q2)
@@ -119,6 +148,50 @@ Record less_defined_QueueA {a} (q1 q2 : QueueA a) : Prop :=
 
 #[global] Instance LessDefined_QueueA {a} : LessDefined (QueueA a) :=
   less_defined_QueueA.
+
+#[global] Instance LessDefinedOrder_QueueA {a} : @LessDefinedOrder (QueueA a) _.
+Proof.
+Admitted.
+
+#[global] Instance LessDefinedExact_QueueA {a} : @LessDefinedExact (QueueA a) _ _ _ _.
+Proof.
+Admitted.
+
+(* Well-formedness *)
+
+Record well_formed {a} (q : Queue a) : Prop :=
+  { skew : nback q <= nfront q
+  ; frontn : nfront q = length (front q)
+  ; backn : nback q = length (back q)
+  }.
+
+Lemma well_formed_empty {a} : well_formed (a := a) empty.
+Proof.
+  constructor; cbn; reflexivity.
+Qed.
+
+Lemma well_formed_mkQueue {a} nf (f : list a) nb b
+  : nf = length f -> nb = length b -> well_formed (mkQueue nf f nb b).
+Proof.
+Admitted.
+
+Lemma well_formed_push {a} (q : Queue a) (x : a) : well_formed q -> well_formed (push q x).
+Proof.
+  intros wf_q. apply well_formed_mkQueue.
+  - apply (frontn wf_q).
+  - cbn; f_equal; apply (backn wf_q).
+Qed.
+
+Lemma well_formed_pop {a} (q : Queue a) x q'
+  : well_formed q -> pop q = Some (x, q') -> well_formed q'.
+Proof.
+  intros wf_q; unfold pop.
+  destruct (front q) eqn:Ef; [ discriminate | ].
+  injection 1. intros <- ->.
+  apply well_formed_mkQueue.
+  - rewrite (frontn wf_q), Ef. reflexivity.
+  - apply (backn wf_q).
+Qed.
 
 (* Lazy amortization works by hiding thunks "deep" in the data structure,
    so they cannot be forced immediately, only after performing operations whose
@@ -213,19 +286,21 @@ Definition popD {a} (q : Queue a) (outD : option (T a * T (QueueA a))) : T (Queu
    result at least as defined as the output demand. *)
 
 Lemma appendD_spec {a} (xs ys : list a) (outD : listA a)
-  : let '(xsD, ysD) := appendD xs ys outD in
+  : forall xsD ysD, (xsD, ysD) = appendD xs ys outD ->
     appendA xsD ysD [[ fun out _ => outD `less_defined` out ]].
 Proof.
 Admitted.
 
 Lemma pushD_spec {a} (q : Queue a) (x : a) (outD : QueueA a)
-  : let '(qD, xD) := pushD q x outD in
+  : well_formed q ->
+    forall qD xD, (qD, xD) = pushD q x outD ->
     pushA qD xD [[ fun out _ => outD `less_defined` out ]].
 Proof.
 Admitted.
 
 Lemma popD_spec {a} (q : Queue a) (outD : option (T a * T (QueueA a)))
-  : let qD := popD q outD in
+  : well_formed q ->
+    let qD := popD q outD in
     popA qD [[ fun out _ => outD `less_defined` out ]].
 Proof.
 Admitted.
@@ -234,13 +309,48 @@ Admitted.
    more defined makes the output more defined. These can be used to generalize the
    demand specifications above to inputs greater than the input demand. *)
 
+Definition less_defined_M {a} `{LessDefined  a} (u v : M a) : Prop :=
+  u {{ fun x n =>
+  v [[ fun y m => x `less_defined` y /\ m <= n ]] }}.
+
+#[global] Instance LessDefined_M {a} `{LessDefined a} : LessDefined (M a) := less_defined_M.
+
 Lemma appendA_mon {a} (xsA xsA' ysA ysA' : T (listA a))
   : xsA `less_defined` xsA' ->
     ysA `less_defined` ysA' ->
-    appendA xsA  ysA  {{ fun zsA n =>
-    appendA xsA' ysA' [[ fun zsA' n' => zsA `less_defined` zsA' /\ n' <= n ]] }}.
+    appendA xsA  ysA  `less_defined` appendA xsA' ysA'.
 Proof.
 Admitted.
+
+Lemma pushA_mon {a} (qA qA' : T (QueueA a)) xA xA'
+  : qA `less_defined` qA' ->
+    xA `less_defined` xA' ->
+    pushA qA xA `less_defined` pushA qA' xA'.
+Proof.
+Admitted.
+
+Lemma popA_mon {a} (qA qA' : T (QueueA a))
+  : qA `less_defined` qA' ->
+    popA qA `less_defined` popA qA'.
+Proof.
+Admitted.
+
+(* Upward closed predicates *)
+Definition uc {a} `{LessDefined a} (k : a -> nat -> Prop) : Prop :=
+  forall x x' n n',
+    x `less_defined` x' ->
+    n' <= n ->
+    k x n -> k x' n'.
+
+Lemma optimistic_corelax {a} `{LessDefined a} (u u' : M a) (k : a -> nat -> Prop)
+  : u `less_defined` u' -> uc k ->
+    u [[ k ]] -> u' [[ k ]].
+Proof.
+  intros H' Hk Hu. hnf in H'. destruct Hu as (x & n & Hx & Hn).
+  apply H' in Hx.
+  relax; [ apply Hx | cbn; intros ? ? HH ].
+  revert Hn; apply Hk; apply HH.
+Qed.
 
 (**)
 
@@ -281,34 +391,60 @@ Class Debitable a : Type :=
 #[global] Instance Debitable_QueueA {a} : Debitable (QueueA a) :=
   fun qA => 2 * sizeX 0 (frontA qA) - 2 * nbackA qA.
 
-Lemma pushA_cost {a} (q : Queue a) (x : a) (outD : QueueA a)
-  : let '(qA, xA) := pushD q x outD in
-    pushA qA xA [[ fun out cost =>
-      outD `less_defined` out /\ debt qA + cost <= 4 + debt outD ]].
-Proof.
-Admitted.
-
-Lemma pushA_cost' {a} (q : Queue a) (x : a) (outD : QueueA a)
-  : let '(qA, xA) := pushD q x outD in
-    forall qA', qA `less_defined` qA' ->
-    pushA qA' xA [[ fun out cost =>
-      outD `less_defined` out /\ debt qA + cost <= 4 + debt outD ]].
-Proof.
-Admitted.
-
-Instance Debitable_popo {a} : Debitable (option (T a * T (QueueA a))) :=
+(* Ad hoc overloading of [debt] on the output of [pop]. *)
+#[local] Instance Debitable_popo {a} : Debitable (option (T a * T (QueueA a))) :=
   fun x =>
     match x with
     | None => 0
     | Some (_, qA) => debt qA
     end.
 
+(* The two main theorems to prove are [pushA_cost] and [popA_cost].
+   We then generalize them by monotonicity into [pushA_cost'] and [popA_cost'],
+   where the input doesn't have to be exactly equal to the input demand. *)
+
+Lemma pushA_cost {a} (q : Queue a) (x : a) (outD : QueueA a)
+  : well_formed q ->
+    forall qA xA, (qA, xA) = pushD q x outD ->
+    pushA qA xA [[ fun out cost =>
+      outD `less_defined` out /\ debt qA + cost <= 4 + debt outD ]].
+Proof.
+Admitted.
+
+Lemma pushA_cost' {a} (q : Queue a) (x : a) (outD : QueueA a)
+  : well_formed q ->
+    forall qA xA, (qA, xA) = pushD q x outD ->
+    forall qA', qA `less_defined` qA' ->
+    pushA qA' xA [[ fun out cost =>
+      outD `less_defined` out /\ debt qA + cost <= 4 + debt outD ]].
+Proof.
+  intros. eapply optimistic_corelax.
+  - eapply pushA_mon. eassumption. reflexivity.
+  - red. intros * ? ? []. split; etransitivity; try eassumption. lia.
+  - eapply pushA_cost; eassumption.
+Qed.
+
 Lemma popA_cost {a} (q : Queue a) (outD : option (T a * T (QueueA a)))
-  : let qA := popD q outD in
+  : well_formed q ->
+    let qA := popD q outD in
     popA qA [[ fun out cost =>
       outD `less_defined` out /\ debt qA + cost <= 4 + debt outD ]].
 Proof.
 Admitted.
+
+Lemma popA_cost' {a} (q : Queue a) (outD : option (T a * T (QueueA a)))
+  : well_formed q ->
+    let qA := popD q outD in
+    forall qA', qA `less_defined` qA' ->
+    popA qA' [[ fun out cost =>
+      outD `less_defined` out /\ debt qA + cost <= 4 + debt outD ]].
+Proof.
+  intros.
+  eapply optimistic_corelax.
+  - eapply popA_mon. eassumption.
+  - red. intros * ? ? []; split; etransitivity; try eassumption. lia.
+  - apply popA_cost. assumption.
+Qed.
 
 (* We want to be able to prove that in any usage of this queue, operations have
    amortized constant cost. We represent "usage" as a tree of operations, where
@@ -330,7 +466,9 @@ Fixpoint run_tree {a} (t : tree a) (q : T (QueueA a)) : M (list (T a)) :=
     let! o := popA q in
     match o with
     | None => ret []
-    | Some (x, q) => ret [x]
+    | Some (x, q) =>
+      let! xs := run_tree t q in
+      ret (x :: xs)
     end
   | Share t1 t2 =>
     let! r1 := run_tree t1 q in
@@ -441,29 +579,53 @@ Proof.
   unfold Proper, respectful; intros; lia.
 Qed.
 
+Lemma pop_popD {a} (q : Queue a)
+  : pop q = None -> popD q None = exact q.
+Proof.
+  unfold pop, popD. destruct (front q); [reflexivity | discriminate].
+Qed.
+
 (* The core lemma where the action happens *)
 Lemma run_tree_cost {a} (t : tree a) (q : Queue a) (qA : T (QueueA a))
-  : demand_tree t q `less_defined` qA ->
+  : well_formed q ->
+    demand_tree t q `less_defined` qA ->
     run_tree t qA [[ fun _ n => debt (demand_tree t q) + n <= 4 * size_tree t ]].
 Proof.
 Opaque Nat.mul Nat.add.
-  revert q qA; induction t; cbn; intros.
-  - mgo'. destruct (demand_tree t (push q a0)) as [ q' | ] eqn:Eq'.
+  revert q qA; induction t; cbn; intros q qA wf_q ld_q.
+  - mgo'. assert (WF := well_formed_push a0 wf_q).
+    destruct (demand_tree t (push q a0)) as [ q' | ] eqn:Eq'; cbn in *.
     { apply optimistic_thunk_go.
-      assert (PUSH := pushA_cost' q a0 q'). cbn in *.
-      destruct (pushD q a0 q') eqn:Epush. specialize (PUSH _ H).
-      assert (t1 = Thunk a0). { unfold pushD in Epush. destruct mkQueueD in Epush. congruence. }
+      destruct (pushD q a0 q') as [xD qD] eqn:Epush; cbn in *.
+      assert (PUSH := pushA_cost' a0 wf_q (eq_sym Epush) ld_q).
+      assert (qD = Thunk a0). { unfold pushD in Epush. destruct mkQueueD in Epush. congruence. }
       subst. relax. { exact PUSH. }
-      cbn; intros * []. relax. { apply IHt. rewrite Eq'. constructor. apply H0. }
-      cbn; intros. rewrite Eq' in H2. cbn in H2. lia. }
-    { apply optimistic_skip. relax. { apply IHt. rewrite Eq'. constructor. }
+      cbn; intros * []. relax. { apply (IHt _ _ WF). rewrite Eq'. constructor. assumption. }
+      cbn; intros. rewrite Eq' in H1. cbn in H1. lia. }
+    { apply optimistic_skip. relax. { apply (IHt _ _ WF). rewrite Eq'. constructor. }
       cbn; intros. lia. }
-  - admit.
-  - apply upper in H. mgo'. relax. { apply IHt1. apply H. }
-    cbn; intros; mgo'. relax. { apply IHt2. apply H. }
+  - mgo'. assert (WF := fun x q' => well_formed_pop (x := x) (q' := q') wf_q). relax.
+    { eapply @popA_cost' with (outD :=
+        match pop q with Some (x, q') => Some (Thunk x, demand_tree t q') | None => None end).
+      { eassumption. }
+      destruct (pop q) as [ [? ?] | ] eqn:Ep; [ specialize (WF _ _ eq_refl) | ].
+      - assumption.
+      - rewrite (pop_popD Ep). assumption.
+    }
+    cbn; intros ? ? [ld_ COST].
+    destruct (pop q) as [ [? ?] | ] eqn:Ep.
+    { inversion ld_; subst. destruct y; destruct H0; cbn in *. apply optimistic_bind.
+      relax.
+      { eapply IHt. { apply (well_formed_pop wf_q Ep). }
+        assumption. }
+      cbn; intros. apply optimistic_ret. lia. }
+    { inversion ld_. mforward idtac. rewrite (pop_popD Ep) in COST.
+      change (Exact_Queue q) with (exact q). cbn in COST |- *. lia. }
+  - apply upper in ld_q. mgo'. relax. { apply IHt1; [apply wf_q | apply ld_q]. }
+    cbn; intros; mgo'. relax. { apply IHt2; [apply wf_q | apply ld_q]. }
     cbn; intros; mgo'. rewrite lub_debt. lia.
   - mgo'.
-Admitted.
+Qed.
 
 Theorem good_queue : GOOD_QUEUE.
 Proof.
@@ -473,6 +635,6 @@ Proof.
   unfold emptyA.
   mgo'.
   relax.
-  - apply run_tree_cost. apply (demand_tree_approx t (q := empty)).
+  - apply run_tree_cost; [ apply well_formed_empty | apply (demand_tree_approx t (q := empty)) ].
   - intros. cbn in H. lia.
 Qed.
