@@ -885,17 +885,17 @@ forall (n : nat) (xs : list a) (xsA : listA a) (acc : list a) (accA : T (listA a
   xsA `is_approx` xs ->  accA `is_approx` acc ->
   (take'A_ n xsA accA) {{ fun zsA cost => cost = min n (length xs) + 1 }}.
 Proof.
-  induction n.
+  induction n as [ | n IHn].
   - mgo_list. relax_apply @revA_cost. cbn; intros. lia.
-  - intros xs. funelim (exact_listA xs); mgo_list.
+  - intros xs. induction xs as [ | x xs IH ]; mgo_list.
     + relax_apply @revA_cost. cbn; intros; lia.
-    + inversion H6; subst. relax.
-      eapply IHn with (acc:=a0 :: acc); try eassumption.
+    + inversion H5; subst. relax.
+      eapply IHn with (acc:=x :: acc); try eassumption.
       constructor. repeat autounfold. simp exact_listA.
       constructor; assumption.
       cbn; intros. lia.
-    + inversion H6; subst. relax.
-      eapply IHn with (acc:=a0 :: acc); try eassumption. constructor.
+    + inversion H5; subst. relax.
+      eapply IHn with (acc:=x :: acc); try eassumption. constructor.
       cbn; intros. lia.
 Qed.
   
@@ -907,9 +907,9 @@ forall (n : nat) (xs : list a) (xsA : T (listA a)),
   (takeA n xsA) {{ fun zsA cost => cost <= min n (sizeX 0 xsA) + 1 }}.
 Proof.
   unfold takeA. induction n; [mgo_list|].
-  intros xs. funelim (exact_listA xs); mgo_list.
-  inversion H5; subst.
-  specialize (IHn l (Thunk x)). cbn in IHn.
+  intros xs. induction xs as [ | x xs IH]; mgo_list.
+  inversion H4; subst.
+  specialize (IHn xs (Thunk x0)). cbn in IHn.
   relax_apply IHn; try assumption.
   mgo_list.
 Qed.
