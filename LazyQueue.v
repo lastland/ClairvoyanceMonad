@@ -288,6 +288,14 @@ Lemma pushA_cost {a} (q : Queue a) (x : a) (outD : QueueA a)
 Proof.
 Admitted.
 
+Lemma pushA_cost' {a} (q : Queue a) (x : a) (outD : QueueA a)
+  : let '(qA, xA) := pushD q x outD in
+    forall qA', qA `less_defined` qA' ->
+    pushA qA' xA [[ fun out cost =>
+      outD `less_defined` out /\ debt qA + cost <= 4 + debt outD ]].
+Proof.
+Admitted.
+
 Instance Debitable_popo {a} : Debitable (option (T a * T (QueueA a))) :=
   fun x =>
     match x with
@@ -438,9 +446,18 @@ Lemma run_tree_cost {a} (t : tree a) (q : Queue a) (qA : T (QueueA a))
   : demand_tree t q `less_defined` qA ->
     run_tree t qA [[ fun _ n => debt (demand_tree t q) + n <= 4 * size_tree t ]].
 Proof.
-Opaque Nat.mul.
+Opaque Nat.mul Nat.add.
   revert q qA; induction t; cbn; intros.
-  - mgo'. admit.
+  - mgo'. destruct (demand_tree t (push q a0)) as [ q' | ] eqn:Eq'.
+    { apply optimistic_thunk_go.
+      assert (PUSH := pushA_cost' q a0 q'). cbn in *.
+      destruct (pushD q a0 q') eqn:Epush. specialize (PUSH _ H).
+      assert (t1 = Thunk a0). { unfold pushD in Epush. destruct mkQueueD in Epush. congruence. }
+      subst. relax. { exact PUSH. }
+      cbn; intros * []. relax. { apply IHt. rewrite Eq'. constructor. apply H0. }
+      cbn; intros. rewrite Eq' in H2. cbn in H2. lia. }
+    { apply optimistic_skip. relax. { apply IHt. rewrite Eq'. constructor. }
+      cbn; intros. lia. }
   - admit.
   - apply upper in H. mgo'. relax. { apply IHt1. apply H. }
     cbn; intros; mgo'. relax. { apply IHt2. apply H. }
