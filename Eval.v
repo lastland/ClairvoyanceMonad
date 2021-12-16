@@ -157,7 +157,7 @@ Fixpoint drop_ {a} (n : nat) (xs' : listA a) : M (listA a) :=
   | S n, ConsA _ xs => drop_ n $! xs
   end.
 
-Fixpoint drop {a : Type} (n : nat) (xs : T (listA a)) : M (listA a) :=
+Definition drop {a : Type} (n : nat) (xs : T (listA a)) : M (listA a) :=
   drop_ n $! xs.
 
 Definition pA {a} (n : nat) (xs ys : T (listA a)) : M (listA a) :=

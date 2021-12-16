@@ -490,7 +490,7 @@ Fixpoint size_tree {a} (t : tree a) : nat :=
 
 (* This queue's operations have amortized constant cost. *)
 Definition GOOD_QUEUE : Prop :=
-  forall {a} (t : tree a),
+  forall a (t : tree a),
     (let~ _empty := emptyA in
      run_tree t _empty) [[ fun _ n => n <= 4 * size_tree t ]].
 
