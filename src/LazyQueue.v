@@ -17,7 +17,7 @@ NEW
 
 From Coq Require Import Arith List Lia Setoid Morphisms.
 Import ListNotations.
-From Clairvoyance Require Import Clairvoyance.
+From Clairvoyance Require Import Core Approx List.
 
 Import RevCompare.
 

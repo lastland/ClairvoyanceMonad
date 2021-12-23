@@ -24,7 +24,7 @@ Set Contextual Implicit.
 
 From Coq Require Import Arith Psatz Setoid Morphisms.
 
-From Clairvoyance Require Import Clairvoyance.
+From Clairvoyance Require Import Core Approx.
 
 (** * Axioms
 

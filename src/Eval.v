@@ -171,9 +171,11 @@ Fixpoint exact_list {a} (xs : list a) : T (listA a) :=
   | x :: xs => ConsA (Defined x) (exact_list xs)
   end.
 
+(*
 Compute runM
   (let~ z := pA 6 (exact_list (seq 0 10)) (exact_list (seq 11 20)) in
    drop 3 z).
+*)
 
 Fixpoint revA_ {a : Type} (xs' : listA a) (ys : T (listA a)) : M (listA a) :=
   match xs' with

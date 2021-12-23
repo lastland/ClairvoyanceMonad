@@ -1,0 +1,245 @@
+Set Implicit Arguments.
+Set Maximal Implicit Insertion.
+Set Contextual Implicit.
+
+From Coq Require Import Arith List Psatz Morphisms Relations.
+From Clairvoyance Require Import Core.
+
+Definition is_defined {a} (t : T a) : Prop :=
+  match t with
+  | Thunk _ => True
+  | Undefined => False
+  end.
+
+(* --------------------------------------- *)
+
+(** * Approximations.
+    
+    This part is a reference implementation of the definitions discussed in
+    Section 5.3.  *)
+
+(** In the paper, we start by giving an [exact] function defined on lists. We
+    mention later in the section that we would also want to be able to overload
+    the [exact] function (and the [is_approx] and [less_defined] relations) for
+    other types. One way of doing that is using type classes, as we show here. *)
+
+(** * [exact] *)
+Class Exact a b : Type := exact : a -> b.
+
+#[global] Hint Unfold exact : core.
+
+#[global]
+Instance Exact_T {a b} {r: Exact a b} : Exact a (T b) 
+  := fun x => Thunk (exact x).
+
+#[global] Hint Unfold Exact_T : core.
+
+(* TODO: Remove me
+Instance Exact_fun {a1 b1 a2 b2} `{Exact b1 a1} `{Exact a2 b2} 
+  : Exact (a1 -> a2) (b1 -> b2) 
+  := fun f => fun x => exact (f (exact x)).
+*)
+
+(** * [less_defined] *)
+Class LessDefined a := less_defined : a -> a -> Prop.
+Infix "`less_defined`" := less_defined (at level 42).
+
+#[global] Hint Unfold less_defined : core.
+
+Inductive less_defined_T {a : Type} `{LessDefined a} : relation (T a) :=
+| LessDefined_Undefined :
+    forall x, less_defined_T Undefined x
+| LessDefined_Thunk :
+    forall x y, x `less_defined` y -> less_defined_T (Thunk x) (Thunk y).
+
+#[global] Hint Constructors less_defined_T : core.
+
+#[global]
+Instance LessDefined_T {a} `{LessDefined a} : LessDefined (T a) := less_defined_T.
+
+#[global] Hint Unfold LessDefined_T : core.
+
+(** * This corresponds to the proposition [less_defined_order] in Section 5.3. *)
+Class LessDefinedOrder a (H: LessDefined a) :=
+  { less_defined_preorder :> PreOrder less_defined ;
+    less_defined_partial_order :> PartialOrder eq less_defined }.
+
+(** * This corresponds to the proposition [exact_max] in Section 5.3. *)
+Class LessDefinedExact {a b} {Hless : LessDefined a}
+      (Horder : LessDefinedOrder Hless) (Hexact : Exact b a) :=
+  { exact_max : forall (xA : a) (x : b), exact x `less_defined` xA -> exact x = xA }.
+
+#[global]
+Instance PreOrder_LessDefined_T {a : Type} `{Ho : LessDefinedOrder a} : PreOrder LessDefined_T.
+Proof.
+constructor.
+- intros x. destruct x.
+  + constructor. apply Ho.
+  + constructor.
+- intros x y z. inversion 1; subst; intros.
+  + constructor.
+  + inversion H2; subst. constructor.
+    destruct Ho. transitivity y0; assumption.
+Qed.
+
+#[global]
+Instance PartialOrder_LessDefined_T {a : Type} `{Ho : LessDefinedOrder a} : PartialOrder eq LessDefined_T.
+Proof.
+constructor.
+- intros ->. autounfold. constructor; reflexivity.
+- inversion 1. induction H1.
+  + inversion H2; reflexivity.
+  + inversion H2; subst. f_equal. apply Ho. constructor; assumption.
+Qed.
+
+#[global]
+Instance LessDefinedOrder_T {a} {H: LessDefined a} {Ho : LessDefinedOrder H} : LessDefinedOrder LessDefined_T :=
+  {| less_defined_preorder := PreOrder_LessDefined_T ;
+     less_defined_partial_order := @PartialOrder_LessDefined_T _ H Ho |}.
+
+Lemma exact_max_T {a b} {Hless : LessDefined a}
+      (Horder : LessDefinedOrder Hless) (Hexact : Exact b a)
+      (Hle : LessDefinedExact Horder Hexact) :
+  forall (xA : T a) (x : b), exact x `less_defined` xA -> exact x = xA.
+Proof.
+  destruct xA; intros.
+  - inversion H; subst. unfold exact, Exact_T.
+    f_equal. apply Hle. assumption.
+  - inversion H.
+Qed.
+
+#[global]
+Instance LessDefinedExact_T {a b} {Hless : LessDefined a} {Horder : LessDefinedOrder Hless}
+         {Hexact : Exact b a} {_ : LessDefinedExact Horder Hexact}:
+  LessDefinedExact LessDefinedOrder_T Exact_T :=
+  {| exact_max := @exact_max_T a b _ _ _ _ |}.
+
+(** * [is_approx]
+    
+    In our paper, the definition of [is_approx] can be anything as long as it
+    satisfies the [approx_exact] proposition. In this file, we choose the most
+    direct definition that satisfies the [approx_exact] law. *)
+Definition is_approx {a b} { _ : Exact b a} {_:LessDefined a} (xA : a) (x : b) : Prop := 
+  xA `less_defined` exact x.
+Infix "`is_approx`" := is_approx (at level 42).
+
+(** * This corresponds to the proposition [approx_exact] in Section 5.3.
+
+    And because of our particular definition, this is true by
+    definition. However, this cannot be proved generically if the definition of
+    [is_approx] can be anything. *)
+Theorem approx_exact {a b} `{Exact b a} `{LessDefined a} :
+  forall (x : b) (xA : a),
+    xA `is_approx` x <-> xA `less_defined` (exact x).
+Proof. reflexivity. Qed.
+  
+#[global] Hint Unfold is_approx : core.
+
+(** * This corresponds to the proposition [approx_down] in Section 5.3.
+
+    Again, because of the particular definition of [is_approx] we use here, this
+    can be proved simply by the law of transitivity. *)
+Lemma approx_down {a b} `{Hld : LessDefined a} `{Exact b a} {_ : LessDefinedOrder Hld}:
+  forall (x : b) (xA yA : a),
+    xA `less_defined` yA -> yA `is_approx` x -> xA `is_approx` x.
+Proof.
+  intros. unfold is_approx. destruct H0.
+  transitivity yA; assumption.
+Qed.
+
+(**)
+
+(** In this part, we prove that any type [a] is also an [exact] of itself. We
+    define this instance so that [listA a] would be an approximation of [list
+    a]---so that we do not need to consider the approximation of [a]. A useful
+    simplification. *)
+#[local] Instance Exact_id {a} : Exact a a := id.
+
+(** However, if we are not careful, the [LessDefined_id] instance might be used
+    everywhere. To prevent that, we give [LessDefined_id] a very low priority
+    here.
+
+    Learn more about the priority of Coq's type classes in the [Controlling
+    Instantiation] section of
+    [https://softwarefoundations.cis.upenn.edu/qc-current/Typeclasses.html]. *)
+#[local] Instance LessDefined_id {a} : LessDefined a | 100 := eq.
+
+#[local] Instance LessDefinedOrder_id {a} : @LessDefinedOrder a _.
+Proof.
+  econstructor. cbv. easy.
+Qed.
+
+#[local] Instance LessDefinedExact_id {a} : @LessDefinedExact a a _ _ _.
+Proof.
+  econstructor. cbv. easy.
+Qed.
+
+#[global] Hint Unfold Exact_id : core.
+#[global] Hint Unfold LessDefined_id : core.
+
+(** * Tactics for working with optimistic and pessimistic specs. *)
+
+(** Use the monotonicity laws. *)
+Ltac relax :=
+  match goal with
+  | [ |- _ {{ _ }} ] => eapply pessimistic_mon
+  | [ |- _ [[ _ ]] ] => eapply optimistic_mon
+  end.
+        
+Ltac relax_apply lem :=
+  match goal with
+  | _ => apply lem
+  | _ => relax; [apply lem|]
+  end.
+
+(** Automatically apply the inference rules. *)
+Ltac mforward tac :=
+  lazymatch goal with
+  | [ |- (ret _) {{ _ }} ] => relax_apply pessimistic_ret
+  | [ |- (bind _ _) {{ _ }} ] => relax_apply pessimistic_bind
+  | [ |- tick {{ _}} ] => relax_apply pessimistic_tick
+  | [ |- (thunk _) {{ _ }} ] => relax_apply pessimistic_thunk
+  | [ |- (force _) {{ _ }} ] => relax_apply pessimistic_force
+  | [ |- (forcing _ _) {{ _ }} ] => relax_apply pessimistic_forcing
+  | [ |- (ret _) [[ _ ]] ] => relax_apply optimistic_ret
+  | [ |- (bind _ _) [[ _ ]] ] => relax_apply optimistic_bind
+  | [ |- tick [[ _]] ] => relax_apply optimistic_tick
+  | [ |- (force _) [[ _ ]] ] => relax_apply optimistic_force
+  | [ |- (forcing _ _) [[ _ ]] ] => relax_apply optimistic_forcing
+  | [ |- (thunk _) [[ _ ]] ] => fail
+  | [ |- (fun _ _ => False) {{ _ }} ] => intros ? ? []
+  | [ |- _ {{ _ }} ] => autounfold; tac
+  | [ |- _ [[ _ ]] ] => autounfold; tac
+  end.
+
+(** Heuristics for dealing with approximations. *)
+Ltac invert_approx :=
+  match goal with
+  | [H : _ `is_approx` _ |- _] =>
+    inversion H; let n:= numgoals in guard n=1; subst; clear H
+  | [H : _ `less_defined` _ |- _] =>
+    inversion H; let n:= numgoals in guard n=1; subst; clear H
+  | [H : is_defined ?x |- _] =>
+    destruct x; [|contradiction]; clear H
+  end.
+
+Ltac invert_eq :=
+  subst; try match goal with
+             | [H : _ = _ |- _] =>
+               inversion H; subst; clear H
+             end.
+
+Ltac solve_approx tac :=
+  repeat (match goal with
+          | _ => solve [auto]
+          | [ |- _ `is_approx` _ ] =>
+            repeat autounfold; tac
+          | [ |- is_defined (Thunk _) ] =>
+            reflexivity
+          end).
+
+(** Heuristics for reasoning about pessimistic/optimistic specs. *)
+Ltac mgo tac := repeat (intros;
+                        repeat invert_eq; repeat invert_approx;
+                        cbn in *; (mforward tac + solve_approx tac + lia)).
+Ltac mgo' := mgo idtac.

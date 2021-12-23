@@ -1,6 +1,9 @@
 -Q src Clairvoyance
 
-src/Clairvoyance.v
+src/Core.v
+src/Approx.v
 src/Translation.v
+src/Fix.v
+src/List.v
 src/LazyQueue.v
 src/Eval.v

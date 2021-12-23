@@ -2,10 +2,9 @@ Set Implicit Arguments.
 Set Maximal Implicit Insertion.
 Set Contextual Implicit.
 
-From Coq Require Import Arith List Psatz.
-From Coq Require Import Relations.Relation_Definitions Classes.RelationClasses.
-
+From Coq Require Import Arith List Psatz Morphisms Relations.
 From Equations Require Import Equations.
+From Clairvoyance Require Import Core Approx.
 
 (* ---------------------- Section 2: Motivating Example ---------------------- *)
 
@@ -28,59 +27,6 @@ Fixpoint take {a} (n : nat) (xs : list a) : list a :=
 Definition p {a} (n : nat) (xs ys : list a) : list a :=
   let zs := append xs ys in
   take n zs.
-
-(* ---------------------- Section 3: The Clairvoyance Monad ---------------------- *)
-
-Section ClairvoyanceMonad.
-
-(** * Figure 4. *)
-
-(* A computation that produces a value of type "a" after some number of ticks. *)
-Definition M (a : Type) : Type := a -> nat -> Prop.
-
-(* A computation that takes no time and yields a single value. *)
-Definition ret {a} (v : a) : M a :=
-  fun y n => (y, n) = (v, 0).
-
-(* Sequence two computations and add their time. *)
-Definition bind {a b} (u : M a) (k : a -> M b) : M b :=
-  fun y n => exists x nx ny, u x nx /\ k x y ny /\ n = nx + ny.
-
-(* A computation with unit cost. *)
-Definition tick : M unit :=
-  fun _ n => n = 1.
-
-(* A thunk: either a known value or unused. *)
-Inductive T (a : Type) : Type :=
-| Thunk (x : a)
-| Undefined.
-
-(* Store a computation without evaluating it (zero cost). *)
-Definition thunk {a} (u : M a) : M (T a) :=
-  fun t n => match t with
-             | Thunk v => u v n
-             | Undefined => n = 0
-             end.
-
-(* Either continue computation with the value of a thunk or fail. *) 
-Definition forcing {a b} (t : T a) (f : a -> M b) : M b :=
-  match t with
-  | Thunk v => f v
-  | Undefined => fun _ _ => False
-  end.
-
-(* Force a thunk. *)
-Definition force {a} (t : T a) : M a := forcing t ret.
-
-End ClairvoyanceMonad.
-
-(* Notation for working with the Monad *)
-
-Notation "t >> s" := (bind t (fun _ => s)) (at level 61, left associativity).
-
-Notation "'let!' x' ':=' t 'in' s" := (bind t (fun x' => s)) (x' as pattern, at level 90).
-Notation "'let~' x  ':=' t 'in' s" := (bind (thunk t) (fun x => s)) (x as pattern, at level 90).
-Notation "f $! x" := (forcing x f) (at level 61, left associativity).
 
 (* ---------------------- Section 4: Translation ---------------------- *)
 
@@ -168,183 +114,6 @@ Definition pA {a} (n : nat) (xs ys : T (listA a)) : M (listA a) :=
 
 End TranslationExample.
 
-(* ---------------------- Section 5: Formal Reasoning ----------------- *)
-
-
-(** * Figure 12.
-
-    The definitions of the pessimistic and optimistic specifications *)
-
-Definition pessimistic {a} (u : M a) (r : a -> nat -> Prop) : Prop :=
-  forall x n, u x n -> r x n.
-
-Definition optimistic {a} (u : M a) (r : a -> nat -> Prop) : Prop :=
-  exists x n, u x n /\ r x n.
-
-Notation " u {{ r }} " := (pessimistic u r) (at level 42).
-Notation " u [[ r ]] " := (optimistic  u r) (at level 42).
-
-
-(* ----------------- Section 5.2 ----------------- *)
-
-(** Reasoning rules for pessimistic and optimistic specifications. *)
-
-Section InferenceRules.
-
-(** * Figure 13. *)
-
-Lemma pessimistic_mon {a} (u : M a) (r r' : a -> nat -> Prop)
-  : u {{ r }} ->
-    (forall x n, r x n -> r' x n) ->
-    u {{ r' }}.
-Proof.
-  intros X F x m H; apply F, X, H.
-Qed.
-
-Lemma pessimistic_ret {a} (x : a) (r : a -> nat -> Prop)
-  : r x 0 -> (ret x) {{ r }}.
-Proof.
-  unfold ret. intros H y m. inversion 1. congruence.
-Qed.
-
-Lemma pessimistic_bind {a b} (u : M a) (k : a -> M b) (r : b -> nat -> Prop)
-  : u {{ fun x n => (k x) {{ fun y m => r y (n + m) }} }} ->
-    (bind u k) {{ r }}.
-Proof.
-  intros H y m0. intros (x & n & m & H1 & H2 & H3).
-  specialize (H x _ H1 y _ H2). rewrite H3; apply H.
-Qed.
-
-Lemma pessimistic_tick (r : unit -> nat -> Prop)
-  : r tt 1 -> tick {{ r }}.
-Proof.
-  intros H [] n. unfold tick. intros ->; auto.
-Qed.
-
-Lemma pessimistic_thunk a (u : M a) r
-  : u {{ fun x => r (Thunk x) }} ->
-    r Undefined 0 ->
-    (thunk u) {{ r }}.
-Proof.
-  intros. intros x m. destruct x; simpl.
-  - apply H.
-  - intros ->. assumption.
-Qed.
-
-Lemma pessimistic_forcing {a b} (t : T a) (k : a -> M b) (r : b -> nat -> Prop)
-  : (forall x, t = Thunk x -> (k x) {{ r }}) ->
-    (k $! t) {{ r }}.
-Proof.
-  intros. destruct t eqn:Ht.
-  - cbn. auto.
-  - inversion 1.
-Qed.
-
-Lemma pessimistic_conj {a} (u : M a) (r p : a -> nat -> Prop)
-  : u {{ r }} ->
-    u {{ p }} ->
-    u {{ fun x n => r x n /\ p x n }}.
-Proof.
-  intros ? ? ? ? Hu. split.
-  - apply H; auto.
-  - apply H0; auto.
-Qed.
-
-(** This rule is not in Fig. 13. Recall that [force t] is defined as [forcing t
-    ret], so this rule can be simply obtained by using the [pessimistic_forcing]
-    rule + the [pessimistic_ret] rule. *)
-Lemma pessimistic_force {a} (t : T a) (r : a -> nat -> Prop)
-  : (forall x, t = Thunk x -> r x 0) ->
-    (force t) {{ r }}.
-Proof.
-  intros. eapply pessimistic_forcing.
-  intros. eapply pessimistic_ret. auto.
-Qed.
-
-(** * Figure 14. *)
-
-Lemma optimistic_mon {a} (u : M a) (r r' : a -> nat -> Prop)
-  : u [[ r ]] ->
-    (forall x n, r x n -> r' x n) ->
-    u [[ r' ]].
-Proof.
-  intros X F. destruct X as (x & n & X).
-  exists x, n. intuition.
-Qed.
-
-Lemma optimistic_ret {a} (x : a) (r : a -> nat -> Prop)
-  : r x 0 -> (ret x) [[ r ]].
-Proof.
-  intros H. exists x, 0. intuition. constructor; reflexivity.
-Qed.
-
-Lemma optimistic_bind {a b} (u : M a) (k : a -> M b) (r : b -> nat -> Prop)
-  : u [[ fun x n => (k x) [[ fun y m => r y (n + m) ]] ]] ->
-    (bind u k) [[ r ]].
-Proof.
-  intros Hu. destruct Hu as (x & n & ? & Hk).
-  destruct Hk as (y & m & ? & ?).
-  exists y, (n + m). intuition.
-  exists x, n, m. intuition.
-Qed.
-
-Lemma optimistic_tick (r : unit -> nat -> Prop)
-  : r tt 1 -> tick [[ r ]].
-Proof.
-  intros H. exists tt, 1. intuition. constructor.
-Qed.
-
-(** For proof engineering purposes, we divide the [thunk] rule of Fig. 14 to two
-    separate rules: [optimistic_thunk_go] and [optimistic_skip]. *)
-Lemma optimistic_thunk_go {a} (u : M a) (r : T a -> nat -> Prop)
-  : u [[ fun x => r (Thunk x) ]] ->
-    (thunk u) [[ r ]].
-Proof.
-  intros (x & n & ? & ?).
-  exists (Thunk x), n; cbn; auto.
-Qed.
-
-Lemma optimistic_skip {a} (u : M a) (r : T a -> nat -> Prop)
-  : r Undefined 0 ->
-    (thunk u) [[ r ]].
-Proof.
-  intros H.
-  exists Undefined, 0. split; [|assumption]. cbn. reflexivity.
-Qed.
-
-Lemma optimistic_forcing {a b} (t : T a) (k : a -> M b) (r : b -> nat -> Prop) x
-  : t = Thunk x ->
-    k x [[ r ]] ->
-    (k $! t) [[ r ]].
-Proof.
-  intros. destruct t eqn:Ht.
-  - cbn. inversion H. auto.
-  - congruence.
-Qed.
-
-Lemma optimistic_conj {a} (u : M a) (r p : a -> nat -> Prop)
-  : u {{ r }} ->
-    u [[ p ]] ->
-    u [[ fun x n => r x n /\ p x n ]].
-Proof.
-  intros ? ?. destruct H0 as (? & ? & ? & ?).
-  exists x, x0. auto.
-Qed.
-
-(** Same as [pessimistic_force], this is a consequence of [optimistic_forcing] +
-    [optimistic_bind]. *)
-Lemma optimistic_force {a} (t : T a) (r : a -> nat -> Prop) x
-  : t = Thunk x ->
-    r x 0 ->
-    (force t) [[ r ]].
-Proof.
-  intros. unfold force. eapply optimistic_forcing.
-  - eassumption.
-  - eapply optimistic_ret; auto.
-Qed.
-
-End InferenceRules.
-
 (* ----------------- Section 5.3 ----------------- *)
 
 (** * Figure 16.
@@ -382,32 +151,6 @@ Qed.
 
 #[global] Hint Resolve sizeX_ge_1 : core.
 
-Definition is_defined {a} (t : T a) : Prop :=
-  match t with
-  | Thunk _ => True
-  | Undefined => False
-  end.
-
-(* --------------------------------------- *)
-
-(** * Approximations.
-    
-    This part is a reference implementation of the definitions discussed in
-    Section 5.3.  *)
-
-(** In the paper, we start by giving an [exact] function defined on lists. We
-    mention later in the section that we would also want to be able to overload
-    the [exact] function (and the [is_approx] and [less_defined] relations) for
-    other types. One way of doing that is using type classes, as we show here. *)
-
-(** * [exact] *)
-Class Exact a b : Type := exact : a -> b.
-
-#[global] Hint Unfold exact : core.
-
-Instance Exact_T_Instance {a b} {r: Exact a b } : Exact a (T b) 
-  := fun x => Thunk (exact x).
-
 (** The function is defined with the help of the Equations library. Neither our
     methodology nor our definitions have to rely on Equations, but the tactics
     provided by Equations such as [funelim] makes our proofs slightly
@@ -416,99 +159,26 @@ Equations exact_listA {a b : Type} `{Exact a b} (xs : list a) : listA b :=
 exact_listA nil := NilA ;
 exact_listA (cons y ys) := ConsA (Thunk (exact y)) (Thunk (exact_listA ys)).
 
-Instance Exact_list_Instance {a b} `{Exact a b} : Exact (list a) (listA b) :=
+#[global]
+Instance Exact_list {a b} `{Exact a b} : Exact (list a) (listA b) :=
   exact_listA.
 
-#[global] Hint Unfold Exact_T_Instance : core.
-#[global] Hint Unfold Exact_list_Instance : core.
-
-Instance Exact_fun {a1 b1 a2 b2} `{Exact b1 a1} `{Exact a2 b2} 
-  : Exact (a1 -> a2) (b1 -> b2) 
-  := fun f => fun x => exact (f (exact x)).
-
-(** * [less_defined] *)
-Class LessDefined a := less_defined : a -> a -> Prop.
-Infix "`less_defined`" := less_defined (at level 42).
-
-#[global] Hint Unfold less_defined : core.
-
-Inductive LessDefined_T {a : Type} `{LessDefined a} : relation (T a) :=
-| LessDefined_Undefined :
-    forall x, LessDefined_T Undefined x
-| LessDefined_Thunk :
-    forall x y, x `less_defined` y -> LessDefined_T (Thunk x) (Thunk y).
-
-#[global] Hint Constructors LessDefined_T : core.
-
-Instance Lift_T {a} `{LessDefined a} : LessDefined (T a) := LessDefined_T.
-
-#[global] Hint Unfold Lift_T : core.
-
-(** * This corresponds to the proposition [less_defined_order] in Section 5.3. *)
-Class LessDefinedOrder a (H: LessDefined a) :=
-  { less_defined_preorder :> PreOrder less_defined ;
-    less_defined_partial_order :> PartialOrder eq less_defined }.
-
-(** * This corresponds to the proposition [exact_max] in Section 5.3. *)
-Class LessDefinedExact {a b} {Hless : LessDefined a}
-      (Horder : LessDefinedOrder Hless) (Hexact : Exact b a) :=
-  { exact_max : forall (xA : a) (x : b), exact x `less_defined` xA -> exact x = xA }.
-
-Instance PreOrder_Lift_T {a : Type} `{Ho : LessDefinedOrder a} : PreOrder Lift_T.
-Proof.
-constructor.
-- intros x. destruct x.
-  + constructor. apply Ho.
-  + constructor.
-- intros x y z. inversion 1; subst; intros.
-  + constructor.
-  + inversion H2; subst. constructor.
-    destruct Ho. transitivity y0; assumption.
-Qed.
-
-Instance PartialOrder_Lift_T {a : Type} `{Ho : LessDefinedOrder a} : PartialOrder eq Lift_T.
-Proof.
-constructor.
-- intros ->. autounfold. constructor; reflexivity.
-- inversion 1. induction H1.
-  + inversion H2; reflexivity.
-  + inversion H2; subst. f_equal. apply Ho. constructor; assumption.
-Qed.
-
-Instance Lift_T_Order {a} {H: LessDefined a} {Ho : LessDefinedOrder H} : LessDefinedOrder Lift_T :=
-  {| less_defined_preorder := PreOrder_Lift_T ;
-     less_defined_partial_order := @PartialOrder_Lift_T _ H Ho |}.
-
-Lemma exact_max_T {a b} {Hless : LessDefined a}
-      (Horder : LessDefinedOrder Hless) (Hexact : Exact b a)
-      (Hle : LessDefinedExact Horder Hexact) :
-  forall (xA : T a) (x : b), exact x `less_defined` xA -> exact x = xA.
-Proof.
-  destruct xA; intros.
-  - inversion H; subst. unfold exact, Exact_T_Instance.
-    f_equal. apply Hle. assumption.
-  - inversion H.
-Qed.
-
-Instance LessDefinedExact_T {a b} {Hless : LessDefined a} {Horder : LessDefinedOrder Hless}
-         {Hexact : Exact b a} {_ : LessDefinedExact Horder Hexact}:
-  LessDefinedExact Lift_T_Order Exact_T_Instance :=
-  {| exact_max := @exact_max_T a b _ _ _ _ |}.
+#[global] Hint Unfold Exact_list : core.
 
 Unset Elimination Schemes.
 
-Inductive LessDefined_list {a : Type} `{LessDefined a} : listA a -> listA a -> Prop :=
+Inductive less_defined_list {a : Type} `{LessDefined a} : listA a -> listA a -> Prop :=
 | LessDefined_NilA :
-    LessDefined_list NilA NilA
+    less_defined_list NilA NilA
 | LessDefined_ConsA : forall (x y : T a) (xs ys : T (listA a)),
     x `less_defined` y ->
-    @Lift_T _ LessDefined_list xs ys ->
-    LessDefined_list (ConsA x xs) (ConsA y ys).
+    @less_defined_T _ less_defined_list xs ys ->
+    less_defined_list (ConsA x xs) (ConsA y ys).
 
-#[global] Hint Constructors LessDefined_list : core.
+#[global] Hint Constructors less_defined_list : core.
 
 (** We need our own induction principle because of nested inductive types. *)
-Lemma LessDefined_list_ind :
+Lemma less_defined_list_ind :
   forall (a : Type) (H : LessDefined a) (P : listA a -> listA a -> Prop),
     P NilA NilA ->
     (forall (x y : T a) (ys : T (listA a)),
@@ -516,10 +186,10 @@ Lemma LessDefined_list_ind :
         P (ConsA x Undefined) (ConsA y ys)) ->
     (forall (x y : T a) (xs ys : listA a),
         x `less_defined` y ->
-        LessDefined_list xs ys ->
+        less_defined_list xs ys ->
         P xs ys ->
         P (ConsA x (Thunk xs)) (ConsA y (Thunk ys))) ->
-    forall l l0 : listA a, LessDefined_list l l0 -> P l l0.
+    forall l l0 : listA a, less_defined_list l l0 -> P l l0.
 Proof.
   intros a H P Hnil Hundef Hthunk. fix SELF 3.
   intros l l' Hl. destruct Hl.
@@ -532,12 +202,13 @@ Defined.
 
 Set Elimination Schemes.
 
-Instance Lift_list {a : Type} `{LessDefined a} : LessDefined (listA a) :=
-  LessDefined_list.
+#[global]
+Instance LessDefined_list {a : Type} `{LessDefined a} : LessDefined (listA a) :=
+  less_defined_list.
 
-#[global] Hint Unfold Lift_list : core.
+#[global] Hint Unfold LessDefined_list : core.
 
-Instance PreOrder_Lift_list {a : Type} `{Ho : LessDefinedOrder a} : PreOrder Lift_list.
+Instance PreOrder_LessDefined_list {a : Type} `{Ho : LessDefinedOrder a} : PreOrder (A := listA a) less_defined.
 Proof.
 constructor. 
 - intros x. induction x.
@@ -553,26 +224,28 @@ constructor.
     * inversion H6; subst. constructor. apply IHHxy. assumption.
 Qed.
 
-Instance PartialOrder_Lift_list  {a : Type} `{Ho : LessDefinedOrder a} : PartialOrder eq Lift_list.
+#[global]
+Instance PartialOrder_LessDefined_list  {a : Type} `{Ho : LessDefinedOrder a} : PartialOrder (A := listA a) eq less_defined.
 Proof.
 constructor.
 - intros ->. autounfold. constructor; reflexivity.
 - inversion 1. clear H0. induction H1.
   + reflexivity.
   + f_equal.
-    * apply Lift_T_Order. constructor. assumption.
+    * apply LessDefinedOrder_T. constructor. assumption.
       inversion H2; subst. assumption.
     * inversion H2; subst. inversion H7; subst. reflexivity.
   + f_equal.
-    * apply Lift_T_Order. constructor. assumption.
+    * apply LessDefinedOrder_T. constructor. assumption.
       inversion H2; subst. assumption.
-    * f_equal. apply IHLessDefined_list.
+    * f_equal. apply IHless_defined_list.
       inversion H2; subst. inversion H8; subst. assumption.
 Qed.
 
-Instance Lift_list_Order {a : Type} `{Ho : LessDefinedOrder a} : LessDefinedOrder Lift_list :=
-  {| less_defined_preorder := PreOrder_Lift_list ;
-     less_defined_partial_order := @PartialOrder_Lift_list _ _ Ho |}.
+#[global]
+Instance LessDefinedOrder_list {a : Type} `{Ho : LessDefinedOrder a} : LessDefinedOrder LessDefined_list :=
+  {| less_defined_preorder := PreOrder_LessDefined_list ;
+     less_defined_partial_order := @PartialOrder_LessDefined_list _ _ Ho |}.
 
 Lemma exact_max_listA {a b} {Hless : LessDefined a}
       (Horder : LessDefinedOrder Hless) (Hexact : Exact b a)
@@ -581,7 +254,7 @@ Lemma exact_max_listA {a b} {Hless : LessDefined a}
 Proof.
   intros xA x. revert xA. induction x.
   - inversion 1. reflexivity.
-  - unfold exact, Exact_list_Instance.
+  - unfold exact, Exact_list.
     rewrite exact_listA_equation_2.
     inversion 1; subst. f_equal.
     + apply LessDefinedExact_T, H2.
@@ -589,143 +262,18 @@ Proof.
       apply IHx. assumption.
 Qed.
 
+#[global]
 Instance LessDefinedExact_list {a b} {Hless : LessDefined a} {Horder : LessDefinedOrder Hless}
          {Hexact : Exact b a} {_ : LessDefinedExact Horder Hexact}:
-  LessDefinedExact Lift_list_Order Exact_list_Instance :=
+  LessDefinedExact LessDefinedOrder_list Exact_list :=
   {| exact_max := @exact_max_listA a b _ _ _ _ |}.
 
-
-Instance LessDefined_Fun {a b} {_ : LessDefined a} {_:LessDefined b} 
-  : LessDefined (a -> b) :=
-  fun f g => forall x y, x `less_defined` y -> f x `less_defined` g y.
-
-(** * [is_approx]
-    
-    In our paper, the definition of [is_approx] can be anything as long as it
-    satisfies the [approx_exact] proposition. In this file, we choose the most
-    direct definition that satisfies the [approx_exact] law. *)
-Definition is_approx {a b} { _ : Exact b a} {_:LessDefined a} (xA : a) (x : b) : Prop := 
-  xA `less_defined` exact x.
-Infix "`is_approx`" := is_approx (at level 42).
-
-(** * This corresponds to the proposition [approx_exact] in Section 5.3.
-
-    And because of our particular definition, this is true by
-    definition. However, this cannot be proved generically if the definition of
-    [is_approx] can be anything. *)
-Theorem approx_exact {a b} `{Exact b a} `{LessDefined a} :
-  forall (x : b) (xA : a),
-    xA `is_approx` x <-> xA `less_defined` (exact x).
-Proof. reflexivity. Qed.
-  
-#[global] Hint Unfold is_approx : core.
-
-(** * This corresponds to the proposition [approx_down] in Section 5.3.
-
-    Again, because of the particular definition of [is_approx] we use here, this
-    can be proved simply by the law of transitivity. *)
-Lemma approx_down {a b} `{Hld : LessDefined a} `{Exact b a} {_ : LessDefinedOrder Hld}:
-  forall (x : b) (xA yA : a),
-    xA `less_defined` yA -> yA `is_approx` x -> xA `is_approx` x.
-Proof.
-  intros. unfold is_approx. destruct H0.
-  transitivity yA; assumption.
-Qed.
-
-(** In this part, we prove that any type [a] is also an [exact] of itself. We
-    define this instance so that [listA a] would be an approximation of [list
-    a]---so that we do not need to consider the approximation of [a]. A useful
-    simplification. *)
-Instance Exact_id {a} : Exact a a := id.
-
-(** However, if we are not careful, the [LessDefined_id] instance might be used
-    everywhere. To prevent that, we give [LessDefined_id] a very low priority
-    here.
-
-    Learn more about the priority of Coq's type classes in the [Controlling
-    Instantiation] section of
-    [https://softwarefoundations.cis.upenn.edu/qc-current/Typeclasses.html]. *)
-#[global] Instance LessDefined_id {a} : LessDefined a | 100 := eq.
-
-#[global] Instance LessDefinedOrder_id {a} : @LessDefinedOrder a _.
-Proof.
-Admitted.
-
-#[global] Instance LessDefinedExact_id {a} : @LessDefinedExact a a _ _ _.
-Proof.
-Admitted.
-
-#[global] Hint Unfold Exact_id : core.
-#[global] Hint Unfold LessDefined_id : core.
-
-(** * Tactics for working with optimistic and pessimistic specs. *)
-
-(** Use the monotonicity laws. *)
-Ltac relax :=
-  match goal with
-  | [ |- _ {{ _ }} ] => eapply pessimistic_mon
-  | [ |- _ [[ _ ]] ] => eapply optimistic_mon
-  end.
-        
-Ltac relax_apply lem :=
-  match goal with
-  | _ => apply lem
-  | _ => relax; [apply lem|]
-  end.
-
-(** Automatically apply the inference rules. *)
-Ltac mforward tac :=
-  lazymatch goal with
-  | [ |- (ret _) {{ _ }} ] => relax_apply pessimistic_ret
-  | [ |- (bind _ _) {{ _ }} ] => relax_apply pessimistic_bind
-  | [ |- tick {{ _}} ] => relax_apply pessimistic_tick
-  | [ |- (thunk _) {{ _ }} ] => relax_apply pessimistic_thunk
-  | [ |- (force _) {{ _ }} ] => relax_apply pessimistic_force
-  | [ |- (forcing _ _) {{ _ }} ] => relax_apply pessimistic_forcing
-  | [ |- (ret _) [[ _ ]] ] => relax_apply optimistic_ret
-  | [ |- (bind _ _) [[ _ ]] ] => relax_apply optimistic_bind
-  | [ |- tick [[ _]] ] => relax_apply optimistic_tick
-  | [ |- (force _) [[ _ ]] ] => relax_apply optimistic_force
-  | [ |- (forcing _ _) [[ _ ]] ] => relax_apply optimistic_forcing
-  | [ |- (thunk _) [[ _ ]] ] => fail
-  | [ |- (fun _ _ => False) {{ _ }} ] => intros ? ? []
-  | [ |- _ {{ _ }} ] => autounfold; tac
-  | [ |- _ [[ _ ]] ] => autounfold; tac
-  end.
-
-(** Heuristics for dealing with approximations. *)
-Ltac invert_approx :=
-  match goal with
-  | [H : _ `is_approx` _ |- _] =>
-    inversion H; let n:= numgoals in guard n=1; subst; clear H
-  | [H : _ `less_defined` _ |- _] =>
-    inversion H; let n:= numgoals in guard n=1; subst; clear H
-  | [H : is_defined ?x |- _] =>
-    destruct x; [|contradiction]; clear H
-  end.
-
-Ltac invert_eq :=
-  subst; try match goal with
-             | [H : _ = _ |- _] =>
-               inversion H; subst; clear H
-             end.
-
-Ltac solve_approx tac :=
-  repeat (match goal with
-          | _ => solve [auto]
-          | [ |- _ `is_approx` _ ] =>
-            repeat autounfold; tac
-          | [ |- is_defined (Thunk _) ] =>
-            reflexivity
-          end).
-
-(** Heuristics for reasoning about pessimistic/optimistic specs. *)
-Ltac mgo tac := repeat (intros;
-                        repeat invert_eq; repeat invert_approx;
-                        cbn in *; (mforward tac + solve_approx tac + lia)).
-Ltac mgo' := mgo idtac.
-
 Ltac mgo_list := mgo ltac:(simp exact_listA).
+
+Existing Instance Exact_id | 1.
+Existing Instance LessDefined_id | 100.
+Existing Instance LessDefinedOrder_id | 100.
+Existing Instance LessDefinedExact_id | 100.
 
 (* ----------------- Section 5.4 ----------------- *)
 
@@ -1168,29 +716,3 @@ Proof.
 Qed.
 
 End CaseStudyFolds.
-
-(* ----------------------- Section 4.2 ------------------------- *)
-
-(** * Figure 10. *)
-Definition impl3 {a b c} (P P' : a -> b -> c -> Prop) : Prop :=
-  forall x y z, P x y z -> P' x y z.
-
-Inductive Fix {a b} (gf : (a -> M b) -> (a -> M b)) x y n : Prop :=
-| MkFix (self : a -> M b) : impl3 self (Fix gf) -> gf self x y n -> Fix gf x y n.
-
-Lemma unfold_Fix {a b} (gf : (a -> M b) -> _)
-  : (forall P P', impl3 P P' -> impl3 (gf P) (gf P')) ->
-    impl3 (Fix gf) (gf (Fix gf)).
-Proof.
-  intros MON; intros ? ? ? W; induction W.
-  eapply MON; [ | eapply H1 ].
-  assumption.
-Qed.
-
-Lemma fold_Fix {a b} (gf : (a -> M b) -> _)
-  : impl3 (gf (Fix gf)) (Fix gf).
-Proof.
-  intros ? ? ? W. econstructor.
-  - intros ? ? ? V; apply V.
-  - assumption.
-Qed.
