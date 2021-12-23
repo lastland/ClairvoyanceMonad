@@ -112,8 +112,8 @@ End Blind.
 
 Notation "t >> s" := (bind t (fun _ => s)) (at level 61, left associativity).
 
-Notation "'let!' x' ':=' t 'in' s" := (bind t (fun x' => s)) (x' binder, at level 200).
-Notation "'let~' x  ':=' t 'in' s" := (bind (thunk t) (fun x => s)) (x binder, at level 200).
+Notation "'let!' x' ':=' t 'in' s" := (bind t (fun x' => s)) (x' pattern, at level 200).
+Notation "'let~' x  ':=' t 'in' s" := (bind (thunk t) (fun x => s)) (x pattern, at level 200).
 Notation "f $! x" := (forcing x f) (at level 61, left associativity).
 
 Unset Elimination Schemes.
@@ -236,7 +236,7 @@ Definition ex2 :=
     match r with
     | None => ret (nil, q)
     | Some (x, q) =>
-      let! '(xs, q) := k q in
+      let! (xs, q) := k q in
       ret (x :: xs, q)
     end) (fun q => ret (nil, q)) (seq 0 100) q.
 
