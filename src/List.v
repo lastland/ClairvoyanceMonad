@@ -6,6 +6,11 @@ From Coq Require Import Arith List Psatz Morphisms Relations.
 From Equations Require Import Equations.
 From Clairvoyance Require Import Core Approx.
 
+#[local] Existing Instance Exact_id | 1.
+#[local] Existing Instance LessDefined_id | 100.
+#[local] Existing Instance LessDefinedOrder_id | 100.
+#[local] Existing Instance LessDefinedExact_id | 100.
+
 (* ---------------------- Section 2: Motivating Example ---------------------- *)
 
 (** * Figure 1. *)
@@ -208,6 +213,7 @@ Instance LessDefined_list {a : Type} `{LessDefined a} : LessDefined (listA a) :=
 
 #[global] Hint Unfold LessDefined_list : core.
 
+#[global]
 Instance PreOrder_LessDefined_list {a : Type} `{Ho : LessDefinedOrder a} : PreOrder (A := listA a) less_defined.
 Proof.
 constructor. 
@@ -269,11 +275,6 @@ Instance LessDefinedExact_list {a b} {Hless : LessDefined a} {Horder : LessDefin
   {| exact_max := @exact_max_listA a b _ _ _ _ |}.
 
 Ltac mgo_list := mgo ltac:(simp exact_listA).
-
-Existing Instance Exact_id | 1.
-Existing Instance LessDefined_id | 100.
-Existing Instance LessDefinedOrder_id | 100.
-Existing Instance LessDefinedExact_id | 100.
 
 (* ----------------- Section 5.4 ----------------- *)
 

@@ -5,7 +5,7 @@ KNOWN
 - Clairvoyant-monadic implementation: [QueueA], [emptyA], [pushA], [popA]
 
 NEW
-- Demand functions: [emptyD], [pushD], [popD]
+- Demand functions: [emptyA'], [pushD], [popD]
 - (Physicist's method) Debt/negative potential: [debt]
 - Amortized cost specifications: [pushA_cost], [popA_cost]
 - Trees ("API traces" with sharing): [tree], [run_tree]
@@ -17,13 +17,18 @@ NEW
 
 From Coq Require Import Arith List Lia Setoid Morphisms.
 Import ListNotations.
-From Clairvoyance Require Import Core Approx List.
+From Clairvoyance Require Import Core Approx List Misc.
 
 Import RevCompare.
 
 Set Implicit Arguments.
 Set Contextual Implicit.
 Set Maximal Implicit Insertion.
+
+#[local] Existing Instance Exact_id | 1.
+#[local] Existing Instance LessDefined_id | 100.
+#[local] Existing Instance LessDefinedOrder_id | 100.
+#[local] Existing Instance LessDefinedExact_id | 100.
 
 (* Lazy persistent queue *)
 (* Amortized O(1) push and pop with persistence *)
@@ -95,51 +100,6 @@ Definition popA {a} (q : T (QueueA a)) : M (option (T a * T (QueueA a))) :=
 
 #[global] Instance Exact_Queue {a} : Exact (Queue a) (QueueA a) :=
   fun q => MkQueueA (nfront q) (exact (front q)) (nback q) (exact (back q)).
-
-#[global] Instance Exact_prod {a aA b bA} `{Exact a aA, Exact b bA} : Exact (a * b) (aA * bA) :=
-  fun xs => (exact (fst xs), exact (snd xs)).
-
-#[global] Instance Exact_option {a aA} `{Exact a aA} : Exact (option a) (option aA) := fun ox =>
-  match ox with
-  | None => None
-  | Some x => Some (exact x)
-  end.
-
-Inductive option_rel {a b} (r : a -> b -> Prop) : option a -> option b -> Prop :=
-| option_rel_None : option_rel r None None
-| option_rel_Some x y : r x y -> option_rel r (Some x) (Some y)
-. 
-
-#[global] Instance LessDefined_option {a} `{LessDefined a} : LessDefined (option a) :=
-  option_rel less_defined.
-
-#[global] Instance LessDefinedOrder_option {a} `{LessDefinedOrder a}
-  : @LessDefinedOrder (option a) _.
-Proof.
-Admitted.
-
-#[global] Instance LessDefinedExact_option {a aA} `{LessDefinedExact a aA}
-  : @LessDefinedExact (option a) (option aA) _ _ _.
-Proof.
-Admitted.
-
-Record pair_rel {a1 b1 a2 b2} (r1 : a1 -> b1 -> Prop) (r2 : a2 -> b2 -> Prop) (xs : a1 * a2) (ys : b1 * b2) : Prop :=
-  { fst_rel : r1 (fst xs) (fst ys)
-  ; snd_rel : r2 (snd xs) (snd ys)
-  }.
-
-#[global] Instance LessDefined_prod {a b} `{LessDefined a, LessDefined b} : LessDefined (a * b) :=
-  pair_rel less_defined less_defined.
-
-#[global] Instance LessDefinedOrder_prod {a b} `{LessDefinedOrder a, LessDefinedOrder b}
-  : @LessDefinedOrder (a * b) _.
-Proof.
-Admitted.
-
-#[global] Instance LessDefinedExact_prod {a aA b bA} `{LessDefinedExact a aA, LessDefinedExact b bA}
-  : @LessDefinedExact (a * b) (aA * bA) _ _ _.
-Proof.
-Admitted.
 
 Record less_defined_QueueA {a} (q1 q2 : QueueA a) : Prop :=
   { ld_front : less_defined (frontA q1) (frontA q2)
@@ -215,14 +175,6 @@ Qed.
    These can also in principled be derived automatically from the initial implementation.
  *)
 
-(* Interlude: ordered types with a least element. It represents an empty demand.
-   It's also convenient as a dummy value in nonsensical cases. *)
-Class Bottom (a : Type) : Type :=
-  bottom : a.
-
-#[global] Instance Bottom_T {a} : Bottom (T a) := Undefined.
-#[global] Instance Bottom_prod {a b} `{Bottom a, Bottom b} : Bottom (a * b) := (bottom, bottom).
-
 (* A combinator for demand functions. If [f : a -> b] is a demand function with input [a],
    then [thunkD f : T a -> b] is a demand function with input [T a]. *)
 Definition thunkD {a b} `{Bottom b} (f : a -> b) (x : T a) : b :=
@@ -261,7 +213,7 @@ Definition mkQueueD {a} (nfront : nat) (front : list a) (nback : nat) (back : li
     (frontD, backD)
   else (frontA outD, backA outD).
 
-Definition emptyD {a} : T (QueueA a) := Thunk (MkQueueA 0 (Thunk NilA) 0 (Thunk NilA)).
+Definition emptyA' {a} : T (QueueA a) := Thunk (MkQueueA 0 (Thunk NilA) 0 (Thunk NilA)).
 
 (* In [pushA], [q] is always forced, so the first component of the input demand is at least
    [Thunk]. *)
@@ -309,12 +261,6 @@ Admitted.
    more defined makes the output more defined. These can be used to generalize the
    demand specifications above to inputs greater than the input demand. *)
 
-Definition less_defined_M {a} `{LessDefined  a} (u v : M a) : Prop :=
-  u {{ fun x n =>
-  v [[ fun y m => x `less_defined` y /\ m <= n ]] }}.
-
-#[global] Instance LessDefined_M {a} `{LessDefined a} : LessDefined (M a) := less_defined_M.
-
 Lemma appendA_mon {a} (xsA xsA' ysA ysA' : T (listA a))
   : xsA `less_defined` xsA' ->
     ysA `less_defined` ysA' ->
@@ -334,23 +280,6 @@ Lemma popA_mon {a} (qA qA' : T (QueueA a))
     popA qA `less_defined` popA qA'.
 Proof.
 Admitted.
-
-(* Upward closed predicates *)
-Definition uc {a} `{LessDefined a} (k : a -> nat -> Prop) : Prop :=
-  forall x x' n n',
-    x `less_defined` x' ->
-    n' <= n ->
-    k x n -> k x' n'.
-
-Lemma optimistic_corelax {a} `{LessDefined a} (u u' : M a) (k : a -> nat -> Prop)
-  : u `less_defined` u' -> uc k ->
-    u [[ k ]] -> u' [[ k ]].
-Proof.
-  intros H' Hk Hu. hnf in H'. destruct Hu as (x & n & Hx & Hn).
-  apply H' in Hx.
-  relax; [ apply Hx | cbn; intros ? ? HH ].
-  revert Hn; apply Hk; apply HH.
-Qed.
 
 (**)
 
@@ -496,19 +425,6 @@ Definition GOOD_QUEUE : Prop :=
 
 (* The proof: we first compute the demand. *)
 
-Class Lub (a : Type) : Type :=
-  lub : a -> a -> a.
-
-Definition lub_T {a} (_lub : a -> a -> a) : T a -> T a -> T a :=
-  fun x y =>
-    match x, y with
-    | Undefined, y => y
-    | x, Undefined => x
-    | Thunk x, Thunk y => Thunk (_lub x y)
-    end.
-
-#[global] Instance Lub_T {a} `{Lub a} : Lub (T a) := lub_T lub.
-
 (* Partial function: we assume that both arguments approximate the same list *)
 Fixpoint lub_list {a} (xs ys : listA a) : listA a :=
   match xs, ys with
@@ -522,18 +438,6 @@ Fixpoint lub_list {a} (xs ys : listA a) : listA a :=
 #[global] Instance Lub_QueueA {a} : Lub (QueueA a) :=
   fun q1 q2 =>
     MkQueueA (nfrontA q1) (lub (frontA q1) (frontA q2)) (nbackA q1) (lub (backA q1) (backA q2)).
-
-Class LubLaw a `{Lub a, LessDefined a} : Prop :=
-  { least : forall x y z, x `less_defined` y -> y `less_defined` z -> lub x y `less_defined` z
-  ; upper : forall x y z, lub x y `less_defined` z -> x `less_defined` z /\ y `less_defined` z
-  }.
-
-Arguments LubLaw : clear implicits.
-Arguments LubLaw a {_ _}.
-
-#[global] Instance LubLaw_T {a} `{LubLaw a} : LubLaw (T a).
-Proof.
-Admitted.
 
 #[global] Instance LubLaw_QueueA {a} : LubLaw (QueueA a).
 Proof.
@@ -573,11 +477,6 @@ Lemma demand_tree_approx {a} (t : tree a) q
   : demand_tree t q `less_defined` exact q.
 Proof.
 Admitted.
-
-#[global] Instance Proper_add_le : Proper (le ==> le ==> le) Nat.add.
-Proof.
-  unfold Proper, respectful; intros; lia.
-Qed.
 
 Lemma pop_popD {a} (q : Queue a)
   : pop q = None -> popD q None = exact q.

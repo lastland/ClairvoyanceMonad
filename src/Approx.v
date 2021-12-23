@@ -59,6 +59,29 @@ Instance LessDefined_T {a} `{LessDefined a} : LessDefined (T a) := less_defined_
 
 #[global] Hint Unfold LessDefined_T : core.
 
+Definition less_defined_M {a} `{LessDefined  a} (u v : M a) : Prop :=
+  u {{ fun x n =>
+  v [[ fun y m => x `less_defined` y /\ m <= n ]] }}.
+
+#[global] Instance LessDefined_M {a} `{LessDefined a} : LessDefined (M a) := less_defined_M.
+
+(* Upward closed predicates *)
+Definition uc {a} `{LessDefined a} (k : a -> nat -> Prop) : Prop :=
+  forall x x' n n',
+    x `less_defined` x' ->
+    n' <= n ->
+    k x n -> k x' n'.
+
+Lemma optimistic_corelax {a} `{LessDefined a} (u u' : M a) (k : a -> nat -> Prop)
+  : u `less_defined` u' -> uc k ->
+    u [[ k ]] -> u' [[ k ]].
+Proof.
+  intros H' Hk Hu. hnf in H'. destruct Hu as (x & n & Hx & Hn).
+  apply H' in Hx.
+  eapply optimistic_mon; [ apply Hx | cbn; intros ? ? HH ].
+  revert Hn; apply Hk; apply HH.
+Qed.
+
 (** * This corresponds to the proposition [less_defined_order] in Section 5.3. *)
 Class LessDefinedOrder a (H: LessDefined a) :=
   { less_defined_preorder :> PreOrder less_defined ;
@@ -148,6 +171,87 @@ Proof.
 Qed.
 
 (**)
+
+(* Ordered types with a least element. It represents an empty demand.
+   It's also convenient as a dummy value in nonsensical cases. *)
+Class Bottom (a : Type) : Type :=
+  bottom : a.
+
+#[global] Instance Bottom_T {a} : Bottom (T a) := Undefined.
+#[global] Instance Bottom_prod {a b} `{Bottom a, Bottom b} : Bottom (a * b) := (bottom, bottom).
+
+(* Least upper bound operation. *)
+Class Lub (a : Type) : Type :=
+  lub : a -> a -> a.
+
+Definition lub_T {a} (_lub : a -> a -> a) : T a -> T a -> T a :=
+  fun x y =>
+    match x, y with
+    | Undefined, y => y
+    | x, Undefined => x
+    | Thunk x, Thunk y => Thunk (_lub x y)
+    end.
+
+#[global] Instance Lub_T {a} `{Lub a} : Lub (T a) := lub_T lub.
+
+Class LubLaw a `{Lub a, LessDefined a} : Prop :=
+  { least : forall x y z, x `less_defined` y -> y `less_defined` z -> lub x y `less_defined` z
+  ; upper : forall x y z, lub x y `less_defined` z -> x `less_defined` z /\ y `less_defined` z
+  }.
+
+Arguments LubLaw : clear implicits.
+Arguments LubLaw a {_ _}.
+
+#[global] Instance LubLaw_T {a} `{LubLaw a} : LubLaw (T a).
+Proof.
+Admitted.
+
+(**)
+
+Inductive option_rel {a b} (r : a -> b -> Prop) : option a -> option b -> Prop :=
+| option_rel_None : option_rel r None None
+| option_rel_Some x y : r x y -> option_rel r (Some x) (Some y)
+.
+
+Record pair_rel {a1 b1 a2 b2} (r1 : a1 -> b1 -> Prop) (r2 : a2 -> b2 -> Prop) (xs : a1 * a2) (ys : b1 * b2) : Prop :=
+  { fst_rel : r1 (fst xs) (fst ys)
+  ; snd_rel : r2 (snd xs) (snd ys)
+  }.
+
+#[global] Instance Exact_prod {a aA b bA} `{Exact a aA, Exact b bA} : Exact (a * b) (aA * bA) :=
+  fun xs => (exact (fst xs), exact (snd xs)).
+
+#[global] Instance Exact_option {a aA} `{Exact a aA} : Exact (option a) (option aA) := fun ox =>
+  match ox with
+  | None => None
+  | Some x => Some (exact x)
+  end.
+
+#[global] Instance LessDefined_option {a} `{LessDefined a} : LessDefined (option a) :=
+  option_rel less_defined.
+
+#[global] Instance LessDefinedOrder_option {a} `{LessDefinedOrder a}
+  : @LessDefinedOrder (option a) _.
+Proof.
+Admitted.
+
+#[global] Instance LessDefinedExact_option {a aA} `{LessDefinedExact a aA}
+  : @LessDefinedExact (option a) (option aA) _ _ _.
+Proof.
+Admitted.
+
+#[global] Instance LessDefined_prod {a b} `{LessDefined a, LessDefined b} : LessDefined (a * b) :=
+  pair_rel less_defined less_defined.
+
+#[global] Instance LessDefinedOrder_prod {a b} `{LessDefinedOrder a, LessDefinedOrder b}
+  : @LessDefinedOrder (a * b) _.
+Proof.
+Admitted.
+
+#[global] Instance LessDefinedExact_prod {a aA b bA} `{LessDefinedExact a aA, LessDefinedExact b bA}
+  : @LessDefinedExact (a * b) (aA * bA) _ _ _.
+Proof.
+Admitted.
 
 (** In this part, we prove that any type [a] is also an [exact] of itself. We
     define this instance so that [listA a] would be an approximation of [list
