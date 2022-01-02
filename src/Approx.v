@@ -186,6 +186,8 @@ Class Bottom (a : Type) : Type :=
 Class Lub (a : Type) : Type :=
   lub : a -> a -> a.
 
+Create HintDb lub.
+
 Definition lub_T {a} (_lub : a -> a -> a) : T a -> T a -> T a :=
   fun x y =>
     match x, y with
@@ -196,17 +198,42 @@ Definition lub_T {a} (_lub : a -> a -> a) : T a -> T a -> T a :=
 
 #[global] Instance Lub_T {a} `{Lub a} : Lub (T a) := lub_T lub.
 
+Definition cobounded {a} `{LessDefined a} (x y : a) : Prop :=
+  exists z : a, x `less_defined` z /\ y `less_defined` z.
+
+#[global] Hint Unfold cobounded : core.
+
+(* [lub] is defined as a total function for convenience, but it is generally partially defined,
+   [lub x y] only makes sense when [x] and [y] have at least one common upper bound. *)
 Class LubLaw a `{Lub a, LessDefined a} : Prop :=
-  { least : forall x y z : a, x `less_defined` y -> y `less_defined` z -> lub x y `less_defined` z
-  ; upper : forall x y z : a, lub x y `less_defined` z -> x `less_defined` z /\ y `less_defined` z
+  { lub_least_upper_bound : forall x y z : a,
+      x `less_defined` z -> y `less_defined` z -> lub x y `less_defined` z
+  ; lub_upper_bound_l : forall x y : a, cobounded x y -> x `less_defined` lub x y
+  ; lub_upper_bound_r : forall x y : a, cobounded x y -> y `less_defined` lub x y
   }.
 
 Arguments LubLaw : clear implicits.
 Arguments LubLaw a {_ _}.
 
-#[global] Instance LubLaw_T {a} `{LubLaw a} : LubLaw (T a).
+#[global] Hint Resolve lub_least_upper_bound lub_upper_bound_l lub_upper_bound_r : lub.
+
+Lemma lub_inv {a} `{LubLaw a} `{!Transitive (less_defined (a := a))}
+  : forall x y z : a, cobounded x y -> lub x y `less_defined` z ->
+       x `less_defined` z /\ y `less_defined` z.
 Proof.
-Admitted.
+  intros x y z Hxy Hlub; split; (etransitivity; eauto using lub_upper_bound_l, lub_upper_bound_r).
+Qed.
+
+#[global] Instance LubLaw_T {a} `{LubLaw a} `{!Reflexive (less_defined (a := a))} : LubLaw (T a).
+Proof.
+  constructor.
+  - intros ? ? ? []; inversion 1; subst; cbn; constructor; auto.
+    apply lub_least_upper_bound; auto.
+  - intros x y [z [ [? | Hx] Hy] ]; cbn; [ constructor | ].
+    inversion Hy; subst; constructor; eauto with lub.
+  - intros x y [z [ Hx Hy ] ]; destruct Hy as [ | Hy]; cbn; [ constructor | ].
+    inversion Hx; subst; constructor; eauto with lub.
+Qed.
 
 (**)
 

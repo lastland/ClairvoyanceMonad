@@ -520,7 +520,8 @@ Opaque Nat.mul Nat.add.
       cbn; intros. apply optimistic_ret. lia. }
     { inversion ld_. mforward idtac. rewrite (pop_popD Ep) in COST.
       change (Exact_Queue q) with (exact q). cbn in COST |- *. lia. }
-  - apply upper in ld_q. mgo'. relax. { apply IHt1; [apply wf_q | apply ld_q]. }
+  - apply lub_inv in ld_q; [ | eauto using demand_tree_approx ].
+    mgo'. relax. { apply IHt1; [apply wf_q | apply ld_q]. }
     cbn; intros; mgo'. relax. { apply IHt2; [apply wf_q | apply ld_q]. }
     cbn; intros; mgo'. rewrite lub_debt. lia.
   - mgo'.
