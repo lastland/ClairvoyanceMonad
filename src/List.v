@@ -249,7 +249,8 @@ constructor.
 Qed.
 
 #[global]
-Instance LessDefinedOrder_list {a : Type} `{Ho : LessDefinedOrder a} : LessDefinedOrder LessDefined_list :=
+Instance LessDefinedOrder_list {a : Type} `{Ho : LessDefinedOrder a}
+  : LessDefinedOrder (less_defined_list (a := a)) :=
   {| less_defined_preorder := PreOrder_LessDefined_list ;
      less_defined_partial_order := @PartialOrder_LessDefined_list _ _ Ho |}.
 
@@ -271,7 +272,7 @@ Qed.
 #[global]
 Instance LessDefinedExact_list {a b} {Hless : LessDefined a} {Horder : LessDefinedOrder Hless}
          {Hexact : Exact b a} {_ : LessDefinedExact Horder Hexact}:
-  LessDefinedExact LessDefinedOrder_list Exact_list :=
+  LessDefinedExact (a := listA a) (b := list b) LessDefinedOrder_list Exact_list :=
   {| exact_max := @exact_max_listA a b _ _ _ _ |}.
 
 Ltac mgo_list := mgo ltac:(simp exact_listA).

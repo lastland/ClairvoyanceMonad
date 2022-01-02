@@ -34,11 +34,10 @@ Instance Exact_T {a b} {r: Exact a b} : Exact a (T b)
 
 #[global] Hint Unfold Exact_T : core.
 
-(* TODO: Remove me
-Instance Exact_fun {a1 b1 a2 b2} `{Exact b1 a1} `{Exact a2 b2} 
-  : Exact (a1 -> a2) (b1 -> b2) 
-  := fun f => fun x => exact (f (exact x)).
-*)
+(* Type classes declared under this will have less confusing resolution.
+   We exclude [Exact] because in [Exact a b],
+   [b] is supposed to be determined by [a]. *)
+Set Typeclasses Strict Resolution.
 
 (** * [less_defined] *)
 Class LessDefined a := less_defined : a -> a -> Prop.
@@ -84,8 +83,8 @@ Qed.
 
 (** * This corresponds to the proposition [less_defined_order] in Section 5.3. *)
 Class LessDefinedOrder a (H: LessDefined a) :=
-  { less_defined_preorder :> PreOrder less_defined ;
-    less_defined_partial_order :> PartialOrder eq less_defined }.
+  { less_defined_preorder :> PreOrder (less_defined (a := a))
+  ; less_defined_partial_order :> PartialOrder eq (less_defined (a := a)) }.
 
 (** * This corresponds to the proposition [exact_max] in Section 5.3. *)
 Class LessDefinedExact {a b} {Hless : LessDefined a}
@@ -93,7 +92,8 @@ Class LessDefinedExact {a b} {Hless : LessDefined a}
   { exact_max : forall (xA : a) (x : b), exact x `less_defined` xA -> exact x = xA }.
 
 #[global]
-Instance PreOrder_LessDefined_T {a : Type} `{Ho : LessDefinedOrder a} : PreOrder LessDefined_T.
+Instance PreOrder_LessDefined_T {a : Type} `{Ho : LessDefinedOrder a}
+  : PreOrder (less_defined_T (a := a)).
 Proof.
 constructor.
 - intros x. destruct x.
@@ -106,7 +106,8 @@ constructor.
 Qed.
 
 #[global]
-Instance PartialOrder_LessDefined_T {a : Type} `{Ho : LessDefinedOrder a} : PartialOrder eq LessDefined_T.
+Instance PartialOrder_LessDefined_T {a : Type} `{Ho : LessDefinedOrder a}
+  : PartialOrder eq (less_defined_T (a := a)).
 Proof.
 constructor.
 - intros ->. autounfold. constructor; reflexivity.
@@ -116,7 +117,8 @@ constructor.
 Qed.
 
 #[global]
-Instance LessDefinedOrder_T {a} {H: LessDefined a} {Ho : LessDefinedOrder H} : LessDefinedOrder LessDefined_T :=
+Instance LessDefinedOrder_T {a} {H: LessDefined a} {Ho : LessDefinedOrder H}
+  : LessDefinedOrder (less_defined_T (a := a)) :=
   {| less_defined_preorder := PreOrder_LessDefined_T ;
      less_defined_partial_order := @PartialOrder_LessDefined_T _ H Ho |}.
 
@@ -134,7 +136,7 @@ Qed.
 #[global]
 Instance LessDefinedExact_T {a b} {Hless : LessDefined a} {Horder : LessDefinedOrder Hless}
          {Hexact : Exact b a} {_ : LessDefinedExact Horder Hexact}:
-  LessDefinedExact LessDefinedOrder_T Exact_T :=
+  LessDefinedExact (a := T a) (b := b) LessDefinedOrder_T Exact_T :=
   {| exact_max := @exact_max_T a b _ _ _ _ |}.
 
 (** * [is_approx]
@@ -195,8 +197,8 @@ Definition lub_T {a} (_lub : a -> a -> a) : T a -> T a -> T a :=
 #[global] Instance Lub_T {a} `{Lub a} : Lub (T a) := lub_T lub.
 
 Class LubLaw a `{Lub a, LessDefined a} : Prop :=
-  { least : forall x y z, x `less_defined` y -> y `less_defined` z -> lub x y `less_defined` z
-  ; upper : forall x y z, lub x y `less_defined` z -> x `less_defined` z /\ y `less_defined` z
+  { least : forall x y z : a, x `less_defined` y -> y `less_defined` z -> lub x y `less_defined` z
+  ; upper : forall x y z : a, lub x y `less_defined` z -> x `less_defined` z /\ y `less_defined` z
   }.
 
 Arguments LubLaw : clear implicits.
