@@ -27,8 +27,7 @@ Set Maximal Implicit Insertion.
 
 #[local] Existing Instance Exact_id | 1.
 #[local] Existing Instance LessDefined_id | 100.
-#[local] Existing Instance LessDefinedOrder_id | 100.
-#[local] Existing Instance LessDefinedExact_id | 100.
+#[local] Existing Instance ApproximationAlgebra_id | 100.
 
 (* Lazy persistent queue *)
 (* Amortized O(1) push and pop with persistence *)
@@ -109,11 +108,7 @@ Record less_defined_QueueA {a} (q1 q2 : QueueA a) : Prop :=
 #[global] Instance LessDefined_QueueA {a} : LessDefined (QueueA a) :=
   less_defined_QueueA.
 
-#[global] Instance LessDefinedOrder_QueueA {a} : @LessDefinedOrder (QueueA a) _.
-Proof.
-Admitted.
-
-#[global] Instance LessDefinedExact_QueueA {a} : @LessDefinedExact (QueueA a) _ _ _ _.
+#[global] Instance ApproximationAlgebra_QueueA {a} : ApproximationAlgebra (QueueA a) (Queue a).
 Proof.
 Admitted.
 

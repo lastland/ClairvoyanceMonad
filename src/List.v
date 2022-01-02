@@ -8,8 +8,7 @@ From Clairvoyance Require Import Core Approx.
 
 #[local] Existing Instance Exact_id | 1.
 #[local] Existing Instance LessDefined_id | 100.
-#[local] Existing Instance LessDefinedOrder_id | 100.
-#[local] Existing Instance LessDefinedExact_id | 100.
+#[local] Existing Instance ApproximationAlgebra_id | 100.
 
 (* ---------------------- Section 2: Motivating Example ---------------------- *)
 
@@ -214,9 +213,9 @@ Instance LessDefined_list {a : Type} `{LessDefined a} : LessDefined (listA a) :=
 #[global] Hint Unfold LessDefined_list : core.
 
 #[global]
-Instance PreOrder_LessDefined_list {a : Type} `{Ho : LessDefinedOrder a} : PreOrder (A := listA a) less_defined.
+Instance PreOrder_LessDefined_list {a : Type} `{LessDefined a, Ho : !PreOrder (less_defined (a := a))} : PreOrder (A := listA a) less_defined.
 Proof.
-constructor. 
+constructor.
 - intros x. induction x.
   + constructor.
   + repeat constructor. reflexivity.
@@ -230,50 +229,27 @@ constructor.
     * inversion H6; subst. constructor. apply IHHxy. assumption.
 Qed.
 
-#[global]
-Instance PartialOrder_LessDefined_list  {a : Type} `{Ho : LessDefinedOrder a} : PartialOrder (A := listA a) eq less_defined.
-Proof.
-constructor.
-- intros ->. autounfold. constructor; reflexivity.
-- inversion 1. clear H0. induction H1.
-  + reflexivity.
-  + f_equal.
-    * apply LessDefinedOrder_T. constructor. assumption.
-      inversion H2; subst. assumption.
-    * inversion H2; subst. inversion H7; subst. reflexivity.
-  + f_equal.
-    * apply LessDefinedOrder_T. constructor. assumption.
-      inversion H2; subst. assumption.
-    * f_equal. apply IHless_defined_list.
-      inversion H2; subst. inversion H8; subst. assumption.
-Qed.
-
-#[global]
-Instance LessDefinedOrder_list {a : Type} `{Ho : LessDefinedOrder a}
-  : LessDefinedOrder (less_defined_list (a := a)) :=
-  {| less_defined_preorder := PreOrder_LessDefined_list ;
-     less_defined_partial_order := @PartialOrder_LessDefined_list _ _ Ho |}.
-
-Lemma exact_max_listA {a b} {Hless : LessDefined a}
-      (Horder : LessDefinedOrder Hless) (Hexact : Exact b a)
-      (Hle : LessDefinedExact Horder Hexact) :
-  forall (xA : listA a) (x : list b), exact x `less_defined` xA -> exact x = xA.
+Lemma exact_max_listA {a b} `{ApproximationAlgebra a b}
+  : forall (xA : listA a) (x : list b), exact x `less_defined` xA -> exact x = xA.
 Proof.
   intros xA x. revert xA. induction x.
   - inversion 1. reflexivity.
   - unfold exact, Exact_list.
     rewrite exact_listA_equation_2.
     inversion 1; subst. f_equal.
-    + apply LessDefinedExact_T, H2.
-    + inversion H4; subst. f_equal.
+    + inversion H3; subst. f_equal. apply exact_max, H2.
+    + inversion H5; subst. f_equal.
       apply IHx. assumption.
 Qed.
 
 #[global]
-Instance LessDefinedExact_list {a b} {Hless : LessDefined a} {Horder : LessDefinedOrder Hless}
-         {Hexact : Exact b a} {_ : LessDefinedExact Horder Hexact}:
-  LessDefinedExact (a := listA a) (b := list b) LessDefinedOrder_list Exact_list :=
-  {| exact_max := @exact_max_listA a b _ _ _ _ |}.
+Instance ApproximationAlgebra_list {a b} `{ApproximationAlgebra a b}
+  : ApproximationAlgebra (listA a) (list b).
+Proof.
+  constructor.
+  - typeclasses eauto.
+  - apply @exact_max_listA; auto.
+Qed.
 
 Ltac mgo_list := mgo ltac:(simp exact_listA).
 

@@ -81,19 +81,24 @@ Proof.
   revert Hn; apply Hk; apply HH.
 Qed.
 
-(** * This corresponds to the proposition [less_defined_order] in Section 5.3. *)
-Class LessDefinedOrder a (H: LessDefined a) :=
-  { less_defined_preorder :> PreOrder (less_defined (a := a))
-  ; less_defined_partial_order :> PartialOrder eq (less_defined (a := a)) }.
+Unset Typeclasses Strict Resolution.
 
-(** * This corresponds to the proposition [exact_max] in Section 5.3. *)
-Class LessDefinedExact {a b} {Hless : LessDefined a}
-      (Horder : LessDefinedOrder Hless) (Hexact : Exact b a) :=
-  { exact_max : forall (xA : a) (x : b), exact x `less_defined` xA -> exact x = xA }.
+(** This corresponds to the propositions [less_defined_order] and [exact_max] in Section 5.3.
+  We actually need only a preorder (TODO: do we?), and the imprecision of
+  "order" in the paper is an oversight.
+ *)
+Class ApproximationAlgebra a b {Hless : LessDefined a} (Hexact : Exact b a) :=
+  { PreOrder_less_defined :> PreOrder (less_defined (a := a))
+  ; exact_max : forall (xA : a) (x : b), exact x `less_defined` xA -> exact x = xA }.
+
+Arguments ApproximationAlgebra : clear implicits.
+Arguments ApproximationAlgebra a b {Hless Hexact}.
+
+Set Typeclasses Strict Resolution.
 
 #[global]
-Instance PreOrder_LessDefined_T {a : Type} `{Ho : LessDefinedOrder a}
-  : PreOrder (less_defined_T (a := a)).
+Instance PreOrder_LessDefined_T {a : Type} `{LessDefined a} `{Ho : !PreOrder (less_defined (a := a))}
+  : PreOrder (less_defined (a := T a)).
 Proof.
 constructor.
 - intros x. destruct x.
@@ -106,8 +111,9 @@ constructor.
 Qed.
 
 #[global]
-Instance PartialOrder_LessDefined_T {a : Type} `{Ho : LessDefinedOrder a}
-  : PartialOrder eq (less_defined_T (a := a)).
+Instance PartialOrder_LessDefined_T {a : Type} `{LessDefined a}
+    `{Ho : PartialOrder _ eq (less_defined (a := a))}
+  : PartialOrder eq (less_defined (a := T a)).
 Proof.
 constructor.
 - intros ->. autounfold. constructor; reflexivity.
@@ -116,28 +122,20 @@ constructor.
   + inversion H2; subst. f_equal. apply Ho. constructor; assumption.
 Qed.
 
-#[global]
-Instance LessDefinedOrder_T {a} {H: LessDefined a} {Ho : LessDefinedOrder H}
-  : LessDefinedOrder (less_defined_T (a := a)) :=
-  {| less_defined_preorder := PreOrder_LessDefined_T ;
-     less_defined_partial_order := @PartialOrder_LessDefined_T _ H Ho |}.
-
-Lemma exact_max_T {a b} {Hless : LessDefined a}
-      (Horder : LessDefinedOrder Hless) (Hexact : Exact b a)
-      (Hle : LessDefinedExact Horder Hexact) :
-  forall (xA : T a) (x : b), exact x `less_defined` xA -> exact x = xA.
+Lemma exact_max_T {a b} `{AA : ApproximationAlgebra a b}
+  : forall (xA : T a) (x : b), exact x `less_defined` xA -> exact x = xA.
 Proof.
-  destruct xA; intros.
-  - inversion H; subst. unfold exact, Exact_T.
-    f_equal. apply Hle. assumption.
-  - inversion H.
+  intros xA x H. inversion H; subst.
+  unfold exact, Exact_T. f_equal. apply exact_max. assumption.
 Qed.
 
 #[global]
-Instance LessDefinedExact_T {a b} {Hless : LessDefined a} {Horder : LessDefinedOrder Hless}
-         {Hexact : Exact b a} {_ : LessDefinedExact Horder Hexact}:
-  LessDefinedExact (a := T a) (b := b) LessDefinedOrder_T Exact_T :=
-  {| exact_max := @exact_max_T a b _ _ _ _ |}.
+Instance ApproximationAlgebra_T {a b} `{AA : ApproximationAlgebra a b} : ApproximationAlgebra (T a) b.
+Proof.
+  constructor.
+  - apply @PreOrder_LessDefined_T, AA.
+  - apply @exact_max_T, AA.
+Qed.
 
 (** * [is_approx]
     
@@ -164,12 +162,11 @@ Proof. reflexivity. Qed.
 
     Again, because of the particular definition of [is_approx] we use here, this
     can be proved simply by the law of transitivity. *)
-Lemma approx_down {a b} `{Hld : LessDefined a} `{Exact b a} {_ : LessDefinedOrder Hld}:
+Lemma approx_down {a b} `{Hld : LessDefined a} `{Exact b a} `{PartialOrder _ eq (less_defined (a := a))}:
   forall (x : b) (xA yA : a),
     xA `less_defined` yA -> yA `is_approx` x -> xA `is_approx` x.
 Proof.
-  intros. unfold is_approx. destruct H0.
-  transitivity yA; assumption.
+  unfold is_approx. intros. etransitivity; eassumption.
 Qed.
 
 (**)
@@ -259,26 +256,27 @@ Record pair_rel {a1 b1 a2 b2} (r1 : a1 -> b1 -> Prop) (r2 : a2 -> b2 -> Prop) (x
 #[global] Instance LessDefined_option {a} `{LessDefined a} : LessDefined (option a) :=
   option_rel less_defined.
 
-#[global] Instance LessDefinedOrder_option {a} `{LessDefinedOrder a}
-  : @LessDefinedOrder (option a) _.
+#[global] Instance PreOrder_option {a} `{LessDefined a} `{!PreOrder (less_defined (a := a))}
+  : PreOrder (less_defined (a := option a)).
+Proof.
+  econstructor.
+Admitted.
+
+#[global] Instance PartialOrder_option {a} `{LessDefined a} `{PartialOrder _ eq (equ := _) (less_defined (a := a))}
+  : PartialOrder eq (less_defined (a := option a)).
 Proof.
 Admitted.
 
-#[global] Instance LessDefinedExact_option {a aA} `{LessDefinedExact a aA}
-  : @LessDefinedExact (option a) (option aA) _ _ _.
+#[global] Instance ApproximationAlgebra_option {a aA} `{ApproximationAlgebra aA a}
+  : ApproximationAlgebra (option aA) (option a).
 Proof.
 Admitted.
 
 #[global] Instance LessDefined_prod {a b} `{LessDefined a, LessDefined b} : LessDefined (a * b) :=
   pair_rel less_defined less_defined.
 
-#[global] Instance LessDefinedOrder_prod {a b} `{LessDefinedOrder a, LessDefinedOrder b}
-  : @LessDefinedOrder (a * b) _.
-Proof.
-Admitted.
-
-#[global] Instance LessDefinedExact_prod {a aA b bA} `{LessDefinedExact a aA, LessDefinedExact b bA}
-  : @LessDefinedExact (a * b) (aA * bA) _ _ _.
+#[global] Instance ApproximationAlgebra_prod {a aA b bA} `{ApproximationAlgebra a aA, ApproximationAlgebra b bA}
+  : ApproximationAlgebra (a * b) (aA * bA).
 Proof.
 Admitted.
 
@@ -297,14 +295,11 @@ Admitted.
     [https://softwarefoundations.cis.upenn.edu/qc-current/Typeclasses.html]. *)
 #[local] Instance LessDefined_id {a} : LessDefined a | 100 := eq.
 
-#[local] Instance LessDefinedOrder_id {a} : @LessDefinedOrder a _.
+#[local] Instance ApproximationAlgebra_id {a} : ApproximationAlgebra a a.
 Proof.
-  econstructor. cbv. easy.
-Qed.
-
-#[local] Instance LessDefinedExact_id {a} : @LessDefinedExact a a _ _ _.
-Proof.
-  econstructor. cbv. easy.
+  econstructor.
+  - typeclasses eauto.
+  - cbv; easy.
 Qed.
 
 #[global] Hint Unfold Exact_id : core.
