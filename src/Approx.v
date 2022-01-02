@@ -1,7 +1,3 @@
-Set Implicit Arguments.
-Set Maximal Implicit Insertion.
-Set Contextual Implicit.
-
 From Coq Require Import Arith List Psatz Morphisms Relations.
 From Clairvoyance Require Import Core.
 
@@ -146,6 +142,8 @@ Definition is_approx {a b} { _ : Exact b a} {_:LessDefined a} (xA : a) (x : b) :
   xA `less_defined` exact x.
 Infix "`is_approx`" := is_approx (at level 42).
 
+#[global] Hint Unfold is_approx : core.
+
 (** * This corresponds to the proposition [approx_exact] in Section 5.3.
 
     And because of our particular definition, this is true by
@@ -155,8 +153,6 @@ Theorem approx_exact {a b} `{Exact b a} `{LessDefined a} :
   forall (x : b) (xA : a),
     xA `is_approx` x <-> xA `less_defined` (exact x).
 Proof. reflexivity. Qed.
-  
-#[global] Hint Unfold is_approx : core.
 
 (** * This corresponds to the proposition [approx_down] in Section 5.3.
 
@@ -178,6 +174,12 @@ Class Bottom (a : Type) : Type :=
 
 #[global] Instance Bottom_T {a} : Bottom (T a) := Undefined.
 #[global] Instance Bottom_prod {a b} `{Bottom a, Bottom b} : Bottom (a * b) := (bottom, bottom).
+
+Class BottomLeast a `{LessDefined a,Bottom a} : Prop :=
+  bottom_least : forall x : a, bottom `less_defined` x.
+
+#[global] Instance BottomLeast_t {a} `{LessDefined a} : BottomLeast (T a).
+Proof. constructor. Qed.
 
 (* Least upper bound operation. *)
 Class Lub (a : Type) : Type :=
@@ -208,9 +210,6 @@ Class LubLaw a `{Lub a, LessDefined a} : Prop :=
   ; lub_upper_bound_l : forall x y : a, cobounded x y -> x `less_defined` lub x y
   ; lub_upper_bound_r : forall x y : a, cobounded x y -> y `less_defined` lub x y
   }.
-
-Arguments LubLaw : clear implicits.
-Arguments LubLaw a {_ _}.
 
 #[global] Hint Resolve lub_least_upper_bound lub_upper_bound_l lub_upper_bound_r : lub.
 
@@ -247,6 +246,21 @@ Record pair_rel {a1 b1 a2 b2} (r1 : a1 -> b1 -> Prop) (r2 : a2 -> b2 -> Prop) (x
 #[global] Instance Exact_prod {a aA b bA} `{Exact a aA, Exact b bA} : Exact (a * b) (aA * bA) :=
   fun xs => (exact (fst xs), exact (snd xs)).
 
+#[global] Instance LessDefined_prod {a b} `{LessDefined a, LessDefined b} : LessDefined (a * b) :=
+  pair_rel less_defined less_defined.
+
+#[global] Instance ApproximationAlgebra_prod {a aA b bA} `{ApproximationAlgebra a aA, ApproximationAlgebra b bA}
+  : ApproximationAlgebra (a * b) (aA * bA).
+Proof.
+Admitted.
+
+#[global] Instance Lub_prod {a b} `{Lub a, Lub b} : Lub (a * b) :=
+  fun x y => (lub (fst x) (fst y), lub (snd x) (snd y)).
+
+#[global] Instance LubLaw_prod {a b} `{LubLaw a, LubLaw b} : LubLaw (a * b).
+Proof.
+Admitted.
+
 #[global] Instance Exact_option {a aA} `{Exact a aA} : Exact (option a) (option aA) := fun ox =>
   match ox with
   | None => None
@@ -272,14 +286,6 @@ Admitted.
 Proof.
 Admitted.
 
-#[global] Instance LessDefined_prod {a b} `{LessDefined a, LessDefined b} : LessDefined (a * b) :=
-  pair_rel less_defined less_defined.
-
-#[global] Instance ApproximationAlgebra_prod {a aA b bA} `{ApproximationAlgebra a aA, ApproximationAlgebra b bA}
-  : ApproximationAlgebra (a * b) (aA * bA).
-Proof.
-Admitted.
-
 (** In this part, we prove that any type [a] is also an [exact] of itself. We
     define this instance so that [listA a] would be an approximation of [list
     a]---so that we do not need to consider the approximation of [a]. A useful
@@ -302,8 +308,20 @@ Proof.
   - cbv; easy.
 Qed.
 
+#[local] Instance Lub_id {a} : Lub a := fun n _ => n.
+#[local] Instance LubLaw_id {a} : LubLaw a.
+Proof.
+  constructor;cbv;firstorder (subst; auto).
+Qed.
+
 #[global] Hint Unfold Exact_id : core.
 #[global] Hint Unfold LessDefined_id : core.
+
+#[global] Instance Exact_nat : Exact nat nat := id.
+#[global] Instance LessDefined_nat : LessDefined nat := eq.
+#[global] Instance ApproximationAlgebra_nat : ApproximationAlgebra nat nat := ApproximationAlgebra_id.
+#[global] Instance Lub_nat : Lub nat := fun n _ => n.
+#[global] Instance LubLaw_nat : LubLaw nat := LubLaw_id.
 
 (** * Tactics for working with optimistic and pessimistic specs. *)
 

@@ -103,6 +103,8 @@ Definition popA {a} (q : T (QueueA a)) : M (option (T a * T (QueueA a))) :=
 Record less_defined_QueueA {a} (q1 q2 : QueueA a) : Prop :=
   { ld_front : less_defined (frontA q1) (frontA q2)
   ; ld_back : less_defined (backA q1) (backA q2)
+  ; ld_nfront : nfrontA q1 = nfrontA q2
+  ; ld_nback : nbackA q1 = nbackA q2
   }.
 
 #[global] Instance LessDefined_QueueA {a} : LessDefined (QueueA a) :=
@@ -210,11 +212,17 @@ Definition mkQueueD {a} (nfront : nat) (front : list a) (nback : nat) (back : li
 
 Definition emptyA' {a} : T (QueueA a) := Thunk (MkQueueA 0 (Thunk NilA) 0 (Thunk NilA)).
 
+Definition tailA' {a} (xs : T (listA a)) : T (listA a) :=
+  match xs with
+  | Thunk (ConsA _ xs) => xs
+  | _ => Undefined
+  end.
+
 (* In [pushA], [q] is always forced, so the first component of the input demand is at least
    [Thunk]. *)
 Definition pushD {a} (q : Queue a) (x : a) (outD : QueueA a) : T (QueueA a) * T a :=
   let '(frontD, backD) := mkQueueD (nfront q) (front q) (S (nback q)) (x :: back q) outD in
-  (Thunk (MkQueueA (nfront q) frontD (nback q) backD), Thunk x).
+  (Thunk (MkQueueA (nfront q) frontD (nback q) (tailA' backD)), Thunk x).
 
 Definition popD {a} (q : Queue a) (outD : option (T a * T (QueueA a))) : T (QueueA a) :=
   match front q, outD with
@@ -226,6 +234,52 @@ Definition popD {a} (q : Queue a) (outD : option (T a * T (QueueA a))) : T (Queu
       (thunkD backA pop_qA))
   | _, _ => bottom
   end.
+
+(* The demand is an approximation of the input. *)
+
+Lemma mkQueueD_approx {a} nf (f : list a) nb b (outD : QueueA a)
+  : outD `is_approx` mkQueue nf f nb b ->
+    mkQueueD nf f nb b outD `is_approx` (f, b).
+Proof.
+Admitted.
+
+Lemma tailA'_mon {a} (xs xs' : T (listA a))
+  : xs `less_defined` xs' -> tailA' xs `less_defined` tailA' xs'.
+Proof.
+  destruct 1 as [ | ? ? [ | ] ]; cbn; auto.
+Qed.
+
+#[global] Instance Proper_tailA' {a} : Proper (less_defined ==> less_defined) (@tailA' a).
+Proof. exact (@tailA'_mon a). Qed.
+
+From Equations Require Import Equations.
+
+Lemma pushD_approx {a} (q : Queue a) (x : a) (outD : QueueA a)
+  : outD `is_approx` push q x -> pushD q x outD `is_approx` (q, x).
+Proof.
+  unfold push, pushD.
+  intros Hout. unfold pushD.
+  destruct mkQueueD eqn:HQ.
+  constructor.
+  - apply mkQueueD_approx in Hout. rewrite HQ in Hout.
+    destruct Hout as [Hout1 Hout2]; cbn in Hout1, Hout2.
+    constructor; constructor; cbn; auto.
+    rewrite Hout2. cbn.
+    change (exact (a := list ?a) (b := listA ?b)) with (exact_listA (a := a) (b := b)).
+    simp exact_listA. constructor; reflexivity.
+  - constructor; reflexivity.
+Qed.
+
+Lemma popD_approx {a} (q : Queue a) (outD : _)
+  : outD `is_approx` pop q -> popD q outD `is_approx` q.
+Proof.
+Admitted.
+
+Lemma popD_approx_Some {a} (q q' : Queue a) x (outD : _)
+  : pop q = Some (x, q') -> outD `is_approx` (x, q') -> popD q (Some outD) `is_approx` q.
+Proof.
+  intros Hpop Hout; apply popD_approx. rewrite Hpop. constructor. apply Hout.
+Qed.
 
 (* The following theorems relate the demand functions to the approximation functions.
    Given the output demand, we compute the input demand, and we expect that
@@ -424,7 +478,7 @@ Definition GOOD_QUEUE : Prop :=
 Fixpoint lub_list {a} (xs ys : listA a) : listA a :=
   match xs, ys with
   | NilA, NilA => NilA
-  | ConsA x xs, ConsA _ ys => ConsA x (lub_T lub_list xs ys)
+  | ConsA x xs, ConsA y ys => ConsA (lub_T (fun r _ => r) x y) (lub_T lub_list xs ys)
   | _, _ => NilA  (* silly case *)
   end.
 
@@ -434,23 +488,108 @@ Fixpoint lub_list {a} (xs ys : listA a) : listA a :=
   fun q1 q2 =>
     MkQueueA (nfrontA q1) (lub (frontA q1) (frontA q2)) (nbackA q1) (lub (backA q1) (backA q2)).
 
+Class Rep (a b : Type) : Type :=
+  { to_rep : a -> b
+  ; from_rep : b -> a
+  ; to_from : forall x, to_rep (from_rep x) = x
+  ; from_to : forall x, from_rep (to_rep x) = x
+  }.
+
+#[global,refine]
+Instance Rep_QueueA {a} : Rep (QueueA a) (nat * T (listA a) * nat * T (listA a)) :=
+  {| to_rep := fun q => (nfrontA q, frontA q, nbackA q, backA q)
+  ;  from_rep := fun '(nf,f,nb,b) => MkQueueA nf f nb b
+  |}.
+Proof.
+  - intros [ [ [nf f] nb] b]; reflexivity.
+  - intros []; reflexivity.
+Defined.
+
+Class LubRep a b `{Rep a b,Lub a,Lub b} : Prop :=
+  to_rep_lub : forall x y : a, to_rep (lub x y) = lub (to_rep x) (to_rep y).
+
+Arguments LubRep : clear implicits.
+Arguments LubRep a b {_ _ _}.
+
+#[global] Instance LubLaw_listA {a} : LubLaw (listA a).
+Proof.
+  constructor.
+  - intros x y z Hx; revert y; induction Hx; intros ?; inversion 1; subst; cbn; constructor; auto.
+    1,2: inversion H; inversion H4; subst; constructor; auto.
+    inversion H5; constructor; auto.
+  - intros x y [z [ Hx Hy] ]; revert y Hy; induction Hx; intros ?; inversion 1; subst; cbn;
+      constructor; reflexivity + auto.
+    1,2: inversion H; inversion H3; constructor; reflexivity + auto.
+    inversion H4; subst; constructor; [ reflexivity | auto ].
+  - intros x y [z [Hx Hy] ]; revert x Hx; induction Hy; intros ?; inversion 1; subst; cbn;
+      constructor; auto.
+    1,2: inversion H; inversion H3; subst; constructor; reflexivity + auto; inversion H7; subst;
+      etransitivity; eauto.
+    inversion H4; subst; constructor; [ reflexivity | auto ].
+Qed.
+
+#[global] Instance LubRep_QueueA {a} : LubRep (QueueA a) (nat * T (listA a) * nat * T (listA a)).
+Proof.
+  intros [] []; reflexivity.
+Qed.
+
+Class LessDefinedRep a b `{REP : Rep a b, LDa : LessDefined a, LDb : LessDefined b} : Prop :=
+  to_rep_less_defined : forall x y : a, less_defined x y <-> less_defined (a := b) (to_rep x) (to_rep y).
+
+Arguments LessDefinedRep : clear implicits.
+Arguments LessDefinedRep a b {REP LDa LDb}.
+
+#[global] Instance LessDefinedRep_QueueA {a} : LessDefinedRep (QueueA a) _.
+Proof.
+  intros [] []; cbn; firstorder.
+Qed.
+
+Lemma to_rep_cobounded {a b} `{LessDefinedRep a b}
+  : forall x y : a, Basics.impl (cobounded x y) (cobounded (a := b) (to_rep x) (to_rep y)).
+Proof.
+  intros x y [z [Hx Hy] ]; exists (to_rep z); rewrite <- 2 to_rep_less_defined; auto.
+Qed.
+
+Lemma LubLaw_LubRep a b `{LubRep a b,LessDefinedRep a b (REP := _),LL: !LubLaw b} : LubLaw a.
+Proof.
+  constructor; intros *; rewrite ?to_rep_cobounded, 3? to_rep_less_defined, to_rep_lub; apply LL.
+Qed.
+
 #[global] Instance LubLaw_QueueA {a} : LubLaw (QueueA a).
 Proof.
-Admitted.
+  exact LubLaw_LubRep.
+Qed.
 
-Class LubDebt a `{Lub a, Debitable a} : Prop :=
-  lub_debt : forall x y : a, debt (lub x y) <= debt x + debt y.
+Class LubDebt a `{LessDefined a, Lub a, Debitable a} : Prop :=
+  lub_debt : forall x y : a, cobounded x y -> debt (lub x y) <= debt x + debt y.
 
 Arguments LubDebt : clear implicits.
-Arguments LubDebt a {_ _}.
+Arguments LubDebt a {_ _ _}.
 
 #[global] Instance LubDebt_T {a} `{LubDebt a} : LubDebt (T a).
 Proof.
-Admitted.
+  intros [x |] [y |] [z [Hx Hy] ]; cbn; [ | lia .. ].
+  apply H2. inversion Hx; subst; inversion Hy; subst. eexists; split; eassumption.
+Qed.
+
+Lemma sizeX'_lub {a} (x y : listA a) : sizeX' 0 (lub x y) <= max (sizeX' 0 x) (sizeX' 0 y).
+Proof.
+  revert y; induction x as [ | | ]; intros [ | y [ ys | ] ]; cbn; auto; try lia.
+  specialize (IHx ys). lia.
+Qed.
+
+Lemma sizeX_lub {a} (x y : T (listA a)) : sizeX 0 (lub x y) <= max (sizeX 0 x) (sizeX 0 y).
+Proof.
+  destruct x, y; cbn; try lia; apply sizeX'_lub.
+Qed.
 
 #[global] Instance LubDebt_QueueA {a} : LubDebt (QueueA a).
 Proof.
-Admitted.
+  intros q1 q2 [q3 [ [] [] ] ]; cbn.
+  repeat match goal with
+  | H : _ = _ |- _ => rewrite H
+  end. rewrite !sizeX_lub. lia.
+Qed.
 
 Fixpoint demand_tree {a} (t : tree a) (q : Queue a) : T (QueueA a) :=
    match t with
@@ -468,10 +607,39 @@ Fixpoint demand_tree {a} (t : tree a) (q : Queue a) : T (QueueA a) :=
    | Done => bottom
    end.
 
-Lemma demand_tree_approx {a} (t : tree a) q
-  : demand_tree t q `less_defined` exact q.
+#[global]
+Instance Proper_fst_less_defined {a b} `{LessDefined a,LessDefined b}
+  : Proper (less_defined ==> less_defined) (@fst a b).
 Proof.
+  intros ? ? [H1 ?]; exact H1.
+Qed.
+
+#[global]
+Instance Proper_thunkD {a b} `{BottomLeast b} (f : a -> b)
+  : Proper (less_defined ==> less_defined) (thunkD f).
+Proof.
+  intros ? ? []; cbn; [ apply bottom_least | ].
 Admitted.
+
+Lemma demand_tree_approx {a} (t : tree a) q
+  : demand_tree t q `is_approx` q.
+Proof.
+  revert q; induction t; cbn; intros.
+  - specialize (IHt (push q a0)).
+    inversion IHt; cbn.
+    + apply bottom_least.
+    + apply pushD_approx in H1. apply Proper_fst_less_defined in H1. apply H1.
+  - destruct (pop q) as [ [] | ] eqn:Hpop; [ | red; reflexivity ].
+    + apply (popD_approx_Some Hpop). constructor; cbn; [ constructor; reflexivity | apply IHt ].
+  - unfold is_approx in *; apply lub_least_upper_bound; auto.
+  - apply bottom_least.
+Qed.
+
+Lemma cobounded_demand_tree {a} (t1 t2 : tree a) q
+  : cobounded (demand_tree t1 q) (demand_tree t2 q).
+Proof.
+  exists (exact q); split; apply demand_tree_approx.
+Qed.
 
 Lemma pop_popD {a} (q : Queue a)
   : pop q = None -> popD q None = exact q.
@@ -515,10 +683,10 @@ Opaque Nat.mul Nat.add.
       cbn; intros. apply optimistic_ret. lia. }
     { inversion ld_. mforward idtac. rewrite (pop_popD Ep) in COST.
       change (Exact_Queue q) with (exact q). cbn in COST |- *. lia. }
-  - apply lub_inv in ld_q; [ | eauto using demand_tree_approx ].
+  - apply lub_inv in ld_q; [ | apply cobounded_demand_tree ].
     mgo'. relax. { apply IHt1; [apply wf_q | apply ld_q]. }
     cbn; intros; mgo'. relax. { apply IHt2; [apply wf_q | apply ld_q]. }
-    cbn; intros; mgo'. rewrite lub_debt. lia.
+    cbn; intros; mgo'. rewrite lub_debt by apply cobounded_demand_tree. lia.
   - mgo'.
 Qed.
 

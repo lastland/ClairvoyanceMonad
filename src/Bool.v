@@ -155,5 +155,7 @@ Ltac2 compile (t : constr) :=
   let t := Std.eval_red t in
   Control.enter (fun () => refine (_compile t)).
 
+(*
 Definition orbA_ := ltac2:(compile 'orb).
 Definition option_mapA_ := ltac2:(compile 'option_map).
+*)
