@@ -6,10 +6,6 @@ From Coq Require Import Arith List Psatz Morphisms Relations.
 From Equations Require Import Equations.
 From Clairvoyance Require Import Core Approx.
 
-#[local] Existing Instance Exact_id | 1.
-#[local] Existing Instance LessDefined_id | 100.
-#[local] Existing Instance ApproximationAlgebra_id | 100.
-
 (* ---------------------- Section 2: Motivating Example ---------------------- *)
 
 (** * Figure 1. *)
@@ -167,8 +163,6 @@ exact_listA (cons y ys) := ConsA (Thunk (exact y)) (Thunk (exact_listA ys)).
 Instance Exact_list {a b} `{Exact a b} : Exact (list a) (listA b) :=
   exact_listA.
 
-#[global] Hint Unfold Exact_list : core.
-
 Lemma exact_list_unfold_nil {a b} `{Exact a b}
   : exact (@nil a) = (@NilA b).
 Proof.
@@ -181,20 +175,37 @@ Proof.
   unfold exact; simp exact_listA; reflexivity.
 Qed.
 
+Lemma exact_list_unfold_nil_T {a b} `{Exact a b}
+  : exact (@nil a) = Thunk (@NilA b).
+Proof.
+  unfold exact; simp exact_listA; reflexivity.
+Qed.
+
+Lemma exact_list_unfold_cons_T {a b} `{Exact a b} (x : a) (xs : list a)
+  : exact (x :: xs) = Thunk (ConsA (exact x) (exact xs)).
+Proof.
+  unfold exact; simp exact_listA; reflexivity.
+Qed.
+
+Create HintDb exact.
+
+#[global] Hint Rewrite @exact_list_unfold_nil @exact_list_unfold_cons
+  @exact_list_unfold_nil_T @exact_list_unfold_cons_T : exact.
+
 Unset Elimination Schemes.
 
-Inductive less_defined_list {a : Type} `{LessDefined a} : listA a -> listA a -> Prop :=
-| LessDefined_NilA :
-    less_defined_list NilA NilA
-| LessDefined_ConsA : forall (x y : T a) (xs ys : T (listA a)),
+Inductive LessDefined_list {a : Type} `{LessDefined a} : LessDefined (listA a) :=
+| less_defined_list_NilA : NilA `less_defined` NilA
+| less_defined_list_ConsA : forall (x y : T a) (xs ys : T (listA a)),
     x `less_defined` y ->
-    @less_defined_T _ less_defined_list xs ys ->
-    less_defined_list (ConsA x xs) (ConsA y ys).
+    xs `less_defined` ys ->
+    ConsA x xs `less_defined` ConsA y ys.
 
-#[global] Hint Constructors less_defined_list : core.
+#[global] Hint Constructors LessDefined_list : core.
+#[global] Existing Instance LessDefined_list.
 
 (** We need our own induction principle because of nested inductive types. *)
-Lemma less_defined_list_ind :
+Lemma LessDefined_list_ind :
   forall (a : Type) (H : LessDefined a) (P : listA a -> listA a -> Prop),
     P NilA NilA ->
     (forall (x y : T a) (ys : T (listA a)),
@@ -202,10 +213,10 @@ Lemma less_defined_list_ind :
         P (ConsA x Undefined) (ConsA y ys)) ->
     (forall (x y : T a) (xs ys : listA a),
         x `less_defined` y ->
-        less_defined_list xs ys ->
+        xs `less_defined` ys ->
         P xs ys ->
         P (ConsA x (Thunk xs)) (ConsA y (Thunk ys))) ->
-    forall l l0 : listA a, less_defined_list l l0 -> P l l0.
+    forall l l0 : listA a, LessDefined_list l l0 -> P l l0.
 Proof.
   intros a H P Hnil Hundef Hthunk. fix SELF 3.
   intros l l' Hl. destruct Hl.
@@ -217,12 +228,6 @@ Proof.
 Defined.
 
 Set Elimination Schemes.
-
-#[global]
-Instance LessDefined_list {a : Type} `{LessDefined a} : LessDefined (listA a) :=
-  less_defined_list.
-
-#[global] Hint Unfold LessDefined_list : core.
 
 #[global]
 Instance PreOrder_LessDefined_list {a : Type} `{LessDefined a, Ho : !PreOrder (less_defined (a := a))} : PreOrder (A := listA a) less_defined.
@@ -238,7 +243,7 @@ constructor.
     transitivity y; assumption.
   + inversion 1; subst. constructor.
     * transitivity y; assumption.
-    * inversion H6; subst. constructor. apply IHHxy. assumption.
+    * inversion H7; subst. auto.
 Qed.
 
 Lemma exact_max_listA {a b} `{ApproximationAlgebra a b}
@@ -263,9 +268,13 @@ Proof.
   - apply @exact_max_listA; auto.
 Qed.
 
-Ltac mgo_list := mgo ltac:(unfold exact; simp exact_listA).
+Ltac mgo_list := mgo ltac:(autorewrite with exact).
 
 #[global] Hint Unfold id : core.
+
+#[local] Existing Instance Exact_id | 1.
+#[local] Existing Instance LessDefined_id | 100.
+#[local] Existing Instance ApproximationAlgebra_id | 100.
 
 (* ----------------- Section 5.4 ----------------- *)
 
@@ -435,14 +444,14 @@ forall (n : nat) (xs : list a) (xsA : listA a) (acc : list a) (accA : T (listA a
 Proof.
   induction n as [ | n IHn].
   - mgo_list. relax_apply @revA_cost. cbn; intros. lia.
-  - intros xs. induction xs as [ | x xs IH ]; mgo_list.
+  - intros xs. destruct xs as [ | x xs ]; mgo_list.
     + relax_apply @revA_cost. cbn; intros; lia.
-    + inversion H5; subst. relax.
+    + relax.
       { eapply IHn with (acc:=x :: acc); try eassumption.
         constructor. rewrite exact_list_unfold_cons.
         solve_approx idtac. }
       { cbn; intros. lia. }
-    + inversion H5; subst. relax.
+    + relax.
       eapply IHn with (acc:=x :: acc); try eassumption. constructor.
       cbn; intros. lia.
 Qed.
@@ -456,9 +465,8 @@ forall (n : nat) (xs : list a) (xsA : T (listA a)),
 Proof.
   unfold takeA. induction n; [mgo_list|].
   intros xs. induction xs as [ | x xs IH]; mgo_list.
-  inversion H4; subst.
   specialize (IHn xs (Thunk x0)). cbn in IHn.
-  relax_apply IHn; try assumption.
+  relax_apply IHn; [ solve_approx idtac | ].
   mgo_list.
 Qed.
 
@@ -555,9 +563,9 @@ forall (xs : list a) (xsA : listA a) (ysA : T (listA a)),
   (revA_ xsA ysA) {{ fun zsA cost => cost = length xs + 1 }}.
 Proof.
   intros. funelim (exact_listA xs); mgo_list.
-  - relax_apply H0. inversion H5; subst. assumption.
+  - relax_apply H0. assumption.
     cbn. intros. lia.
-  - relax_apply H0. inversion H5; subst. assumption.
+  - relax_apply H0. assumption.
     cbn. intros. lia.
 Qed.
 
@@ -578,7 +586,7 @@ forall (xs : list a) (xsA : listA a),
   (rev'A_ xsA) {{ fun zsA cost => cost = length xs + 1 }}.
 Proof.
   intros. funelim (exact_listA xs); mgo_list.
-  relax_apply H0. inversion H5; subst; assumption.
+  relax_apply H0. assumption.
   mgo_list. pose (appendA'_cost (Thunk x1)) as Ha. cbn in Ha.
   relax_apply Ha. cbn; intros; subst. lia.
 Qed.
@@ -653,9 +661,8 @@ Proof.
     constructor; assumption.
     cbn. intros. lia.
   - specialize (H0 _ _ _ _ f (Thunk x)).
-    cbn in H0. relax. apply H0 with (v:=v); try eassumption.
-    constructor.
-    cbn. intros. lia.
+    cbn in H0. relax; [ apply H0 with (v:=v); auto; solve_approx idtac | ].
+    cbn; lia.
 Qed.
 
 Definition foldr_pessim {a b bA} `{LessDefined bA} `{LessDefined (T bA)} `{Exact b bA} :
@@ -669,7 +676,7 @@ Proof.
   intros f xs xsA v vA Hf Hxs. revert v vA.
   unfold foldrA. funelim (exact_listA xs); mgo_list.
   - specialize (H0 _ _ _ _ _ f (Thunk x)).
-    relax. eapply H0; try eassumption.
+    relax; [ eapply H0; auto; solve_approx eauto | ].
     mgo_list. relax_apply Hf. mgo_list.
   - relax_apply Hf. cbn. intros. subst.
     destruct xs; simpl; lia.

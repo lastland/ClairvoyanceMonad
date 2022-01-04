@@ -3,6 +3,7 @@
 src/Misc.v
 src/Core.v
 src/Approx.v
+src/Monotonic.v
 src/Translation.v
 src/Fix.v
 src/List.v

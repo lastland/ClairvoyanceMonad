@@ -26,8 +26,6 @@ Class Exact a b : Type := exact : a -> b.
 Instance Exact_T {a b} {r: Exact a b} : Exact a (T b) 
   := fun x => Thunk (exact x).
 
-#[global] Hint Unfold Exact_T : core.
-
 (* Type classes declared under this will have less confusing resolution.
    We exclude [Exact] because in [Exact a b],
    [b] is supposed to be determined by [a]. *)
@@ -37,60 +35,13 @@ Set Typeclasses Strict Resolution.
 Class LessDefined a := less_defined : a -> a -> Prop.
 Infix "`less_defined`" := less_defined (at level 42).
 
-#[global] Hint Unfold less_defined : core.
+Inductive LessDefined_T {a : Type} `{LessDefined a} : LessDefined (T a) :=
+| LessDefined_Undefined x : Undefined `less_defined` x
+| LessDefined_Thunk x y :
+    x `less_defined` y -> Thunk x `less_defined` Thunk y.
 
-Inductive less_defined_T {a : Type} `{LessDefined a} : relation (T a) :=
-| LessDefined_Undefined :
-    forall x, less_defined_T Undefined x
-| LessDefined_Thunk :
-    forall x y, x `less_defined` y -> less_defined_T (Thunk x) (Thunk y).
-
-#[global] Hint Constructors less_defined_T : core.
-
-#[global]
-Instance LessDefined_T {a} `{LessDefined a} : LessDefined (T a) := less_defined_T.
-
-#[global] Hint Unfold LessDefined_T : core.
-
-#[global] Instance LessDefined_M {a} `{LessDefined a} : LessDefined (M a) :=
-  fun u v =>
-  u {{ fun x n =>
-  v [[ fun y m => x `less_defined` y /\ m <= n ]] }}.
-
-(* Upward closed predicates *)
-Definition uc {a} `{LessDefined a} (k : a -> nat -> Prop) : Prop :=
-  forall x x' n n',
-    x `less_defined` x' ->
-    n' <= n ->
-    k x n -> k x' n'.
-
-(* [uc] lemmas for some common forms of cost specifications *)
-
-Lemma uc_cost {a} `{LessDefined a} `{Transitive _ (less_defined (a := a))}
-    (d : a) (n : nat)
-  : uc (fun out cost => d `less_defined` out /\ cost <= n).
-Proof.
-  red; intros * ? ? []; split; etransitivity; try eassumption.
-Qed.
-
-(* Amortized cost specfications *)
-Lemma uc_acost {a} `{LessDefined a} `{Transitive _ (less_defined (a := a))}
-    (d : a) (m n : nat)
-  : uc (fun out cost => d `less_defined` out /\ m + cost <= n).
-Proof.
-  red; intros * ? ? []; split; etransitivity; try eassumption.
-  apply Nat.add_le_mono_l; assumption.
-Qed.
-
-Lemma optimistic_corelax {a} `{LessDefined a} (u u' : M a) (k : a -> nat -> Prop)
-  : u `less_defined` u' -> uc k ->
-    u [[ k ]] -> u' [[ k ]].
-Proof.
-  intros H' Hk Hu. hnf in H'. destruct Hu as (x & n & Hx & Hn).
-  apply H' in Hx.
-  eapply optimistic_mon; [ apply Hx | cbn; intros ? ? HH ].
-  revert Hn; apply Hk; apply HH.
-Qed.
+#[global] Hint Constructors LessDefined_T : core.
+#[global] Existing Instance LessDefined_T.
 
 Unset Typeclasses Strict Resolution.
 
@@ -338,6 +289,12 @@ Qed.
 #[global] Instance Lub_nat : Lub nat := fun n _ => n.
 #[global] Instance LubLaw_nat : LubLaw nat := LubLaw_id.
 
+#[global] Instance Exact_unit : Exact unit unit := id.
+#[global] Instance LessDefined_unit : LessDefined unit := eq.
+#[global] Instance ApproximationAlgebra_unit : ApproximationAlgebra unit unit := ApproximationAlgebra_id.
+#[global] Instance Lub_unit : Lub unit := fun n _ => n.
+#[global] Instance LubLaw_unit : LubLaw unit := LubLaw_id.
+
 (** * Tactics for working with optimistic and pessimistic specs. *)
 
 (** Use the monotonicity laws. *)
@@ -394,8 +351,7 @@ Ltac solve_approx tac :=
   repeat (match goal with
           | _ => solve [auto]
           | [ |- _ `less_defined` _ ] => try constructor
-          | [ |- _ `is_approx` _ ] =>
-            repeat autounfold; tac
+          | [ |- _ `is_approx` _ ] => unfold is_approx; tac
           | [ |- is_defined (Thunk _) ] =>
             reflexivity
           end).

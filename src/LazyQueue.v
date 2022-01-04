@@ -17,7 +17,7 @@ NEW
 
 From Coq Require Import Arith List Lia Setoid Morphisms.
 Import ListNotations.
-From Clairvoyance Require Import Core Approx List Misc.
+From Clairvoyance Require Import Core Approx Monotonic List Misc.
 
 Import RevCompare.
 
@@ -106,6 +106,9 @@ Record less_defined_QueueA {a} (q1 q2 : QueueA a) : Prop :=
   ; ld_nfront : nfrontA q1 = nfrontA q2
   ; ld_nback : nbackA q1 = nbackA q2
   }.
+
+#[global] Hint Constructors less_defined_QueueA : core.
+#[global] Hint Resolve ld_front ld_back ld_nfront ld_nback : core.
 
 #[global] Instance LessDefined_QueueA {a} : LessDefined (QueueA a) :=
   less_defined_QueueA.
@@ -347,15 +350,36 @@ Admitted.
 Lemma appendA_mon {a} (xsA xsA' ysA ysA' : T (listA a))
   : xsA `less_defined` xsA' ->
     ysA `less_defined` ysA' ->
-    appendA xsA  ysA  `less_defined` appendA xsA' ysA'.
+    appendA xsA  ysA `less_defined` appendA xsA' ysA'.
 Proof.
 Admitted.
+
+#[global] Hint Resolve appendA_mon : mon.
+
+Lemma revA_mon {a} (xsA xsA' : T (listA a))
+  : xsA `less_defined` xsA' ->
+    revA xsA `less_defined` revA xsA'.
+Proof.
+Admitted.
+
+#[global] Hint Resolve revA_mon : mon.
+
+Lemma mkQueueA_mon {a} (nf nb : nat) (f f' b b' : T (listA a))
+  : f `less_defined` f' ->
+    b `less_defined` b' ->
+    mkQueueA nf f nb b `less_defined` mkQueueA nf f' nb b'.
+Proof.
+  intros; unfold mkQueueA; solve_mon.
+Qed.
+
+#[global] Hint Resolve mkQueueA_mon : mon.
 
 Lemma pushA_mon {a} (qA qA' : T (QueueA a)) xA xA'
   : qA `less_defined` qA' ->
     xA `less_defined` xA' ->
     pushA qA xA `less_defined` pushA qA' xA'.
 Proof.
+  intros; unfold pushA. solve_mon.
 Admitted.
 
 Lemma popA_mon {a} (qA qA' : T (QueueA a))
@@ -714,17 +738,19 @@ Arguments LubRep a b {_ _ _}.
 Proof.
   constructor.
   - intros x y z Hx; revert y; induction Hx; intros ?; inversion 1; subst; cbn; constructor; auto.
-    1,2: inversion H; inversion H4; subst; constructor; auto.
-    inversion H5; constructor; auto.
+    1: inversion H; subst; inversion H4; subst; try constructor; auto.
+    1: inversion H; subst; inversion H5; subst; try constructor; auto.
+    inversion H6; constructor; auto.
   - intros x y [z [ Hx Hy] ]; revert y Hy; induction Hx; intros ?; inversion 1; subst; cbn;
       constructor; auto.
-    1,2: inversion H; inversion H3; constructor; reflexivity + auto.
-    inversion H4; subst; constructor; [ reflexivity | auto ].
+    1: inversion H; inversion H3; constructor; reflexivity + auto.
+    1: inversion H; inversion H4; constructor; reflexivity.
+    inversion H5; subst; constructor; [ reflexivity | auto ].
   - intros x y [z [Hx Hy] ]; revert x Hx; induction Hy; intros ?; inversion 1; subst; cbn;
       constructor; auto.
-    1,2: inversion H; inversion H3; subst; constructor; reflexivity + auto; inversion H7; subst;
-      etransitivity; eauto.
-    inversion H4; subst; constructor; [ reflexivity | auto ].
+    1: inversion H; inversion H3; subst; invert_approx; constructor; reflexivity + auto; inversion H7; invert_approx; reflexivity.
+    1: inversion H; inversion H4; subst; invert_approx; constructor; reflexivity + auto; inversion H8; invert_approx; reflexivity.
+    inversion H5; subst; constructor; [ reflexivity | auto ].
 Qed.
 
 #[global] Instance LubRep_QueueA {a} : LubRep (QueueA a) (nat * T (listA a) * nat * T (listA a)).
@@ -865,7 +891,7 @@ Opaque Nat.mul Nat.add.
       { eassumption. }
       { destruct (pop q) as [ [? ?] | ] eqn:Ep.
         - constructor. constructor; cbn.
-          + constructor. eauto.
+          + constructor. hnf. reflexivity.
           + apply demand_tree_approx.
         - constructor. }
       destruct (pop q) as [ [? ?] | ] eqn:Ep; [ specialize (WF _ _ eq_refl) | ].
