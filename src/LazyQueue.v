@@ -113,9 +113,60 @@ Record less_defined_QueueA {a} (q1 q2 : QueueA a) : Prop :=
 #[global] Instance LessDefined_QueueA {a} : LessDefined (QueueA a) :=
   less_defined_QueueA.
 
+Class Rep (a b : Type) : Type :=
+  { to_rep : a -> b
+  ; from_rep : b -> a
+  ; to_from : forall x, to_rep (from_rep x) = x
+  ; from_to : forall x, from_rep (to_rep x) = x
+  }.
+
+#[global,refine]
+Instance Rep_QueueA {a} : Rep (QueueA a) (nat * T (listA a) * nat * T (listA a)) :=
+  {| to_rep := fun q => (nfrontA q, frontA q, nbackA q, backA q)
+  ;  from_rep := fun '(nf,f,nb,b) => MkQueueA nf f nb b
+  |}.
+Proof.
+  - intros [ [ [nf f] nb] b]; reflexivity.
+  - intros []; reflexivity.
+Defined.
+
+Class LessDefinedRep a b `{REP : Rep a b, LDa : LessDefined a, LDb : LessDefined b} : Prop :=
+  to_rep_less_defined : forall x y : a, less_defined x y <-> less_defined (a := b) (to_rep x) (to_rep y).
+
+Arguments LessDefinedRep : clear implicits.
+Arguments LessDefinedRep a b {REP LDa LDb}.
+
+#[global] Instance LessDefinedRep_QueueA {a} : LessDefinedRep (QueueA a) _.
+Proof.
+  intros [] []; cbn; firstorder.
+Qed.
+
+Lemma Reflexive_Rep {a b} `{LessDefinedRep a b} `{!Reflexive (less_defined (a := b))}
+  : Reflexive (less_defined (a := a)).
+Proof.
+  unfold Reflexive. intros ?. apply to_rep_less_defined. reflexivity.
+Qed.
+
+Lemma Transitive_Rep {a b} `{LessDefinedRep a b} `{!Transitive (less_defined (a := b))}
+  : Transitive (less_defined (a := a)).
+Proof.
+  unfold Transitive; intros *. rewrite 3 to_rep_less_defined. apply transitivity.
+Qed.
+
+Lemma PreOrder_Rep {a b} `{LessDefinedRep a b} `{!PreOrder (less_defined (a := b))}
+  : PreOrder (less_defined (a := a)).
+Proof.
+  constructor; auto using Reflexive_Rep, Transitive_Rep.
+Qed.
+
 #[global] Instance ApproximationAlgebra_QueueA {a} : ApproximationAlgebra (QueueA a) (Queue a).
 Proof.
-Admitted.
+  constructor.
+  - apply PreOrder_Rep.
+  - intros * []; cbn in *.
+    apply exact_max in ld_front0, ld_back0. destruct xA; cbn in *; subst.
+    reflexivity.
+Qed.
 
 (* Well-formedness *)
 
@@ -263,9 +314,10 @@ Proof.
 Qed.
 
 Lemma revD_approx {a} (xs : list a) (outD : _)
-  : outD `is_approx` rev xs -> revD xs outD `is_approx` xs.
+  : revD xs outD `is_approx` xs.
 Proof.
-Admitted.
+  unfold revD. reflexivity.
+Qed.
 
 Lemma mkQueueD_approx {a} nf (f : list a) nb b (outD : QueueA a)
   : outD `is_approx` mkQueue nf f nb b ->
@@ -496,6 +548,8 @@ Class Debitable a : Type :=
 #[global] Instance Debitable_QueueA {a} : Debitable (QueueA a) :=
   fun qA => 2 * sizeX 0 (frontA qA) - 2 * nbackA qA.
 
+Arguments Debitable_QueueA {a} qA /.
+
 (* Ad hoc overloading of [debt] on the output of [pop]. *)
 #[local] Instance Debitable_popo {a} : Debitable (option (T a * T (QueueA a))) :=
   fun x =>
@@ -640,23 +694,51 @@ Proof.
 Qed.
 
 Lemma mkQueueA_cost' {a} (nf : nat) (f : list a) (nb : nat) (b : list a) (outD : QueueA a)
-  : forall fA bA, (fA, bA) = mkQueueD nf f nb b outD ->
+  : nf = length f /\ nb = length b /\ nb <= nf + 1 -> outD `is_approx` mkQueue nf f nb b ->
+    forall fA bA, (fA, bA) = mkQueueD nf f nb b outD ->
     forall fA' bA', fA `less_defined` fA' -> bA `less_defined` bA' ->
     mkQueueA nf fA' nb bA' [[ fun out cost =>
       outD `less_defined` out /\ 2 * sizeX 0 fA - 2 * nb + cost <= 4 + debt outD ]].
 Proof.
-Admitted.
+  intros. eapply optimistic_corelax.
+  - eapply mkQueueA_mon; eassumption + reflexivity.
+  - apply uc_acost.
+  - eapply mkQueueA_cost; eassumption.
+Qed.
+
+Lemma less_defined_tail_cons {a} (l : T (listA a)) x xs
+  : l `less_defined` Thunk (ConsA x xs) ->
+    l `less_defined` Thunk (ConsA x (tailX l)).
+Proof.
+  inversion 1; subst; constructor. inversion H2; constructor; cbn; [ auto | reflexivity ].
+Qed.
 
 Lemma pushA_cost {a} (q : Queue a) (x : a) (outD : QueueA a)
   : well_formed q ->
+    outD `is_approx` push q x ->
     forall qA xA, (qA, xA) = pushD q x outD ->
     pushA qA xA [[ fun out cost =>
       outD `less_defined` out /\ debt qA + cost <= 7 + debt outD ]].
 Proof.
-Admitted.
+  intros Wq Hout; unfold pushA, pushD. intros. repeat (mforward idtac).
+  destruct mkQueueD eqn:Em in H; inversion H; subst; clear H.
+  cbn. mforward idtac; cbn.
+  relax.
+  { eapply mkQueueA_cost'; eauto; cbn.
+    - split; [ apply Wq | ].
+      split; [ f_equal; apply Wq | ].
+      rewrite Nat.add_1_r; rewrite <- Nat.succ_le_mono. apply Wq.
+    - reflexivity.
+    - apply mkQueueD_approx in Hout. rewrite Em in Hout.
+      destruct Hout as [HH1 HH2]; cbn in *. autorewrite with exact in HH2.
+      eauto using less_defined_tail_cons. }
+  cbn; intros * []; split; [ auto | ].
+  unfold debt at 1; cbn. lia.
+Qed.
 
 Lemma pushA_cost' {a} (q : Queue a) (x : a) (outD : QueueA a)
   : well_formed q ->
+    outD `is_approx` push q x ->
     forall qA xA, (qA, xA) = pushD q x outD ->
     forall qA', qA `less_defined` qA' ->
     pushA qA' xA [[ fun out cost =>
@@ -780,23 +862,6 @@ Fixpoint lub_list {a} (xs ys : listA a) : listA a :=
   fun q1 q2 =>
     MkQueueA (nfrontA q1) (lub (frontA q1) (frontA q2)) (nbackA q1) (lub (backA q1) (backA q2)).
 
-Class Rep (a b : Type) : Type :=
-  { to_rep : a -> b
-  ; from_rep : b -> a
-  ; to_from : forall x, to_rep (from_rep x) = x
-  ; from_to : forall x, from_rep (to_rep x) = x
-  }.
-
-#[global,refine]
-Instance Rep_QueueA {a} : Rep (QueueA a) (nat * T (listA a) * nat * T (listA a)) :=
-  {| to_rep := fun q => (nfrontA q, frontA q, nbackA q, backA q)
-  ;  from_rep := fun '(nf,f,nb,b) => MkQueueA nf f nb b
-  |}.
-Proof.
-  - intros [ [ [nf f] nb] b]; reflexivity.
-  - intros []; reflexivity.
-Defined.
-
 Class LubRep a b `{Rep a b,Lub a,Lub b} : Prop :=
   to_rep_lub : forall x y : a, to_rep (lub x y) = lub (to_rep x) (to_rep y).
 
@@ -825,17 +890,6 @@ Qed.
 #[global] Instance LubRep_QueueA {a} : LubRep (QueueA a) (nat * T (listA a) * nat * T (listA a)).
 Proof.
   intros [] []; reflexivity.
-Qed.
-
-Class LessDefinedRep a b `{REP : Rep a b, LDa : LessDefined a, LDb : LessDefined b} : Prop :=
-  to_rep_less_defined : forall x y : a, less_defined x y <-> less_defined (a := b) (to_rep x) (to_rep y).
-
-Arguments LessDefinedRep : clear implicits.
-Arguments LessDefinedRep a b {REP LDa LDb}.
-
-#[global] Instance LessDefinedRep_QueueA {a} : LessDefinedRep (QueueA a) _.
-Proof.
-  intros [] []; cbn; firstorder.
 Qed.
 
 Lemma to_rep_cobounded {a b} `{LessDefinedRep a b}
@@ -947,7 +1001,9 @@ Opaque Nat.mul Nat.add.
     destruct (demand_tree t (push q a0)) as [ q' | ] eqn:Eq'; cbn in *.
     { apply optimistic_thunk_go.
       destruct (pushD q a0 q') as [xD qD] eqn:Epush; cbn in *.
-      assert (PUSH := pushA_cost' a0 wf_q (eq_sym Epush) ld_q).
+      assert (Hq' : q' `is_approx` push q a0).
+      { apply less_defined_Thunk_inv. rewrite <- Eq'. apply demand_tree_approx. }
+      assert (PUSH := pushA_cost' a0 wf_q Hq' (eq_sym Epush) ld_q).
       assert (qD = Thunk a0). { unfold pushD in Epush. destruct mkQueueD in Epush. congruence. }
       subst. relax. { exact PUSH. }
       cbn; intros * []. relax. { apply (IHt _ _ WF). rewrite Eq'. constructor. assumption. }

@@ -43,6 +43,10 @@ Inductive LessDefined_T {a : Type} `{LessDefined a} : LessDefined (T a) :=
 #[global] Hint Constructors LessDefined_T : core.
 #[global] Existing Instance LessDefined_T.
 
+Lemma less_defined_Thunk_inv {a} `{LessDefined a}
+  : forall x y : a, Thunk x `less_defined` Thunk y -> x `less_defined` y.
+Proof. inversion 1; auto. Qed.
+
 Unset Typeclasses Strict Resolution.
 
 (** This corresponds to the propositions [less_defined_order] and [exact_max] in Section 5.3.
