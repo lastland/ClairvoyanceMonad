@@ -1,4 +1,4 @@
-From Coq Require Import Arith List Psatz Morphisms Relations.
+From Coq Require Import Arith List Lia Morphisms Relations.
 From Clairvoyance Require Import Core.
 
 Definition is_defined {a} (t : T a) : Prop :=
@@ -237,7 +237,11 @@ Qed.
 
 #[global] Instance LubLaw_prod {a b} `{LubLaw a, LubLaw b} : LubLaw (a * b).
 Proof.
-Admitted.
+  constructor.
+  - intros * [] []; constructor; cbn; apply lub_least_upper_bound; auto.
+  - intros * [? [ [] [] ] ]; constructor; cbn; apply lub_upper_bound_l; eauto.
+  - intros * [? [ [] [] ] ]; constructor; cbn; apply lub_upper_bound_r; eauto.
+Qed.
 
 #[global] Instance Exact_option {a aA} `{Exact a aA} : Exact (option a) (option aA) := fun ox =>
   match ox with
@@ -252,17 +256,17 @@ Admitted.
   : PreOrder (less_defined (a := option a)).
 Proof.
   econstructor.
-Admitted.
-
-#[global] Instance PartialOrder_option {a} `{LessDefined a} `{PartialOrder _ eq (equ := _) (less_defined (a := a))}
-  : PartialOrder eq (less_defined (a := option a)).
-Proof.
-Admitted.
+  - intros []; constructor. reflexivity.
+  - intros ? ? ? []. auto. inversion 1; subst. constructor; etransitivity; eauto.
+Qed.
 
 #[global] Instance ApproximationAlgebra_option {a aA} `{ApproximationAlgebra aA a}
   : ApproximationAlgebra (option aA) (option a).
 Proof.
-Admitted.
+  constructor.
+  - typeclasses eauto.
+  - intros [] []; inversion 1; subst; cbn; f_equal. apply exact_max. auto.
+Qed.
 
 (** In this part, we prove that any type [a] is also an [exact] of itself. We
     define this instance so that [listA a] would be an approximation of [list
