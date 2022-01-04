@@ -353,14 +353,10 @@ Proof.
   unfold push, pushD.
   intros Hout. unfold pushD.
   destruct mkQueueD eqn:HQ.
-  constructor.
-  - apply mkQueueD_approx in Hout. rewrite HQ in Hout.
-    destruct Hout as [Hout1 Hout2]; cbn in Hout1, Hout2.
-    constructor; constructor; cbn; auto.
-    rewrite Hout2. cbn.
-    change (exact (a := list ?a) (b := listA ?b)) with (exact_listA (a := a) (b := b)).
-    simp exact_listA. constructor; reflexivity.
-  - constructor; reflexivity.
+  apply mkQueueD_approx in Hout. rewrite HQ in Hout.
+  destruct Hout as [Hout1 Hout2]; cbn in Hout1, Hout2.
+  apply tailX_mon in Hout2.
+  solve_approx.
 Qed.
 
 Lemma popD_approx {a} (q : Queue a) (outD : _)
@@ -370,11 +366,9 @@ Proof.
   - reflexivity.
   - destruct x; destruct H2; cbn in *.
     inversion snd_rel; subst; cbn.
-    + constructor. constructor; cbn; auto; constructor. rewrite Ef; autorewrite with exact.
-      constructor; auto. constructor.
+    + solve_approx. rewrite Ef. solve_approx.
     + apply mkQueueD_approx in H2. destruct mkQueueD eqn:Em.
-      destruct H2; cbn in *. constructor; constructor; cbn; auto.
-      rewrite Ef; autorewrite with exact. constructor; constructor; auto.
+      destruct H2; cbn in *. solve_approx. rewrite Ef. solve_approx.
 Qed.
 
 Lemma popD_approx_Some {a} (q q' : Queue a) x (outD : _)
