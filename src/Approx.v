@@ -104,11 +104,10 @@ Qed.
     In our paper, the definition of [is_approx] can be anything as long as it
     satisfies the [approx_exact] proposition. In this file, we choose the most
     direct definition that satisfies the [approx_exact] law. *)
-Definition is_approx {a b} { _ : Exact b a} {_:LessDefined a} (xA : a) (x : b) : Prop := 
-  xA `less_defined` exact x.
-Infix "`is_approx`" := is_approx (at level 42).
+Notation is_approx xA x := (xA `less_defined` exact x) (only parsing).
+Infix "`is_approx`" := is_approx (at level 42, only parsing).
 
-#[global] Hint Unfold is_approx : core.
+Create HintDb exact.
 
 (** * This corresponds to the proposition [approx_exact] in Section 5.3.
 
@@ -128,7 +127,7 @@ Lemma approx_down {a b} `{Hld : LessDefined a} `{Exact b a} `{PartialOrder _ eq 
   forall (x : b) (xA yA : a),
     xA `less_defined` yA -> yA `is_approx` x -> xA `is_approx` x.
 Proof.
-  unfold is_approx. intros. etransitivity; eassumption.
+  intros. etransitivity; eassumption.
 Qed.
 
 (**)
@@ -342,8 +341,6 @@ Ltac mforward tac :=
 (** Heuristics for dealing with approximations. *)
 Ltac invert_approx :=
   match goal with
-  | [H : _ `is_approx` _ |- _] =>
-    inversion H; let n:= numgoals in guard n=1; subst; clear H
   | [H : _ `less_defined` _ |- _] =>
     inversion H; let n:= numgoals in guard n=1; subst; clear H
   | [H : is_defined ?x |- _] =>
@@ -356,11 +353,10 @@ Ltac invert_eq :=
                inversion H; subst; clear H
              end.
 
-Ltac solve_approx tac :=
+Ltac solve_approx :=
   repeat (match goal with
-          | _ => solve [auto]
-          | [ |- _ `less_defined` _ ] => try constructor
-          | [ |- _ `is_approx` _ ] => unfold is_approx; tac
+          | _ => solve [eauto]
+          | [ |- _ `less_defined` _ ] => progress (autorewrite with exact) + (constructor; cbn)
           | [ |- is_defined (Thunk _) ] =>
             reflexivity
           end).
@@ -368,5 +364,5 @@ Ltac solve_approx tac :=
 (** Heuristics for reasoning about pessimistic/optimistic specs. *)
 Ltac mgo tac := repeat (intros;
                         repeat invert_eq; repeat invert_approx;
-                        cbn in *; (mforward tac + solve_approx tac + lia)).
+                        cbn in *; (mforward tac + solve_approx + lia)).
 Ltac mgo' := mgo idtac.

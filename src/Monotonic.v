@@ -107,7 +107,7 @@ Proof.
   unfold less_defined, LessDefined_M. intros u v Hu.
   constructor; apply pessimistic_thunk.
   - relax; [ apply Hu | cbn; intros * Hv ]. apply optimistic_thunk_go.
-    relax; [ apply Hv | cbn; intros * [] ]. split; [ solve_approx idtac | auto ].
+    relax; [ apply Hv | cbn; intros * [] ]. split; [ solve_approx | auto ].
   - apply optimistic_skip. split; [ reflexivity | auto ].
 Qed.
 

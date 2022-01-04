@@ -250,11 +250,39 @@ Definition popD {a} (q : Queue a) (outD : option (T a * T (QueueA a))) : T (Queu
 
 (* The demand is an approximation of the input. *)
 
+Lemma appendD_approx {a} (xs ys : list a) (outD : _)
+  : outD `is_approx` append xs ys -> appendD xs ys outD `is_approx` (xs, ys).
+Proof.
+  revert outD; induction xs; cbn.
+  - intros; solve_approx.
+  - autorewrite with exact; intros. inversion H; subst.
+    inversion H4; subst; cbn.
+    + constructor; cbn; constructor. autorewrite with exact. constructor; auto; constructor.
+    + specialize (IHxs _ H2); inversion IHxs; subst.
+      destruct appendD; cbn in *. solve_approx.
+Qed.
+
+Lemma revD_approx {a} (xs : list a) (outD : _)
+  : outD `is_approx` rev xs -> revD xs outD `is_approx` xs.
+Proof.
+Admitted.
+
 Lemma mkQueueD_approx {a} nf (f : list a) nb b (outD : QueueA a)
   : outD `is_approx` mkQueue nf f nb b ->
     mkQueueD nf f nb b outD `is_approx` (f, b).
 Proof.
-Admitted.
+  unfold mkQueue, mkQueueD.
+  destruct (Nat.ltb_spec nf nb).
+  - destruct (frontA outD) eqn:Ef; cbn.
+    + destruct appendD eqn:Eapp. intros []; cbn in *.
+      rewrite Ef in ld_front0; inversion ld_front0; subst.
+      apply appendD_approx in H2. rewrite Eapp in H2. destruct H2; cbn in *.
+      constructor; cbn; auto.
+      inversion snd_rel; subst; cbn; [ constructor | ].
+      auto using revD_approx.
+    + do 2 constructor.
+  - intros HH; constructor; apply HH.
+Qed.
 
 Lemma tailX_mon {a} (xs xs' : T (listA a))
   : xs `less_defined` xs' -> tailX xs `less_defined` tailX xs'.
@@ -283,24 +311,11 @@ Proof.
   - constructor; reflexivity.
 Qed.
 
-Lemma appendD_approx {a} (xs ys : list a) (outD : _)
-  : outD `is_approx` append xs ys -> appendD xs ys outD `is_approx` (xs, ys).
-Proof.
-  revert outD; induction xs; cbn.
-  - intros; solve_approx idtac.
-  - unfold is_approx; autorewrite with exact; intros. inversion H; subst.
-    inversion H4; subst; cbn.
-    + constructor; cbn; constructor. autorewrite with exact. constructor; auto; constructor.
-    + specialize (IHxs _ H2); inversion IHxs; subst.
-      destruct appendD; cbn in *. solve_approx idtac. cbn. autorewrite with exact.
-      constructor; auto.
-Qed.
-
 Lemma popD_approx {a} (q : Queue a) (outD : _)
   : outD `is_approx` pop q -> popD q outD `is_approx` q.
 Proof.
   unfold pop, popD. destruct front eqn:Ef; cbn; inversion 1; subst.
-  - red; reflexivity.
+  - reflexivity.
   - destruct x; destruct H2; cbn in *.
     inversion snd_rel; subst; cbn.
     + constructor. constructor; cbn; auto; constructor. rewrite Ef; autorewrite with exact.
@@ -902,9 +917,9 @@ Proof.
     inversion IHt; cbn.
     + apply bottom_least.
     + apply pushD_approx in H1. apply Proper_fst_less_defined in H1. apply H1.
-  - destruct (pop q) as [ [] | ] eqn:Hpop; [ | red; reflexivity ].
+  - destruct (pop q) as [ [] | ] eqn:Hpop; [ | reflexivity ].
     + apply (popD_approx_Some Hpop). constructor; cbn; [ constructor; reflexivity | apply IHt ].
-  - unfold is_approx in *; apply lub_least_upper_bound; auto.
+  - apply lub_least_upper_bound; auto.
   - apply bottom_least.
 Qed.
 

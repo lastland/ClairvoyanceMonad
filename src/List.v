@@ -187,8 +187,6 @@ Proof.
   unfold exact; simp exact_listA; reflexivity.
 Qed.
 
-Create HintDb exact.
-
 (* #[global] *)
 Hint Rewrite @exact_list_unfold_nil @exact_list_unfold_cons
   @exact_list_unfold_nil_T @exact_list_unfold_cons_T : exact.
@@ -450,7 +448,7 @@ Proof.
     + relax.
       { eapply IHn with (acc:=x :: acc); try eassumption.
         constructor. rewrite exact_list_unfold_cons.
-        solve_approx idtac. }
+        solve_approx. }
       { cbn; intros. lia. }
     + relax.
       eapply IHn with (acc:=x :: acc); try eassumption. constructor.
@@ -467,7 +465,7 @@ Proof.
   unfold takeA. induction n; [mgo_list|].
   intros xs. induction xs as [ | x xs IH]; mgo_list.
   specialize (IHn xs (Thunk x0)). cbn in IHn.
-  relax_apply IHn; [ solve_approx idtac | ].
+  relax_apply IHn; [ solve_approx | ].
   mgo_list.
 Qed.
 
@@ -662,7 +660,7 @@ Proof.
     constructor; assumption.
     cbn. intros. lia.
   - specialize (H0 _ _ _ _ f (Thunk x)).
-    cbn in H0. relax; [ apply H0 with (v:=v); auto; solve_approx idtac | ].
+    cbn in H0. relax; [ apply H0 with (v:=v); auto; solve_approx | ].
     cbn; lia.
 Qed.
 
@@ -677,7 +675,7 @@ Proof.
   intros f xs xsA v vA Hf Hxs. revert v vA.
   unfold foldrA. funelim (exact_listA xs); mgo_list.
   - specialize (H0 _ _ _ _ _ f (Thunk x)).
-    relax; [ eapply H0; auto; solve_approx eauto | ].
+    relax; [ eapply H0; auto; solve_approx | ].
     mgo_list. relax_apply Hf. mgo_list.
   - relax_apply Hf. cbn. intros. subst.
     destruct xs; simpl; lia.
