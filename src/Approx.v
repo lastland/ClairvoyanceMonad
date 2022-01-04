@@ -215,10 +215,19 @@ Record pair_rel {a1 b1 a2 b2} (r1 : a1 -> b1 -> Prop) (r2 : a2 -> b2 -> Prop) (x
 #[global] Instance LessDefined_prod {a b} `{LessDefined a, LessDefined b} : LessDefined (a * b) :=
   pair_rel less_defined less_defined.
 
+Lemma PreOrder_pair_rel {a b ra rb} `{!@PreOrder a ra,!@PreOrder b rb} : PreOrder (pair_rel ra rb).
+Proof.
+  constructor; constructor; reflexivity + etransitivity; eapply fst_rel + eapply snd_rel; eassumption.
+Qed.
+
 #[global] Instance ApproximationAlgebra_prod {a aA b bA} `{ApproximationAlgebra a aA, ApproximationAlgebra b bA}
   : ApproximationAlgebra (a * b) (aA * bA).
 Proof.
-Admitted.
+  constructor.
+  - apply PreOrder_pair_rel.
+  - intros [] [] [HH1 HH2]; cbn in *. apply exact_max in HH1, HH2.
+    unfold exact, Exact_prod; cbn. congruence.
+Qed.
 
 #[global] Instance Lub_prod {a b} `{Lub a, Lub b} : Lub (a * b) :=
   fun x y => (lub (fst x) (fst y), lub (snd x) (snd y)).
