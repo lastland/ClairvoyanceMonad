@@ -37,7 +37,7 @@ Set Typeclasses Strict Resolution.
 Class LessDefined a := less_defined : a -> a -> Prop.
 Infix "`less_defined`" := less_defined (at level 42).
 
-#[global] Hint Unfold less_defined.
+#[global] Hint Unfold less_defined : core.
 
 Inductive less_defined_T {a : Type} `{LessDefined a} : relation (T a) :=
 | LessDefined_Undefined :
@@ -64,6 +64,24 @@ Definition uc {a} `{LessDefined a} (k : a -> nat -> Prop) : Prop :=
     x `less_defined` x' ->
     n' <= n ->
     k x n -> k x' n'.
+
+(* [uc] lemmas for some common forms of cost specifications *)
+
+Lemma uc_cost {a} `{LessDefined a} `{Transitive _ (less_defined (a := a))}
+    (d : a) (n : nat)
+  : uc (fun out cost => d `less_defined` out /\ cost <= n).
+Proof.
+  red; intros * ? ? []; split; etransitivity; try eassumption.
+Qed.
+
+(* Amortized cost specfications *)
+Lemma uc_acost {a} `{LessDefined a} `{Transitive _ (less_defined (a := a))}
+    (d : a) (m n : nat)
+  : uc (fun out cost => d `less_defined` out /\ m + cost <= n).
+Proof.
+  red; intros * ? ? []; split; etransitivity; try eassumption.
+  apply Nat.add_le_mono_l; assumption.
+Qed.
 
 Lemma optimistic_corelax {a} `{LessDefined a} (u u' : M a) (k : a -> nat -> Prop)
   : u `less_defined` u' -> uc k ->

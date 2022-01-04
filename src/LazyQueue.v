@@ -463,7 +463,7 @@ Lemma appendA_cost' {a} (xs ys : list a) outD
 Proof.
   intros. eapply optimistic_corelax.
   - eapply appendA_mon; eassumption.
-  - red; intros * ? ? []; split; etransitivity; eauto.
+  - apply uc_cost.
   - eauto using appendA_cost.
 Qed.
 
@@ -571,7 +571,7 @@ Lemma pushA_cost' {a} (q : Queue a) (x : a) (outD : QueueA a)
 Proof.
   intros. eapply optimistic_corelax.
   - eapply pushA_mon. eassumption. reflexivity.
-  - red. intros * ? ? []. split; etransitivity; try eassumption. lia.
+  - apply uc_acost.
   - eapply pushA_cost; eassumption.
 Qed.
 
@@ -619,7 +619,7 @@ Proof.
   intros.
   eapply optimistic_corelax.
   - eapply popA_mon. eassumption.
-  - red. intros * ? ? []; split; etransitivity; try eassumption. lia.
+  - apply uc_acost.
   - apply popA_cost; assumption.
 Qed.
 

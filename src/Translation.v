@@ -1164,6 +1164,7 @@ Lemma Transitive_eq_Rnm g g' (s1 s2 s3 : Rnm g g')
 Proof. unfold eq_Rnm; etransitivity; eauto. Qed.
 
 (** [eq_Rnm] is an equivalence relation. *)
+#[global]
 Instance Equivalence_eq_Rnm g g' : Equivalence (@eq_Rnm g g').
 Proof.
   constructor; red; unfold eq_Rnm; [reflexivity | symmetry | etransitivity]; eauto.
