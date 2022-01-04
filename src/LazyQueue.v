@@ -995,7 +995,6 @@ Lemma run_tree_cost {a} (t : tree a) (q : Queue a) (qA : T (QueueA a))
     demand_tree t q `less_defined` qA ->
     run_tree t qA [[ fun _ n => debt (demand_tree t q) + n <= 7 * size_tree t ]].
 Proof.
-Opaque Nat.mul Nat.add.
   revert q qA; induction t; cbn; intros q qA wf_q ld_q.
   - mgo'. assert (WF := well_formed_push a0 wf_q).
     destruct (demand_tree t (push q a0)) as [ q' | ] eqn:Eq'; cbn in *.
@@ -1050,3 +1049,5 @@ Proof.
   - apply run_tree_cost; [ apply well_formed_empty | apply (demand_tree_approx t (q := empty)) ].
   - intros. cbn in H. lia.
 Qed.
+
+(* Print Assumptions good_queue. *)
