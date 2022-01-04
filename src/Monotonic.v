@@ -139,7 +139,7 @@ Ltac solve_mon :=
       | [ |- less_defined (bind _ _) (bind _ _) ] => apply bind_mon; [ | intros ? ? ? ]
       | [ |- less_defined (forcing _ _) (forcing _ _) ] => apply forcing_mon; [ | intros ? ? ? ]
       | [ |- less_defined (force _) (force _) ] => apply force_mon
-      | [ |- less_defined (thunk _) (thunk _) ] => apply thunk_mon
+      | [ |- less_defined (thunk ?u) (thunk ?v) ] => apply (thunk_mon u v)
       | [ |- less_defined (fun _ _ => False) _ ] => apply bot_mon
       end
     | [ |- less_defined _ _ ] => constructor

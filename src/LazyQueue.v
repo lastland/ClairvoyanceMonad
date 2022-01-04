@@ -27,7 +27,8 @@ Set Maximal Implicit Insertion.
 
 #[local] Existing Instance Exact_id | 1.
 #[local] Existing Instance LessDefined_id | 100.
-#[local] Existing Instance ApproximationAlgebra_id | 100.
+#[local] Existing Instance PreOrder_LessDefined_id | 100.
+#[local] Existing Instance ExactMaximal_id | 100.
 
 (* Lazy persistent queue *)
 (* Amortized O(1) push and pop with persistence *)
@@ -159,14 +160,89 @@ Proof.
   constructor; auto using Reflexive_Rep, Transitive_Rep.
 Qed.
 
-#[global] Instance ApproximationAlgebra_QueueA {a} : ApproximationAlgebra (QueueA a) (Queue a).
+#[global] Instance PreOrder_QueueA {a} : PreOrder (less_defined (a := QueueA a)).
+Proof. exact PreOrder_Rep. Qed.
+
+#[global] Instance ExactMaximal_QueueA {a} : ExactMaximal (QueueA a) (Queue a).
 Proof.
-  constructor.
-  - apply PreOrder_Rep.
-  - intros * []; cbn in *.
-    apply exact_max in ld_front0, ld_back0. destruct xA; cbn in *; subst.
-    reflexivity.
+  red; intros * []; cbn in *.
+  apply exact_maximal in ld_front0, ld_back0. destruct xA; cbn in *; subst.
+  reflexivity.
 Qed.
+
+(* Monotonicity: There should also be properties that making inputs of approximation functions
+   more defined makes the output more defined. These can be used to generalize the
+   demand specifications above to inputs greater than the input demand. *)
+
+Lemma appendA__mon {a} (xsA xsA' : listA a) (ysA ysA' : T (listA a))
+  : xsA `less_defined` xsA' ->
+    ysA `less_defined` ysA' ->
+    append_ xsA  ysA `less_defined` append_ xsA' ysA'.
+Proof.
+  intros Hxs; revert ysA ysA'; induction Hxs; intros * Hys; cbn; solve_mon.
+Qed.
+
+#[global] Hint Resolve appendA__mon : mon.
+
+Lemma appendA_mon {a} (xsA xsA' ysA ysA' : T (listA a))
+  : xsA `less_defined` xsA' ->
+    ysA `less_defined` ysA' ->
+    appendA xsA  ysA `less_defined` appendA xsA' ysA'.
+Proof.
+  intros; unfold appendA; solve_mon.
+Qed.
+
+#[global] Hint Resolve appendA_mon : mon.
+
+Lemma revA__mon {a} (xsA xsA' : listA a) (ysA ysA' : T (listA a))
+  : xsA `less_defined` xsA' ->
+    ysA `less_defined` ysA' ->
+    revA_ xsA ysA `less_defined` revA_ xsA' ysA'.
+Proof.
+  intros Hxs; revert ysA ysA'; induction Hxs; intros * Hys; cbn; solve_mon.
+Qed.
+
+#[global] Hint Resolve revA__mon : mon.
+
+Lemma revA_mon {a} (xsA xsA' : T (listA a))
+  : xsA `less_defined` xsA' ->
+    revA xsA `less_defined` revA xsA'.
+Proof.
+  intros; unfold revA; solve_mon.
+Qed.
+
+#[global] Hint Resolve revA_mon : mon.
+
+Lemma mkQueueA_mon {a} (nf nf' nb nb' : nat) (f f' b b' : T (listA a))
+  : nf = nf' ->
+    f `less_defined` f' ->
+    b `less_defined` b' ->
+    nb = nb' ->
+    mkQueueA nf f nb b `less_defined` mkQueueA nf' f' nb' b'.
+Proof.
+  intros; subst; unfold mkQueueA; solve_mon.
+Qed.
+
+#[global] Hint Resolve mkQueueA_mon : mon.
+
+Lemma pushA_mon {a} (qA qA' : T (QueueA a)) xA xA'
+  : qA `less_defined` qA' ->
+    xA `less_defined` xA' ->
+    pushA qA xA `less_defined` pushA qA' xA'.
+Proof.
+  intros; unfold pushA. solve_mon.
+  apply mkQueueA_mon; auto.
+Qed.
+
+Lemma popA_mon {a} (qA qA' : T (QueueA a))
+  : qA `less_defined` qA' ->
+    popA qA `less_defined` popA qA'.
+Proof.
+  intros; unfold popA. solve_mon.
+  apply mkQueueA_mon; auto.
+Qed.
+
+(**)
 
 (* Well-formedness *)
 
@@ -430,80 +506,6 @@ Lemma popD_spec {a} (q : Queue a) (outD : option (T a * T (QueueA a)))
     popA qD [[ fun out _ => outD `less_defined` out ]].
 Proof.
 Abort.
-
-(* Monotonicity: There should also be properties that making inputs of approximation functions
-   more defined makes the output more defined. These can be used to generalize the
-   demand specifications above to inputs greater than the input demand. *)
-
-Lemma appendA__mon {a} (xsA xsA' : listA a) (ysA ysA' : T (listA a))
-  : xsA `less_defined` xsA' ->
-    ysA `less_defined` ysA' ->
-    append_ xsA  ysA `less_defined` append_ xsA' ysA'.
-Proof.
-  intros Hxs; revert ysA ysA'; induction Hxs; intros * Hys; cbn; solve_mon.
-Qed.
-
-#[global] Hint Resolve appendA__mon : mon.
-
-Lemma appendA_mon {a} (xsA xsA' ysA ysA' : T (listA a))
-  : xsA `less_defined` xsA' ->
-    ysA `less_defined` ysA' ->
-    appendA xsA  ysA `less_defined` appendA xsA' ysA'.
-Proof.
-  intros; unfold appendA; solve_mon.
-Qed.
-
-#[global] Hint Resolve appendA_mon : mon.
-
-Lemma revA__mon {a} (xsA xsA' : listA a) (ysA ysA' : T (listA a))
-  : xsA `less_defined` xsA' ->
-    ysA `less_defined` ysA' ->
-    revA_ xsA ysA `less_defined` revA_ xsA' ysA'.
-Proof.
-  intros Hxs; revert ysA ysA'; induction Hxs; intros * Hys; cbn; solve_mon.
-Qed.
-
-#[global] Hint Resolve revA__mon : mon.
-
-Lemma revA_mon {a} (xsA xsA' : T (listA a))
-  : xsA `less_defined` xsA' ->
-    revA xsA `less_defined` revA xsA'.
-Proof.
-  intros; unfold revA; solve_mon.
-Qed.
-
-#[global] Hint Resolve revA_mon : mon.
-
-Lemma mkQueueA_mon {a} (nf nf' nb nb' : nat) (f f' b b' : T (listA a))
-  : nf = nf' ->
-    f `less_defined` f' ->
-    b `less_defined` b' ->
-    nb = nb' ->
-    mkQueueA nf f nb b `less_defined` mkQueueA nf' f' nb' b'.
-Proof.
-  intros; subst; unfold mkQueueA; solve_mon.
-Qed.
-
-#[global] Hint Resolve mkQueueA_mon : mon.
-
-Lemma pushA_mon {a} (qA qA' : T (QueueA a)) xA xA'
-  : qA `less_defined` qA' ->
-    xA `less_defined` xA' ->
-    pushA qA xA `less_defined` pushA qA' xA'.
-Proof.
-  intros; unfold pushA. solve_mon.
-  apply mkQueueA_mon; auto.
-Qed.
-
-Lemma popA_mon {a} (qA qA' : T (QueueA a))
-  : qA `less_defined` qA' ->
-    popA qA `less_defined` popA qA'.
-Proof.
-  intros; unfold popA. solve_mon.
-  apply mkQueueA_mon; auto.
-Qed.
-
-(**)
 
 (* Physicist's method *)
 

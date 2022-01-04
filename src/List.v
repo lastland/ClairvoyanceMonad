@@ -245,26 +245,17 @@ constructor.
     * inversion H7; subst. auto.
 Qed.
 
-Lemma exact_max_listA {a b} `{ApproximationAlgebra a b}
-  : forall (xA : listA a) (x : list b), exact x `less_defined` xA -> exact x = xA.
+#[global]
+Instance ExactMaximal_listA {a b} `{ExactMaximal a b} : ExactMaximal (listA a) (list b).
 Proof.
   intros xA x. revert xA. induction x.
   - inversion 1. reflexivity.
   - unfold exact, Exact_list.
     rewrite exact_listA_equation_2.
     inversion 1; subst. f_equal.
-    + inversion H3; subst. f_equal. apply exact_max, H2.
+    + inversion H3; subst. f_equal. apply exact_maximal, H2.
     + inversion H5; subst. f_equal.
       apply IHx. assumption.
-Qed.
-
-#[global]
-Instance ApproximationAlgebra_list {a b} `{ApproximationAlgebra a b}
-  : ApproximationAlgebra (listA a) (list b).
-Proof.
-  constructor.
-  - typeclasses eauto.
-  - apply @exact_max_listA; auto.
 Qed.
 
 Ltac mgo_list := mgo ltac:(autorewrite with exact).
@@ -273,7 +264,7 @@ Ltac mgo_list := mgo ltac:(autorewrite with exact).
 
 #[local] Existing Instance Exact_id | 1.
 #[local] Existing Instance LessDefined_id | 100.
-#[local] Existing Instance ApproximationAlgebra_id | 100.
+#[local] Existing Instance ExactMaximal_id | 100.
 
 (* ----------------- Section 5.4 ----------------- *)
 

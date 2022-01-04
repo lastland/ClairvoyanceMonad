@@ -1,3 +1,35 @@
+(** * Approximations *)
+
+(** Concepts for reasoning about approximations.
+
+  "Approximations" are the values used in clairvoyant programs (functions
+  with explicit cost semantics in the clairvoyance monad). "Pure values" are those
+  used in non-monadic functions.
+
+  - [less_defined]: an order relation between approximations (technically, just a preorder).
+  - [lub]: least upper bound function on approximations.
+  - [exact]: an embedding of pure values into approximations.
+  - [is_approx]: a relation between approximations and pure values.
+
+  Remarks:
+  - [x `is_approx` y] is equivalent to [x `less_defined` exact y],
+    and is now defined as such.
+  - However, [exact] is not always definable, while [is_approx] might still
+    have a reasonable definition. For instance, this is the case for functions.
+    That's why our paper introduces [is_approx] as a separate concept.
+    We haven't run into a use case of [is_approx] for functions or infinite data
+    types so far though, so we reverted to defining [is_approx] as a notation using
+    [less_defined] and [exact] for simplicity.
+ *)
+
+(** This part is a reference implementation of the definitions discussed in
+    Section 5.3. *)
+
+(** In the paper, we start by giving an [exact] function defined on lists. We
+  mention later in the section that we would also want to be able to overload
+  the [exact] function (and the [is_approx] and [less_defined] relations) for
+  other types. One way of doing that is using type classes, as we show here. *)
+
 From Coq Require Import Arith List Lia Morphisms Relations.
 From Clairvoyance Require Import Core.
 
@@ -7,36 +39,34 @@ Definition is_defined {a} (t : T a) : Prop :=
   | Undefined => False
   end.
 
-(* --------------------------------------- *)
-
-(** * Approximations.
-    
-    This part is a reference implementation of the definitions discussed in
-    Section 5.3.  *)
-
-(** In the paper, we start by giving an [exact] function defined on lists. We
-    mention later in the section that we would also want to be able to overload
-    the [exact] function (and the [is_approx] and [less_defined] relations) for
-    other types. One way of doing that is using type classes, as we show here. *)
-
-(** * [exact] *)
-Class Exact a b : Type := exact : a -> b.
-
-#[global]
-Instance Exact_T {a b} {r: Exact a b} : Exact a (T b) 
-  := fun x => Thunk (exact x).
-
-(* Type classes declared under this will have less confusing resolution.
-   We exclude [Exact] because in [Exact a b],
-   [b] is supposed to be determined by [a]. *)
+(* Type classes declared under this flag will have less confusing resolution.
+  We will exclude [Exact] because in [Exact a b],
+  [b] is supposed to be determined by [a], so it's fine to leave it as a flexible metavariable. *)
 Set Typeclasses Strict Resolution.
 
-(** * [less_defined] *)
+(** * [less_defined]: approximation ordering *)
+
+(** [x `less_defined` y] *)
+
 Class LessDefined a := less_defined : a -> a -> Prop.
 Infix "`less_defined`" := less_defined (at level 42).
 
+(** [less_defined] should be a preorder (reflexive and transitive).
+  (The paper says "order", which is imprecise. That was an oversight.)
+
+  Every instance [LessDefined t] should be accompanied by an instance:
+  [[
+  #[global] Instance PreOrder_t : PreOrder (less_defined (a := t)).
+  ]] *)
+
+(** As a preorder, we expect to be able to do rewriting (in monotonic contexts).
+  This instance registers [less_defined] as a relation for rewriting.
+  Having [PreOrder] instances lying around is technically sufficient,
+  but this helps automation in some cases. *)
 #[global] Instance RewriteRelation_less_defined {a} `{LessDefined a}
   : RewriteRelation (less_defined (a := a)) := {}.
+
+(** ** [less_defined] instance for [T]. *)
 
 Inductive LessDefined_T {a : Type} `{LessDefined a} : LessDefined (T a) :=
 | LessDefined_Undefined x : Undefined `less_defined` x
@@ -46,39 +76,32 @@ Inductive LessDefined_T {a : Type} `{LessDefined a} : LessDefined (T a) :=
 #[global] Hint Constructors LessDefined_T : core.
 #[global] Existing Instance LessDefined_T.
 
+(** An inversion lemma *)
 Lemma less_defined_Thunk_inv {a} `{LessDefined a}
   : forall x y : a, Thunk x `less_defined` Thunk y -> x `less_defined` y.
 Proof. inversion 1; auto. Qed.
 
-Unset Typeclasses Strict Resolution.
+#[local]
+Instance Reflexive_LessDefined_T {a} `{LessDefined a} `{!Reflexive (less_defined (a := a))}
+  : Reflexive (less_defined (a := T a)).
+Proof. intros []; constructor; auto. Qed.
 
-(** This corresponds to the propositions [less_defined_order] and [exact_max] in Section 5.3.
-  We actually need only a preorder (TODO: do we?), and the imprecision of
-  "order" in the paper is an oversight.
- *)
-Class ApproximationAlgebra a b {Hless : LessDefined a} (Hexact : Exact b a) :=
-  { PreOrder_less_defined :> PreOrder (less_defined (a := a))
-  ; exact_max : forall (xA : a) (x : b), exact x `less_defined` xA -> exact x = xA }.
+#[local]
+Instance Transitive_LessDefined_T {a} `{LessDefined a} `{!Transitive (less_defined (a := a))}
+  : Transitive (less_defined (a := T a)).
+Proof.
+  intros ? ? ? []; [ constructor | inversion 1; subst; constructor; etransitivity; eassumption ].
+Qed.
 
-Arguments ApproximationAlgebra : clear implicits.
-Arguments ApproximationAlgebra a b {Hless Hexact}.
-
-Set Typeclasses Strict Resolution.
-
+(** [PreOrder] instance for [less_defined] at [T]. *)
 #[global]
 Instance PreOrder_LessDefined_T {a : Type} `{LessDefined a} `{Ho : !PreOrder (less_defined (a := a))}
   : PreOrder (less_defined (a := T a)).
 Proof.
-constructor.
-- intros x. destruct x.
-  + constructor. apply Ho.
-  + constructor.
-- intros x y z. inversion 1; subst; intros.
-  + constructor.
-  + inversion H2; subst. constructor.
-    destruct Ho. transitivity y0; assumption.
+  constructor; exact _.
 Qed.
 
+(* Not sure we will ever need this, but it doesn't hurt to leave it here. *)
 #[global]
 Instance PartialOrder_LessDefined_T {a : Type} `{LessDefined a}
     `{Ho : PartialOrder _ eq (less_defined (a := a))}
@@ -91,45 +114,64 @@ constructor.
   + inversion H2; subst. f_equal. apply Ho. constructor; assumption.
 Qed.
 
-Lemma exact_max_T {a b} `{AA : ApproximationAlgebra a b}
-  : forall (xA : T a) (x : b), exact x `less_defined` xA -> exact x = xA.
-Proof.
-  intros xA x H. inversion H; subst.
-  unfold exact, Exact_T. f_equal. apply exact_max. assumption.
-Qed.
+Unset Typeclasses Strict Resolution.
+
+(** * [exact]: embedding pure values as approximations *)
+Class Exact a b : Type := exact : a -> b.
+
+(** This corresponds to the [exact_max] in Section 5.3: [exact] embeddings should be
+  maximal elements. *)
+Class ExactMaximal a b {Hless : LessDefined a} (Hexact : Exact b a) :=
+  exact_maximal : forall (xA : a) (x : b), exact x `less_defined` xA -> exact x = xA.
+
+Arguments ExactMaximal : clear implicits.
+Arguments ExactMaximal a b {Hless Hexact}.
+
+(** I don't think we've actually needed this fact so far. *)
+
+(** ** [exact] instance for [T] *)
+
+(** When [exact] doesn't reduce by [cbn], we may register rewrite lemmas in the
+    hint database [exact] for doing simplification by [autorewrite with exact]. *)
+Create HintDb exact.
 
 #[global]
-Instance ApproximationAlgebra_T {a b} `{AA : ApproximationAlgebra a b} : ApproximationAlgebra (T a) b.
+Instance Exact_T {a b} {r: Exact a b} : Exact a (T b)
+  := fun x => Thunk (exact x).
+
+#[global]
+Instance ExactMaximal_T {a b} `{AA : ExactMaximal a b} : ExactMaximal (T a) b.
 Proof.
-  constructor.
-  - apply @PreOrder_LessDefined_T, AA.
-  - apply @exact_max_T, AA.
+  red. intros xA x H. inversion H; subst.
+  unfold exact, Exact_T. f_equal. apply exact_maximal. assumption.
 Qed.
 
-(** * [is_approx]
-    
-    In our paper, the definition of [is_approx] can be anything as long as it
+(** * [is_approx]: relating approximations and pure values *)
+
+(** In our paper, the definition of [is_approx] can be anything as long as it
     satisfies the [approx_exact] proposition. In this file, we choose the most
     direct definition that satisfies the [approx_exact] law. *)
+(** TODO: this should really be its own class, to support functions and infinite data types
+    (see remarks at the top). *)
 Notation is_approx xA x := (xA `less_defined` exact x) (only parsing).
 Infix "`is_approx`" := is_approx (at level 42, only parsing).
 
-Create HintDb exact.
+Set Typeclasses Strict Resolution.
 
-(** * This corresponds to the proposition [approx_exact] in Section 5.3.
+(** This corresponds to the proposition [approx_exact] in Section 5.3.
 
-    And because of our particular definition, this is true by
-    definition. However, this cannot be proved generically if the definition of
-    [is_approx] can be anything. *)
+  And because of our particular definition, this is true by
+  definition. However, this cannot be proved generically if the definition of
+  [is_approx] can be anything. *)
 Theorem approx_exact {a b} `{Exact b a} `{LessDefined a} :
   forall (x : b) (xA : a),
     xA `is_approx` x <-> xA `less_defined` (exact x).
 Proof. reflexivity. Qed.
 
-(** * This corresponds to the proposition [approx_down] in Section 5.3.
+(** This corresponds to the proposition [approx_down] in Section 5.3.
 
-    Again, because of the particular definition of [is_approx] we use here, this
-    can be proved simply by the law of transitivity. *)
+  Again, because of the particular definition of [is_approx] we use here, this
+  can be proved simply by the law of transitivity. *)
 Lemma approx_down {a b} `{Hld : LessDefined a} `{Exact b a} `{PartialOrder _ eq (less_defined (a := a))}:
   forall (x : b) (xA yA : a),
     xA `less_defined` yA -> yA `is_approx` x -> xA `is_approx` x.
@@ -139,21 +181,11 @@ Qed.
 
 (**)
 
-(* Ordered types with a least element. It represents an empty demand.
-   It's also convenient as a dummy value in nonsensical cases. *)
-Class Bottom (a : Type) : Type :=
-  bottom : a.
+(** * [lub]: least upper bound. *)
 
-#[global] Instance Bottom_T {a} : Bottom (T a) := Undefined.
-#[global] Instance Bottom_prod {a b} `{Bottom a, Bottom b} : Bottom (a * b) := (bottom, bottom).
-
-Class BottomLeast a `{LessDefined a,Bottom a} : Prop :=
-  bottom_least : forall x : a, bottom `less_defined` x.
-
-#[global] Instance BottomLeast_t {a} `{LessDefined a} : BottomLeast (T a).
-Proof. constructor. Qed.
-
-(* Least upper bound operation. *)
+(** [lub] is defined as a total function for convenience, but it is morally
+  only partially defined: [lub x y] only makes sense when [x] and [y] have
+  at least one common upper bound (they are [cobounded]). *)
 Class Lub (a : Type) : Type :=
   lub : a -> a -> a.
 
@@ -167,15 +199,15 @@ Definition lub_T {a} (_lub : a -> a -> a) : T a -> T a -> T a :=
     | Thunk x, Thunk y => Thunk (_lub x y)
     end.
 
-#[global] Instance Lub_T {a} `{Lub a} : Lub (T a) := lub_T lub.
+Definition Lub_T {a} `{Lub a} : Lub (T a) := Eval unfold lub_T in lub_T lub.
+#[global] Existing Instance Lub_T.
 
+(** [cobounded x y]: [x] and [y] have a common upper bound. *)
 Definition cobounded {a} `{LessDefined a} (x y : a) : Prop :=
   exists z : a, x `less_defined` z /\ y `less_defined` z.
 
 #[global] Hint Unfold cobounded : core.
 
-(* [lub] is defined as a total function for convenience, but it is generally partially defined,
-   [lub x y] only makes sense when [x] and [y] have at least one common upper bound. *)
 Class LubLaw a `{Lub a, LessDefined a} : Prop :=
   { lub_least_upper_bound : forall x y z : a,
       x `less_defined` z -> y `less_defined` z -> lub x y `less_defined` z
@@ -189,21 +221,36 @@ Lemma lub_inv {a} `{LubLaw a} `{!Transitive (less_defined (a := a))}
   : forall x y z : a, cobounded x y -> lub x y `less_defined` z ->
        x `less_defined` z /\ y `less_defined` z.
 Proof.
-  intros x y z Hxy Hlub; split; (etransitivity; eauto using lub_upper_bound_l, lub_upper_bound_r).
+  intros x y z Hxy Hlub; split; (etransitivity; eauto with lub).
 Qed.
 
 #[global] Instance LubLaw_T {a} `{LubLaw a} `{!Reflexive (less_defined (a := a))} : LubLaw (T a).
 Proof.
   constructor.
-  - intros ? ? ? []; inversion 1; subst; cbn; constructor; auto.
-    apply lub_least_upper_bound; auto.
+  - intros ? ? ? []; inversion 1; subst; cbn; constructor; auto with lub.
   - intros x y [z [ [? | Hx] Hy] ]; cbn; [ constructor | ].
     inversion Hy; subst; constructor; eauto with lub.
   - intros x y [z [ Hx Hy ] ]; destruct Hy as [ | Hy]; cbn; [ constructor | ].
     inversion Hx; subst; constructor; eauto with lub.
 Qed.
 
-(**)
+(** * [bottom] *)
+
+(** Ordered types with a least element. It represents an empty demand.
+  It's also convenient as a dummy value in nonsensical cases. *)
+Class Bottom (a : Type) : Type :=
+  bottom : a.
+
+#[global] Instance Bottom_T {a} : Bottom (T a) := Undefined.
+#[global] Instance Bottom_prod {a b} `{Bottom a, Bottom b} : Bottom (a * b) := (bottom, bottom).
+
+Class BottomLeast a `{LessDefined a,Bottom a} : Prop :=
+  bottom_least : forall x : a, bottom `less_defined` x.
+
+#[global] Instance BottomLeast_t {a} `{LessDefined a} : BottomLeast (T a).
+Proof. constructor. Qed.
+
+(** * Instances for standard types *)
 
 Inductive option_rel {a b} (r : a -> b -> Prop) : option a -> option b -> Prop :=
 | option_rel_None : option_rel r None None
@@ -221,18 +268,17 @@ Record pair_rel {a1 b1 a2 b2} (r1 : a1 -> b1 -> Prop) (r2 : a2 -> b2 -> Prop) (x
 #[global] Instance LessDefined_prod {a b} `{LessDefined a, LessDefined b} : LessDefined (a * b) :=
   pair_rel less_defined less_defined.
 
-Lemma PreOrder_pair_rel {a b ra rb} `{!@PreOrder a ra,!@PreOrder b rb} : PreOrder (pair_rel ra rb).
+#[global]
+Instance PreOrder_pair_rel {a b ra rb} `{!@PreOrder a ra,!@PreOrder b rb} : PreOrder (pair_rel ra rb).
 Proof.
   constructor; constructor; reflexivity + etransitivity; eapply fst_rel + eapply snd_rel; eassumption.
 Qed.
 
-#[global] Instance ApproximationAlgebra_prod {a aA b bA} `{ApproximationAlgebra a aA, ApproximationAlgebra b bA}
-  : ApproximationAlgebra (a * b) (aA * bA).
+#[global] Instance ExactMaximal_prod {a aA b bA} `{ExactMaximal a aA, ExactMaximal b bA}
+  : ExactMaximal (a * b) (aA * bA).
 Proof.
-  constructor.
-  - apply PreOrder_pair_rel.
-  - intros [] [] [HH1 HH2]; cbn in *. apply exact_max in HH1, HH2.
-    unfold exact, Exact_prod; cbn. congruence.
+  intros [] [] [HH1 HH2]; cbn in *. apply exact_maximal in HH1, HH2.
+  unfold exact, Exact_prod; cbn. congruence.
 Qed.
 
 #[global] Instance Lub_prod {a b} `{Lub a, Lub b} : Lub (a * b) :=
@@ -263,12 +309,10 @@ Proof.
   - intros ? ? ? []. auto. inversion 1; subst. constructor; etransitivity; eauto.
 Qed.
 
-#[global] Instance ApproximationAlgebra_option {a aA} `{ApproximationAlgebra aA a}
-  : ApproximationAlgebra (option aA) (option a).
+#[global] Instance ExactMaximal_option {a aA} `{ExactMaximal aA a}
+  : ExactMaximal (option aA) (option a).
 Proof.
-  constructor.
-  - typeclasses eauto.
-  - intros [] []; inversion 1; subst; cbn; f_equal. apply exact_max. auto.
+  intros [] []; inversion 1; subst; cbn; f_equal. apply exact_maximal. auto.
 Qed.
 
 (** In this part, we prove that any type [a] is also an [exact] of itself. We
@@ -286,12 +330,11 @@ Qed.
     [https://softwarefoundations.cis.upenn.edu/qc-current/Typeclasses.html]. *)
 #[local] Instance LessDefined_id {a} : LessDefined a | 100 := eq.
 
-#[local] Instance ApproximationAlgebra_id {a} : ApproximationAlgebra a a.
-Proof.
-  econstructor.
-  - typeclasses eauto.
-  - cbv; easy.
-Qed.
+#[local] Instance PreOrder_LessDefined_id {a} : PreOrder (less_defined (a := a)).
+Proof. exact _. Qed.
+
+#[local] Instance ExactMaximal_id {a} : ExactMaximal a a.
+Proof. cbv; easy. Qed.
 
 #[local] Instance Lub_id {a} : Lub a := fun n _ => n.
 #[local] Instance LubLaw_id {a} : LubLaw a.
@@ -304,13 +347,15 @@ Qed.
 
 #[global] Instance Exact_nat : Exact nat nat := id.
 #[global] Instance LessDefined_nat : LessDefined nat := eq.
-#[global] Instance ApproximationAlgebra_nat : ApproximationAlgebra nat nat := ApproximationAlgebra_id.
+#[global] Instance PreOrder_LessDefined_nat : PreOrder (less_defined (a := nat)) := PreOrder_LessDefined_id.
+#[global] Instance ExactMaximal_nat : ExactMaximal nat nat := ExactMaximal_id.
 #[global] Instance Lub_nat : Lub nat := fun n _ => n.
 #[global] Instance LubLaw_nat : LubLaw nat := LubLaw_id.
 
 #[global] Instance Exact_unit : Exact unit unit := id.
 #[global] Instance LessDefined_unit : LessDefined unit := eq.
-#[global] Instance ApproximationAlgebra_unit : ApproximationAlgebra unit unit := ApproximationAlgebra_id.
+#[global] Instance PreOrder_LessDefined_unit : PreOrder (less_defined (a := unit)) := PreOrder_LessDefined_id.
+#[global] Instance ExactMaximal_unit : ExactMaximal unit unit := ExactMaximal_id.
 #[global] Instance Lub_unit : Lub unit := fun n _ => n.
 #[global] Instance LubLaw_unit : LubLaw unit := LubLaw_id.
 
