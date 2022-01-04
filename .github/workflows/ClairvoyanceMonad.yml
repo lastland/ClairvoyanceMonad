@@ -10,10 +10,8 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
         ocaml: [4.07.1]
-        coq: [8.10.2, 8.11.2, 8.12.2, 8.13.2]
+        coq: [8.11.2, 8.12.2, 8.13.2]
         include:
-          - coq: 8.10.2
-            equations: 1.2+8.10
           - coq: 8.11.2
             equations: 1.2.4+8.11
           - coq: 8.12.2
