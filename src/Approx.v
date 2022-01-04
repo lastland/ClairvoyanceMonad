@@ -35,6 +35,9 @@ Set Typeclasses Strict Resolution.
 Class LessDefined a := less_defined : a -> a -> Prop.
 Infix "`less_defined`" := less_defined (at level 42).
 
+#[global] Instance RewriteRelation_less_defined {a} `{LessDefined a}
+  : RewriteRelation (less_defined (a := a)) := {}.
+
 Inductive LessDefined_T {a : Type} `{LessDefined a} : LessDefined (T a) :=
 | LessDefined_Undefined x : Undefined `less_defined` x
 | LessDefined_Thunk x y :
