@@ -1,8 +1,17 @@
+(** * Ordering between clairvoyant computations *)
+
 From Coq Require Import Arith Setoid.
 From Clairvoyance Require Import Core Approx.
 
-Create HintDb mon.
+(** A clairvoyant computation [u] is less defined than [v] if, whenever
+  [u] produces a result [x] in time [n], [v] can produce a result [y] at least
+  as defined as [x] in time at most [n].
 
+  The nondeterministic results of a clairvoyant computation should be thought
+  of as underapproximations of the behavior of a corresponding lazy computation
+  (understood in the "natural" stateful sense):
+  if [u] produces a result [(x,n)], that means that [u] models a lazy computation
+  which may produce a result at least as defined as [x] in time at most [n]. *)
 Record less_defined_M {a} `{LessDefined a} (u v : M a) : Prop :=
   { less_defined_M_def :
     u {{ fun x n =>
@@ -48,6 +57,7 @@ Proof.
   apply Nat.add_le_mono_l; assumption.
 Qed.
 
+(** [optimistic u k] is monotonic over [u], when the postcondition [k] is upward-closed. *)
 Lemma optimistic_corelax {a} `{LessDefined a} (u u' : M a) (k : a -> nat -> Prop)
   : u `less_defined` u' -> uc k ->
     u [[ k ]] -> u' [[ k ]].
@@ -57,6 +67,8 @@ Proof.
   eapply optimistic_mon; [ apply Hx | cbn; intros ? ? HH ].
   revert Hn; apply Hk; apply HH.
 Qed.
+
+(** * Monotonicity of the core combinators *)
 
 Lemma ret_mon {a} `{LessDefined a}
   : forall x y : a, x `less_defined` y -> ret x `less_defined` ret y.
@@ -111,11 +123,16 @@ Proof.
   - apply optimistic_skip. split; [ reflexivity | auto ].
 Qed.
 
-Lemma bot_mon {a} `{LessDefined a} (u : M a)
+Lemma bot_M {a} `{LessDefined a} (u : M a)
   : (fun _ _ => False) `less_defined` u.
 Proof.
   constructor; hnf; contradiction.
 Qed.
+
+(* Monotonicity lemmas *)
+Create HintDb mon.
+
+#[global] Hint Resolve ret_mon bind_mon forcing_mon force_mon thunk_mon bot_M : mon.
 
 Ltac solve_mon :=
   repeat
@@ -140,7 +157,7 @@ Ltac solve_mon :=
       | [ |- less_defined (forcing _ _) (forcing _ _) ] => apply forcing_mon; [ | intros ? ? ? ]
       | [ |- less_defined (force _) (force _) ] => apply force_mon
       | [ |- less_defined (thunk ?u) (thunk ?v) ] => apply (thunk_mon u v)
-      | [ |- less_defined (fun _ _ => False) _ ] => apply bot_mon
+      | [ |- less_defined (fun _ _ => False) _ ] => apply bot_M
       end
     | [ |- less_defined _ _ ] => constructor
     end).
