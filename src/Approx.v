@@ -52,11 +52,10 @@ Instance LessDefined_T {a} `{LessDefined a} : LessDefined (T a) := less_defined_
 
 #[global] Hint Unfold LessDefined_T : core.
 
-Definition less_defined_M {a} `{LessDefined  a} (u v : M a) : Prop :=
+#[global] Instance LessDefined_M {a} `{LessDefined a} : LessDefined (M a) :=
+  fun u v =>
   u {{ fun x n =>
   v [[ fun y m => x `less_defined` y /\ m <= n ]] }}.
-
-#[global] Instance LessDefined_M {a} `{LessDefined a} : LessDefined (M a) := less_defined_M.
 
 (* Upward closed predicates *)
 Definition uc {a} `{LessDefined a} (k : a -> nat -> Prop) : Prop :=

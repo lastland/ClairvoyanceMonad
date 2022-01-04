@@ -717,7 +717,7 @@ Proof.
     1,2: inversion H; inversion H4; subst; constructor; auto.
     inversion H5; constructor; auto.
   - intros x y [z [ Hx Hy] ]; revert y Hy; induction Hx; intros ?; inversion 1; subst; cbn;
-      constructor; reflexivity + auto.
+      constructor; auto.
     1,2: inversion H; inversion H3; constructor; reflexivity + auto.
     inversion H4; subst; constructor; [ reflexivity | auto ].
   - intros x y [z [Hx Hy] ]; revert x Hx; induction Hy; intros ?; inversion 1; subst; cbn;
