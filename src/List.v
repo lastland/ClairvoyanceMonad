@@ -189,7 +189,8 @@ Qed.
 
 Create HintDb exact.
 
-#[global] Hint Rewrite @exact_list_unfold_nil @exact_list_unfold_cons
+(* #[global] *)
+Hint Rewrite @exact_list_unfold_nil @exact_list_unfold_cons
   @exact_list_unfold_nil_T @exact_list_unfold_cons_T : exact.
 
 Unset Elimination Schemes.
