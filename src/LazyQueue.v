@@ -5,7 +5,7 @@ KNOWN
 - Clairvoyant-monadic implementation: [QueueA], [emptyA], [pushA], [popA]
 
 NEW
-- Demand functions: [emptyA'], [pushD], [popD]
+- Demand functions: [pushD], [popD]
 - (Physicist's method) Debt/negative potential: [debt]
 - Amortized cost specifications: [pushA_cost], [popA_cost]
 - Trees ("API traces" with sharing): [tree], [run_tree]
@@ -130,10 +130,18 @@ Proof.
   constructor; cbn; reflexivity.
 Qed.
 
+Lemma length_append {a} (xs ys : list a) : length (append xs ys) = length xs + length ys.
+Proof.
+  induction xs; cbn; lia.
+Qed.
+
 Lemma well_formed_mkQueue {a} nf (f : list a) nb b
   : nf = length f -> nb = length b -> well_formed (mkQueue nf f nb b).
 Proof.
-Admitted.
+  unfold mkQueue; destruct (Nat.ltb_spec nf nb); intros; subst; constructor; cbn; auto.
+  - lia.
+  - rewrite length_append,rev_length; reflexivity.
+Qed.
 
 Lemma well_formed_push {a} (q : Queue a) (x : a) : well_formed q -> well_formed (push q x).
 Proof.
@@ -213,9 +221,9 @@ Definition mkQueueD {a} (nfront : nat) (front : list a) (nback : nat) (back : li
     (frontD, backD)
   else (frontA outD, backA outD).
 
-Definition emptyA' {a} : T (QueueA a) := Thunk (MkQueueA 0 (Thunk NilA) 0 (Thunk NilA)).
+Definition emptyX {a} : T (QueueA a) := Thunk (MkQueueA 0 (Thunk NilA) 0 (Thunk NilA)).
 
-Definition tailA' {a} (xs : T (listA a)) : T (listA a) :=
+Definition tailX {a} (xs : T (listA a)) : T (listA a) :=
   match xs with
   | Thunk (ConsA _ xs) => xs
   | _ => Undefined
@@ -225,7 +233,7 @@ Definition tailA' {a} (xs : T (listA a)) : T (listA a) :=
    [Thunk]. *)
 Definition pushD {a} (q : Queue a) (x : a) (outD : QueueA a) : T (QueueA a) * T a :=
   let '(frontD, backD) := mkQueueD (nfront q) (front q) (S (nback q)) (x :: back q) outD in
-  (Thunk (MkQueueA (nfront q) frontD (nback q) (tailA' backD)), Thunk x).
+  (Thunk (MkQueueA (nfront q) frontD (nback q) (tailX backD)), Thunk x).
 
 Definition popD {a} (q : Queue a) (outD : option (T a * T (QueueA a))) : T (QueueA a) :=
   match front q, outD with
@@ -248,14 +256,14 @@ Lemma mkQueueD_approx {a} nf (f : list a) nb b (outD : QueueA a)
 Proof.
 Admitted.
 
-Lemma tailA'_mon {a} (xs xs' : T (listA a))
-  : xs `less_defined` xs' -> tailA' xs `less_defined` tailA' xs'.
+Lemma tailX_mon {a} (xs xs' : T (listA a))
+  : xs `less_defined` xs' -> tailX xs `less_defined` tailX xs'.
 Proof.
   destruct 1 as [ | ? ? [ | ] ]; cbn; auto.
 Qed.
 
-#[global] Instance Proper_tailA' {a} : Proper (less_defined ==> less_defined) (@tailA' a).
-Proof. exact (@tailA'_mon a). Qed.
+#[global] Instance Proper_tailX {a} : Proper (less_defined ==> less_defined) (@tailX a).
+Proof. exact (@tailX_mon a). Qed.
 
 From Equations Require Import Equations.
 
@@ -278,12 +286,29 @@ Qed.
 Lemma appendD_approx {a} (xs ys : list a) (outD : _)
   : outD `is_approx` append xs ys -> appendD xs ys outD `is_approx` (xs, ys).
 Proof.
-Admitted.
+  revert outD; induction xs; cbn.
+  - intros; solve_approx idtac.
+  - unfold is_approx; autorewrite with exact; intros. inversion H; subst.
+    inversion H4; subst; cbn.
+    + constructor; cbn; constructor. autorewrite with exact. constructor; auto; constructor.
+    + specialize (IHxs _ H2); inversion IHxs; subst.
+      destruct appendD; cbn in *. solve_approx idtac. cbn. autorewrite with exact.
+      constructor; auto.
+Qed.
 
 Lemma popD_approx {a} (q : Queue a) (outD : _)
   : outD `is_approx` pop q -> popD q outD `is_approx` q.
 Proof.
-Admitted.
+  unfold pop, popD. destruct front eqn:Ef; cbn; inversion 1; subst.
+  - red; reflexivity.
+  - destruct x; destruct H2; cbn in *.
+    inversion snd_rel; subst; cbn.
+    + constructor. constructor; cbn; auto; constructor. rewrite Ef; autorewrite with exact.
+      constructor; auto. constructor.
+    + apply mkQueueD_approx in H2. destruct mkQueueD eqn:Em.
+      destruct H2; cbn in *. constructor; constructor; cbn; auto.
+      rewrite Ef; autorewrite with exact. constructor; constructor; auto.
+Qed.
 
 Lemma popD_approx_Some {a} (q q' : Queue a) x (outD : _)
   : pop q = Some (x, q') -> outD `is_approx` (x, q') -> popD q (Some outD) `is_approx` q.
@@ -321,55 +346,81 @@ Qed.
 (* The following theorems relate the demand functions to the approximation functions.
    Given the output demand, we compute the input demand, and we expect that
    running the function on those input demands will (optimistically) yield a
-   result at least as defined as the output demand. *)
+   result at least as defined as the output demand.
+
+   These are subsumed by the [_cost] lemmas. *)
 
 Lemma appendD_spec {a} (xs ys : list a) (outD : listA a)
   : forall xsD ysD, (xsD, ysD) = appendD xs ys outD ->
     appendA xsD ysD [[ fun out _ => outD `less_defined` out ]].
 Proof.
-Admitted.
+Abort.
 
 Lemma pushD_spec {a} (q : Queue a) (x : a) (outD : QueueA a)
   : well_formed q ->
     forall qD xD, (qD, xD) = pushD q x outD ->
     pushA qD xD [[ fun out _ => outD `less_defined` out ]].
 Proof.
-Admitted.
+Abort.
 
 Lemma popD_spec {a} (q : Queue a) (outD : option (T a * T (QueueA a)))
   : well_formed q ->
     let qD := popD q outD in
     popA qD [[ fun out _ => outD `less_defined` out ]].
 Proof.
-Admitted.
+Abort.
 
 (* Monotonicity: There should also be properties that making inputs of approximation functions
    more defined makes the output more defined. These can be used to generalize the
    demand specifications above to inputs greater than the input demand. *)
+
+Lemma appendA__mon {a} (xsA xsA' : listA a) (ysA ysA' : T (listA a))
+  : xsA `less_defined` xsA' ->
+    ysA `less_defined` ysA' ->
+    append_ xsA  ysA `less_defined` append_ xsA' ysA'.
+Proof.
+  intros Hxs; revert ysA ysA'; induction Hxs; intros * Hys; cbn; solve_mon.
+Qed.
+
+#[global] Hint Resolve appendA__mon : mon.
 
 Lemma appendA_mon {a} (xsA xsA' ysA ysA' : T (listA a))
   : xsA `less_defined` xsA' ->
     ysA `less_defined` ysA' ->
     appendA xsA  ysA `less_defined` appendA xsA' ysA'.
 Proof.
-Admitted.
+  intros; unfold appendA; solve_mon.
+Qed.
 
 #[global] Hint Resolve appendA_mon : mon.
+
+Lemma revA__mon {a} (xsA xsA' : listA a) (ysA ysA' : T (listA a))
+  : xsA `less_defined` xsA' ->
+    ysA `less_defined` ysA' ->
+    revA_ xsA ysA `less_defined` revA_ xsA' ysA'.
+Proof.
+  intros Hxs; revert ysA ysA'; induction Hxs; intros * Hys; cbn; solve_mon.
+Qed.
+
+#[global] Hint Resolve revA__mon : mon.
 
 Lemma revA_mon {a} (xsA xsA' : T (listA a))
   : xsA `less_defined` xsA' ->
     revA xsA `less_defined` revA xsA'.
 Proof.
-Admitted.
+  intros; unfold revA; solve_mon.
+Qed.
 
 #[global] Hint Resolve revA_mon : mon.
 
-Lemma mkQueueA_mon {a} (nf nb : nat) (f f' b b' : T (listA a))
-  : f `less_defined` f' ->
+Lemma mkQueueA_mon {a} (nf nf' nb nb' : nat) (f f' b b' : T (listA a))
+  : nf = nf' ->
+    f `less_defined` f' ->
     b `less_defined` b' ->
-    mkQueueA nf f nb b `less_defined` mkQueueA nf f' nb b'.
+    nb = nb' ->
+    mkQueueA nf f nb b `less_defined` mkQueueA nf' f' nb' b'.
 Proof.
-  intros; unfold mkQueueA; solve_mon.
+  intros; subst; unfold mkQueueA; solve_mon.
 Qed.
 
 #[global] Hint Resolve mkQueueA_mon : mon.
@@ -380,13 +431,16 @@ Lemma pushA_mon {a} (qA qA' : T (QueueA a)) xA xA'
     pushA qA xA `less_defined` pushA qA' xA'.
 Proof.
   intros; unfold pushA. solve_mon.
-Admitted.
+  apply mkQueueA_mon; auto.
+Qed.
 
 Lemma popA_mon {a} (qA qA' : T (QueueA a))
   : qA `less_defined` qA' ->
     popA qA `less_defined` popA qA'.
 Proof.
-Admitted.
+  intros; unfold popA. solve_mon.
+  apply mkQueueA_mon; auto.
+Qed.
 
 (**)
 
