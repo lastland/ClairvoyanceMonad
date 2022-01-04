@@ -43,7 +43,7 @@ Record Queue (a : Type) : Type := MkQueue
   }.
 
 Definition mkQueue {a} (fn : nat) (f : list a) (bn : nat) (b : list a) : Queue a :=
-  if fn <? bn then {| nfront := fn + bn ; front := f ++ rev b ; nback := 0 ; back := [] |}
+  if fn <? bn then {| nfront := fn + bn ; front := append f (rev b) ; nback := 0 ; back := [] |}
   else {| nfront := fn ; front := f ; nback := bn ; back := b |}.
 
 Definition empty {a} : Queue a := MkQueue 0 [] 0 [].
@@ -227,11 +227,13 @@ Definition pushD {a} (q : Queue a) (x : a) (outD : QueueA a) : T (QueueA a) * T 
 Definition popD {a} (q : Queue a) (outD : option (T a * T (QueueA a))) : T (QueueA a) :=
   match front q, outD with
   | [], _ => exact q  (* The queue is empty so the "whole queue" must be a fixed value. *)
-  | x :: f, Some (xA, pop_qA) => Thunk (MkQueueA
+  | x :: f, Some (xA, pop_qA) =>
+    let '(fD, bD) := thunkD (mkQueueD (pred (nfront q)) f (nback q) (back q)) pop_qA in
+    Thunk (MkQueueA
       (nfront q)
-      (Thunk (ConsA xA (thunkD frontA pop_qA)))
+      (Thunk (ConsA xA fD))
       (nback q)
-      (thunkD backA pop_qA))
+      bD)
   | _, _ => bottom
   end.
 
@@ -270,6 +272,11 @@ Proof.
   - constructor; reflexivity.
 Qed.
 
+Lemma appendD_approx {a} (xs ys : list a) (outD : _)
+  : outD `is_approx` append xs ys -> appendD xs ys outD `is_approx` (xs, ys).
+Proof.
+Admitted.
+
 Lemma popD_approx {a} (q : Queue a) (outD : _)
   : outD `is_approx` pop q -> popD q outD `is_approx` q.
 Proof.
@@ -279,6 +286,33 @@ Lemma popD_approx_Some {a} (q q' : Queue a) x (outD : _)
   : pop q = Some (x, q') -> outD `is_approx` (x, q') -> popD q (Some outD) `is_approx` q.
 Proof.
   intros Hpop Hout; apply popD_approx. rewrite Hpop. constructor. apply Hout.
+Qed.
+
+Lemma appendD_size {a} (xs ys : list a) (outD : _)
+  : outD `is_approx` append xs ys ->
+    let xy := appendD xs ys outD in
+    sizeX' 0 outD = sizeX (sizeX 0 (snd xy)) (fst xy).
+Proof.
+  revert outD; induction xs; cbn; intros; [ reflexivity | ].
+  destruct outD as [ | ? [] ]; cbn; [ reflexivity | | reflexivity ].
+  rewrite IHxs.
+  - destruct appendD as [ [] ? ] eqn:E; cbn; reflexivity.
+  - inversion H; subst. inversion H5; subst. auto.
+Qed.
+
+Lemma appendD_Thunk_r {a} (xs ys : list a) (outD : _)
+  : outD `is_approx` append xs ys ->
+    forall xsA ysA, (xsA, Thunk ysA) = appendD xs ys outD ->
+    sizeX 0 xsA = length xs.
+Proof.
+  revert outD; induction xs; cbn; intros outD Hout xsA ysA H.
+  - inversion H; reflexivity.
+  - inversion Hout; subst.
+    inversion H4; subst; cbn in H.
+    + inversion H.
+    + destruct appendD eqn:ED in H; inversion H; subst; cbn.
+      erewrite <- IHxs by eauto.
+      destruct t as [ xs' | ]; reflexivity.
 Qed.
 
 (* The following theorems relate the demand functions to the approximation functions.
@@ -381,11 +415,150 @@ Class Debitable a : Type :=
    We then generalize them by monotonicity into [pushA_cost'] and [popA_cost'],
    where the input doesn't have to be exactly equal to the input demand. *)
 
+Opaque Nat.mul Nat.add Nat.sub.
+
+Lemma revA__cost {a} (xs ys : list a)
+  : revA_ (exact xs) (exact ys) [[ fun out cost =>
+      out = exact (rev_append xs ys) /\ cost = length xs + 1 ]].
+Proof.
+  revert ys; induction xs; [ rewrite exact_list_unfold_nil | rewrite exact_list_unfold_cons ];
+    intros; mgo'.
+  apply optimistic_thunk_go; mgo'.
+  specialize (IHxs (a0 :: ys)). unfold exact at 2, Exact_T in IHxs.
+  rewrite exact_list_unfold_cons in IHxs.
+  relax; [ exact IHxs | ]. cbn; intros * [ ? -> ]; split; [auto | lia].
+Qed.
+
+Lemma revA_cost {a} (xs : list a)
+  : revA (exact xs) [[ fun out cost =>
+      out = exact (rev_append xs []) /\ cost = length xs + 1 ]].
+Proof.
+  unfold revA; mgo'. apply optimistic_thunk_go; mgo'. apply (revA__cost xs nil).
+Qed.
+
+Lemma appendA_cost {a} (xs ys : list a) outD
+  : outD `is_approx` append xs ys ->
+    forall xsA ysA, (xsA, ysA) = appendD xs ys outD ->
+    appendA xsA ysA [[ fun out cost =>
+      outD `less_defined` out /\ cost <= sizeX 1 xsA ]].
+Proof.
+  revert outD; induction xs; cbn; intros outD Hout * H.
+  - inversion H; subst. cbn. mgo'. split; [ reflexivity | lia ].
+  - inversion Hout; subst.
+    destruct thunkD eqn:ED in H. inversion H; subst.
+    cbn; repeat mforward idtac.
+    inversion H4; subst.
+    + apply optimistic_skip. mgo'. split; [reflexivity | lia].
+    + apply optimistic_thunk_go. relax; [apply IHxs; eauto| cbn; intros ].
+      mforward idtac. split; [ constructor; [reflexivity | constructor; apply H0] | ].
+      destruct t; cbn in H0; lia.
+Qed.
+
+Lemma appendA_cost' {a} (xs ys : list a) outD
+  : outD `is_approx` append xs ys ->
+    forall xsA ysA, (xsA, ysA) = appendD xs ys outD ->
+    forall xsA' ysA', xsA `less_defined` xsA' -> ysA `less_defined` ysA' ->
+    appendA xsA' ysA' [[ fun out cost =>
+      outD `less_defined` out /\ cost <= sizeX 1 xsA ]].
+Proof.
+  intros. eapply optimistic_corelax.
+  - eapply appendA_mon; eassumption.
+  - red; intros * ? ? []; split; etransitivity; eauto.
+  - eauto using appendA_cost.
+Qed.
+
+Lemma size_approx {a} (xs : list a) (xsA : T (listA a))
+  : xsA `is_approx` xs -> sizeX 0 xsA <= length xs.
+Proof.
+  revert xsA; induction xs; intros *; inversion 1; subst; cbn; try lia.
+  - inversion H2; cbn; lia.
+  - inversion H2; subst; cbn. inversion H5; subst; cbn. lia.
+    apply le_n_S. eapply (IHxs (Thunk x)); auto.
+Qed.
+
+Lemma sizeX_up {a} (xs : T (listA a)) n : sizeX n xs <= sizeX 0 xs + n.
+Proof.
+  destruct xs as [ xs | ]; cbn; [ | lia ].
+  induction xs; cbn; lia.
+Qed.
+
+Lemma sizeX_down {a} (xs : T (listA a)) n : sizeX 0 xs <= sizeX n xs.
+Proof.
+  destruct xs as [ xs | ]; cbn; [ | lia ].
+  induction xs; cbn; lia.
+Qed.
+
+Lemma mkQueueA_cost {a} (nf : nat) (f : list a) (nb : nat) (b : list a) (outD : QueueA a)
+  : nf = length f /\ nb = length b /\ nb <= nf + 1 -> outD `is_approx` mkQueue nf f nb b ->
+    forall fA bA, (fA, bA) = mkQueueD nf f nb b outD ->
+    mkQueueA nf fA nb bA [[ fun out cost =>
+      outD `less_defined` out /\ 2 * sizeX 0 fA - 2 * nb + cost <= 4 + debt outD  ]].
+Proof.
+  unfold mkQueue, mkQueueA, mkQueueD.
+  intros (Hf & Hb & Hbf) Hout * HmkQ.
+  destruct (Nat.ltb_spec nf nb); repeat mforward idtac.
+  - destruct thunkD eqn:ED in HmkQ. inversion HmkQ; subst; clear HmkQ.
+    destruct t0; cbn.
+    + apply optimistic_thunk_go.
+      relax; [ apply revA_cost | cbn; intros * [] ].
+      mforward idtac.
+      apply optimistic_thunk_go.
+      destruct frontA eqn:Ef in ED; cbn in ED; [ | inversion ED ].
+      inversion Hout; cbn in *. rewrite Ef in ld_front0.
+      inversion ld_front0; subst; clear ld_front0.
+      assert (APX := appendD_approx H4).
+      rewrite ED in APX. destruct APX as [APX1 APX2]; cbn in *; inversion APX2; subst.
+      relax.
+      { eapply appendA_cost'; eauto. { reflexivity. }
+        { constructor; auto. rewrite <- rev_alt; auto. } }
+      cbn; intros * []. mforward idtac. split.
+      * constructor; auto. cbn. rewrite Ef; constructor; auto.
+      * unfold debt, Debitable_QueueA.
+        rewrite Ef. cbn. erewrite appendD_size by eauto.
+        rewrite ED; cbn.
+        rewrite (size_approx (xs := f)) by assumption.
+        rewrite sizeX_up in H1.
+        rewrite <- sizeX_down.
+        rewrite ld_nback0.
+        assert (sizeX 0 t = length f). { eapply appendD_Thunk_r; eauto. }
+        lia.
+    + apply optimistic_skip; mforward idtac.
+      inversion Hout; cbn in *.
+      destruct frontA eqn:Ef in *; cbn in ED.
+      * apply optimistic_thunk_go.
+        inversion ld_front0; subst; clear ld_front0.
+        relax.
+        { eapply appendA_cost'; eauto; reflexivity. }
+        cbn; intros * []. mforward idtac. split.
+        ** constructor; cbn; auto. rewrite Ef; constructor; auto.
+        ** unfold debt, Debitable_QueueA.
+           rewrite ld_nback0. rewrite Ef; cbn; erewrite appendD_size by eauto.
+           rewrite ED; cbn. rewrite sizeX_up in H1.
+            assert (sizeX 0 t <= length f).
+            { apply size_approx. apply appendD_approx in H2.
+              rewrite ED in H2. apply H2. }
+            lia.
+      * apply optimistic_skip. mforward idtac. cbn.
+        split; [ constructor; cbn; eauto; rewrite Ef; auto | ].
+        inversion ED; subst; cbn. lia.
+  - unfold debt, Debitable_QueueA.
+    inversion HmkQ; subst. split; [ constructor; cbn; reflexivity + apply Hout | ].
+    inversion Hout; cbn in *. lia.
+Qed.
+
+Lemma mkQueueA_cost' {a} (nf : nat) (f : list a) (nb : nat) (b : list a) (outD : QueueA a)
+  : forall fA bA, (fA, bA) = mkQueueD nf f nb b outD ->
+    forall fA' bA', fA `less_defined` fA' -> bA `less_defined` bA' ->
+    mkQueueA nf fA' nb bA' [[ fun out cost =>
+      outD `less_defined` out /\ 2 * sizeX 0 fA - 2 * nb + cost <= 4 + debt outD ]].
+Proof.
+Admitted.
+
 Lemma pushA_cost {a} (q : Queue a) (x : a) (outD : QueueA a)
   : well_formed q ->
     forall qA xA, (qA, xA) = pushD q x outD ->
     pushA qA xA [[ fun out cost =>
-      outD `less_defined` out /\ debt qA + cost <= 4 + debt outD ]].
+      outD `less_defined` out /\ debt qA + cost <= 7 + debt outD ]].
 Proof.
 Admitted.
 
@@ -394,7 +567,7 @@ Lemma pushA_cost' {a} (q : Queue a) (x : a) (outD : QueueA a)
     forall qA xA, (qA, xA) = pushD q x outD ->
     forall qA', qA `less_defined` qA' ->
     pushA qA' xA [[ fun out cost =>
-      outD `less_defined` out /\ debt qA + cost <= 4 + debt outD ]].
+      outD `less_defined` out /\ debt qA + cost <= 7 + debt outD ]].
 Proof.
   intros. eapply optimistic_corelax.
   - eapply pushA_mon. eassumption. reflexivity.
@@ -404,24 +577,50 @@ Qed.
 
 Lemma popA_cost {a} (q : Queue a) (outD : option (T a * T (QueueA a)))
   : well_formed q ->
+    outD `is_approx` pop q ->
     let qA := popD q outD in
     popA qA [[ fun out cost =>
-      outD `less_defined` out /\ debt qA + cost <= 4 + debt outD ]].
+      outD `less_defined` out /\ debt qA + cost <= 7 + debt outD ]].
 Proof.
-Admitted.
+  intros Wq Hout; unfold popA. mgo'.
+  unfold popD; unfold pop in Hout. destruct (front q) eqn:Ef.
+  - cbn. repeat (mforward idtac; cbn).
+    let q' := eval unfold exact, Exact_Queue in (exact q) in change (exact q) with q'.
+    rewrite Ef. simp exact_listA. mforward idtac.
+    rewrite exact_list_unfold_nil. mforward idtac.
+    split; cbn; auto. unfold debt, Debitable_QueueA; cbn. rewrite exact_list_unfold_nil. cbn. lia.
+  - inversion Hout; subst. destruct H1 as [Hfst Hsnd]; destruct x as [x' q']; cbn in *.
+    destruct thunkD eqn:EmkQ. cbn.
+    repeat (mforward idtac; cbn). inversion Hsnd; subst; cbn in *.
+    + apply optimistic_skip. mforward idtac; cbn [thunkD bottom Bottom_T].
+      split; [ reflexivity | ]. inversion EmkQ; subst. unfold debt, Debitable_QueueA. cbn.
+      lia.
+    + apply optimistic_thunk_go; cbn.
+      assert (HQ := @mkQueueA_cost _ (pred (nfront q)) l (nback q) (back q) x).
+      eassert (HQH : _); [ | specialize (HQ HQH) ].
+      { destruct Wq. inversion Hout; cbn in *; subst. rewrite Ef in *; cbn in *.
+        lia. }
+      relax; [ eapply mkQueueA_cost; eauto | ].
+      cbn; intros * [HH HH']. mforward idtac.
+      split; [ constructor; constructor; cbn; [ reflexivity | constructor; apply HH ] | ].
+      revert HH'.
+      unfold debt, Debitable_QueueA; cbn.
+      destruct t; cbn; try lia.
+Qed.
 
 Lemma popA_cost' {a} (q : Queue a) (outD : option (T a * T (QueueA a)))
   : well_formed q ->
+    outD `is_approx` pop q ->
     let qA := popD q outD in
     forall qA', qA `less_defined` qA' ->
     popA qA' [[ fun out cost =>
-      outD `less_defined` out /\ debt qA + cost <= 4 + debt outD ]].
+      outD `less_defined` out /\ debt qA + cost <= 7 + debt outD ]].
 Proof.
   intros.
   eapply optimistic_corelax.
   - eapply popA_mon. eassumption.
   - red. intros * ? ? []; split; etransitivity; try eassumption. lia.
-  - apply popA_cost. assumption.
+  - apply popA_cost; assumption.
 Qed.
 
 (* We want to be able to prove that in any usage of this queue, operations have
@@ -470,7 +669,7 @@ Fixpoint size_tree {a} (t : tree a) : nat :=
 Definition GOOD_QUEUE : Prop :=
   forall a (t : tree a),
     (let~ _empty := emptyA in
-     run_tree t _empty) [[ fun _ n => n <= 4 * size_tree t ]].
+     run_tree t _empty) [[ fun _ n => n <= 7 * size_tree t ]].
 
 (* The proof: we first compute the demand. *)
 
@@ -586,6 +785,7 @@ Qed.
 #[global] Instance LubDebt_QueueA {a} : LubDebt (QueueA a).
 Proof.
   intros q1 q2 [q3 [ [] [] ] ]; cbn.
+  unfold debt, Debitable_QueueA; cbn.
   repeat match goal with
   | H : _ = _ |- _ => rewrite H
   end. rewrite !sizeX_lub. lia.
@@ -613,13 +813,6 @@ Instance Proper_fst_less_defined {a b} `{LessDefined a,LessDefined b}
 Proof.
   intros ? ? [H1 ?]; exact H1.
 Qed.
-
-#[global]
-Instance Proper_thunkD {a b} `{BottomLeast b} (f : a -> b)
-  : Proper (less_defined ==> less_defined) (thunkD f).
-Proof.
-  intros ? ? []; cbn; [ apply bottom_least | ].
-Admitted.
 
 Lemma demand_tree_approx {a} (t : tree a) q
   : demand_tree t q `is_approx` q.
@@ -651,7 +844,7 @@ Qed.
 Lemma run_tree_cost {a} (t : tree a) (q : Queue a) (qA : T (QueueA a))
   : well_formed q ->
     demand_tree t q `less_defined` qA ->
-    run_tree t qA [[ fun _ n => debt (demand_tree t q) + n <= 4 * size_tree t ]].
+    run_tree t qA [[ fun _ n => debt (demand_tree t q) + n <= 7 * size_tree t ]].
 Proof.
 Opaque Nat.mul Nat.add.
   revert q qA; induction t; cbn; intros q qA wf_q ld_q.
@@ -670,6 +863,11 @@ Opaque Nat.mul Nat.add.
     { eapply @popA_cost' with (outD :=
         match pop q with Some (x, q') => Some (Thunk x, demand_tree t q') | None => None end).
       { eassumption. }
+      { destruct (pop q) as [ [? ?] | ] eqn:Ep.
+        - constructor. constructor; cbn.
+          + constructor. eauto.
+          + apply demand_tree_approx.
+        - constructor. }
       destruct (pop q) as [ [? ?] | ] eqn:Ep; [ specialize (WF _ _ eq_refl) | ].
       - assumption.
       - rewrite (pop_popD Ep). assumption.

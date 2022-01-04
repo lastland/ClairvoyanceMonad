@@ -169,6 +169,18 @@ Instance Exact_list {a b} `{Exact a b} : Exact (list a) (listA b) :=
 
 #[global] Hint Unfold Exact_list : core.
 
+Lemma exact_list_unfold_nil {a b} `{Exact a b}
+  : exact (@nil a) = (@NilA b).
+Proof.
+  unfold exact; simp exact_listA; reflexivity.
+Qed.
+
+Lemma exact_list_unfold_cons {a b} `{Exact a b} (x : a) (xs : list a)
+  : exact (x :: xs) = ConsA (exact x) (exact xs).
+Proof.
+  unfold exact; simp exact_listA; reflexivity.
+Qed.
+
 Unset Elimination Schemes.
 
 Inductive less_defined_list {a : Type} `{LessDefined a} : listA a -> listA a -> Prop :=
@@ -251,7 +263,9 @@ Proof.
   - apply @exact_max_listA; auto.
 Qed.
 
-Ltac mgo_list := mgo ltac:(simp exact_listA).
+Ltac mgo_list := mgo ltac:(unfold exact; simp exact_listA).
+
+#[global] Hint Unfold id : core.
 
 (* ----------------- Section 5.4 ----------------- *)
 
@@ -424,15 +438,15 @@ Proof.
   - intros xs. induction xs as [ | x xs IH ]; mgo_list.
     + relax_apply @revA_cost. cbn; intros; lia.
     + inversion H5; subst. relax.
-      eapply IHn with (acc:=x :: acc); try eassumption.
-      constructor. repeat autounfold. simp exact_listA.
-      constructor; assumption.
-      cbn; intros. lia.
+      { eapply IHn with (acc:=x :: acc); try eassumption.
+        constructor. rewrite exact_list_unfold_cons.
+        solve_approx idtac. }
+      { cbn; intros. lia. }
     + inversion H5; subst. relax.
       eapply IHn with (acc:=x :: acc); try eassumption. constructor.
       cbn; intros. lia.
 Qed.
-  
+
 (** The pessimistic specification for [takeA] and the proof that [takeA]
     satisfies the spec, as stated in the paper. *)
 Definition takeA__pessim {a} : 

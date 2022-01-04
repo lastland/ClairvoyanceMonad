@@ -22,8 +22,6 @@ Definition is_defined {a} (t : T a) : Prop :=
 (** * [exact] *)
 Class Exact a b : Type := exact : a -> b.
 
-#[global] Hint Unfold exact : core.
-
 #[global]
 Instance Exact_T {a b} {r: Exact a b} : Exact a (T b) 
   := fun x => Thunk (exact x).
@@ -39,7 +37,7 @@ Set Typeclasses Strict Resolution.
 Class LessDefined a := less_defined : a -> a -> Prop.
 Infix "`less_defined`" := less_defined (at level 42).
 
-#[global] Hint Unfold less_defined : core.
+#[global] Hint Unfold less_defined.
 
 Inductive less_defined_T {a : Type} `{LessDefined a} : relation (T a) :=
 | LessDefined_Undefined :
@@ -378,6 +376,7 @@ Ltac invert_eq :=
 Ltac solve_approx tac :=
   repeat (match goal with
           | _ => solve [auto]
+          | [ |- _ `less_defined` _ ] => try constructor
           | [ |- _ `is_approx` _ ] =>
             repeat autounfold; tac
           | [ |- is_defined (Thunk _) ] =>
