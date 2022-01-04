@@ -250,6 +250,59 @@ Class BottomLeast a `{LessDefined a,Bottom a} : Prop :=
 #[global] Instance BottomLeast_t {a} `{LessDefined a} : BottomLeast (T a).
 Proof. constructor. Qed.
 
+(** * Deriving instances via isomorphisms *)
+
+Unset Typeclasses Strict Resolution.
+
+(** Bijection between [a] and [b]. *)
+Class Rep (a b : Type) : Type :=
+  { to_rep : a -> b
+  ; from_rep : b -> a
+  }.
+
+(** Laws of a bijection *)
+Class RepLaw (a b : Type) `{Rep a b} : Prop :=
+  { to_from : forall x, to_rep (from_rep x) = x
+  ; from_to : forall x, from_rep (to_rep x) = x
+  }.
+
+Class LessDefinedRep a b `{REP : Rep a b, LessDefined a, LessDefined b} : Prop :=
+  to_rep_less_defined : forall x y : a, less_defined x y <-> less_defined (a := b) (to_rep x) (to_rep y).
+
+Lemma Reflexive_Rep {a b} `{LessDefinedRep a b} `{!Reflexive (less_defined (a := b))}
+  : Reflexive (less_defined (a := a)).
+Proof.
+  unfold Reflexive. intros ?. apply to_rep_less_defined. reflexivity.
+Qed.
+
+Lemma Transitive_Rep {a b} `{LessDefinedRep a b} `{!Transitive (less_defined (a := b))}
+  : Transitive (less_defined (a := a)).
+Proof.
+  unfold Transitive; intros *. rewrite 3 to_rep_less_defined. apply transitivity.
+Qed.
+
+Lemma PreOrder_Rep {a b} `{LessDefinedRep a b} `{!PreOrder (less_defined (a := b))}
+  : PreOrder (less_defined (a := a)).
+Proof.
+  constructor; auto using Reflexive_Rep, Transitive_Rep.
+Qed.
+
+Class LubRep a b `{Rep a b,Lub a,Lub b} : Prop :=
+  to_rep_lub : forall x y : a, to_rep (lub x y) = lub (to_rep x) (to_rep y).
+
+Lemma to_rep_cobounded {a b} `{LessDefinedRep a b}
+  : forall x y : a, Basics.impl (cobounded x y) (cobounded (a := b) (to_rep x) (to_rep y)).
+Proof.
+  intros x y [z [Hx Hy] ]; exists (to_rep z); rewrite <- 2 to_rep_less_defined; auto.
+Qed.
+
+Lemma LubLaw_LubRep {a b} `{LubRep a b,LessDefinedRep a b (REP := _),LL: !LubLaw b} : LubLaw a.
+Proof.
+  constructor; intros *; rewrite ?to_rep_cobounded, 3? to_rep_less_defined, to_rep_lub; apply LL.
+Qed.
+
+Set Typeclasses Strict Resolution.
+
 (** * Instances for standard types *)
 
 Inductive option_rel {a b} (r : a -> b -> Prop) : option a -> option b -> Prop :=

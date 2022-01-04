@@ -32,9 +32,20 @@ Set Maximal Implicit Insertion.
 
 (* Lazy persistent queue *)
 (* Amortized O(1) push and pop with persistence *)
-(* Consider arithmetic on [nat] is O(1) *)
+(* Assume arithmetic on [nat] is O(1) *)
 
 (* Pure implementation *)
+
+(** This is a queue with two lists, but rather than wait for the front to be empty
+  (as in the simple non-persistent queue), we maintain the invariant that
+  [length back <= length front] and reverse-and-append the back list at the end
+  of the front list when [length back = length front + 1] (as soon as the
+  invariant breaks).
+
+  Thus, if [length back = length front + 1 = n], we create a thunk for reversing
+  the back list, which costs [O(n)], but will only be forced after popping the [n+1]
+  elements in front of it. That way, the cost of the thunk is amortized by those
+  necessary operations before the thunk is forced. *)
 
 Record Queue (a : Type) : Type := MkQueue
   { nfront : nat
@@ -59,7 +70,7 @@ Definition pop {a} (q : Queue a) : option (a * Queue a) :=
   end.
 
 (* Monadic implementation *)
-(* We consider the numbers are strict, for simplicity *)
+(* We consider the length fields are strict, for simplicity *)
 
 Record QueueA (a : Type) : Type := MkQueueA
   { nfrontA : nat
@@ -96,10 +107,9 @@ Definition popA {a} (q : T (QueueA a)) : M (option (T a * T (QueueA a))) :=
     ret (Some (x, q))
   end.
 
-(**)
+(** * Approximation structure for [QueueA] *)
 
-#[global] Instance Exact_Queue {a} : Exact (Queue a) (QueueA a) :=
-  fun q => MkQueueA (nfront q) (exact (front q)) (nback q) (exact (back q)).
+(** [less_defined], [exact], [lub] *)
 
 Record less_defined_QueueA {a} (q1 q2 : QueueA a) : Prop :=
   { ld_front : less_defined (frontA q1) (frontA q2)
@@ -114,54 +124,29 @@ Record less_defined_QueueA {a} (q1 q2 : QueueA a) : Prop :=
 #[global] Instance LessDefined_QueueA {a} : LessDefined (QueueA a) :=
   less_defined_QueueA.
 
-Class Rep (a b : Type) : Type :=
-  { to_rep : a -> b
-  ; from_rep : b -> a
-  ; to_from : forall x, to_rep (from_rep x) = x
-  ; from_to : forall x, from_rep (to_rep x) = x
-  }.
-
-#[global,refine]
+#[global]
 Instance Rep_QueueA {a} : Rep (QueueA a) (nat * T (listA a) * nat * T (listA a)) :=
   {| to_rep := fun q => (nfrontA q, frontA q, nbackA q, backA q)
   ;  from_rep := fun '(nf,f,nb,b) => MkQueueA nf f nb b
   |}.
+
+#[global] Instance RepLaw_QueueA {a} : RepLaw (QueueA a) _.
 Proof.
+  constructor.
   - intros [ [ [nf f] nb] b]; reflexivity.
   - intros []; reflexivity.
-Defined.
-
-Class LessDefinedRep a b `{REP : Rep a b, LDa : LessDefined a, LDb : LessDefined b} : Prop :=
-  to_rep_less_defined : forall x y : a, less_defined x y <-> less_defined (a := b) (to_rep x) (to_rep y).
-
-Arguments LessDefinedRep : clear implicits.
-Arguments LessDefinedRep a b {REP LDa LDb}.
+Qed.
 
 #[global] Instance LessDefinedRep_QueueA {a} : LessDefinedRep (QueueA a) _.
 Proof.
   intros [] []; cbn; firstorder.
 Qed.
 
-Lemma Reflexive_Rep {a b} `{LessDefinedRep a b} `{!Reflexive (less_defined (a := b))}
-  : Reflexive (less_defined (a := a)).
-Proof.
-  unfold Reflexive. intros ?. apply to_rep_less_defined. reflexivity.
-Qed.
-
-Lemma Transitive_Rep {a b} `{LessDefinedRep a b} `{!Transitive (less_defined (a := b))}
-  : Transitive (less_defined (a := a)).
-Proof.
-  unfold Transitive; intros *. rewrite 3 to_rep_less_defined. apply transitivity.
-Qed.
-
-Lemma PreOrder_Rep {a b} `{LessDefinedRep a b} `{!PreOrder (less_defined (a := b))}
-  : PreOrder (less_defined (a := a)).
-Proof.
-  constructor; auto using Reflexive_Rep, Transitive_Rep.
-Qed.
-
 #[global] Instance PreOrder_QueueA {a} : PreOrder (less_defined (a := QueueA a)).
 Proof. exact PreOrder_Rep. Qed.
+
+#[global] Instance Exact_Queue {a} : Exact (Queue a) (QueueA a) :=
+  fun q => MkQueueA (nfront q) (exact (front q)) (nback q) (exact (back q)).
 
 #[global] Instance ExactMaximal_QueueA {a} : ExactMaximal (QueueA a) (Queue a).
 Proof.
@@ -170,9 +155,57 @@ Proof.
   reflexivity.
 Qed.
 
-(* Monotonicity: There should also be properties that making inputs of approximation functions
-   more defined makes the output more defined. These can be used to generalize the
-   demand specifications above to inputs greater than the input demand. *)
+(* Partial function: we assume that both arguments approximate the same list *)
+Fixpoint lub_list {a} (xs ys : listA a) : listA a :=
+  match xs, ys with
+  | NilA, NilA => NilA
+  | ConsA x xs, ConsA y ys => ConsA (lub_T (fun r _ => r) x y) (lub_T lub_list xs ys)
+  | _, _ => NilA  (* silly case *)
+  end.
+
+#[global] Instance Lub_list {a} : Lub (listA a) := lub_list.
+
+#[global] Instance Lub_QueueA {a} : Lub (QueueA a) :=
+  fun q1 q2 =>
+    MkQueueA (nfrontA q1) (lub (frontA q1) (frontA q2)) (nbackA q1) (lub (backA q1) (backA q2)).
+
+#[global] Instance LubLaw_listA {a} : LubLaw (listA a).
+Proof.
+  constructor.
+  - intros x y z Hx; revert y; induction Hx; intros ?; inversion 1; subst; cbn; constructor; auto.
+    1: inversion H; subst; inversion H4; subst; try constructor; auto.
+    1: inversion H; subst; inversion H5; subst; try constructor; auto.
+    inversion H6; constructor; auto.
+  - intros x y [z [ Hx Hy] ]; revert y Hy; induction Hx; intros ?; inversion 1; subst; cbn;
+      constructor; auto.
+    1: inversion H; inversion H3; constructor; reflexivity + auto.
+    1: inversion H; inversion H4; constructor; reflexivity.
+    inversion H5; subst; constructor; [ reflexivity | auto ].
+  - intros x y [z [Hx Hy] ]; revert x Hx; induction Hy; intros ?; inversion 1; subst; cbn;
+      constructor; auto.
+    1: inversion H; inversion H3; subst; invert_approx; constructor; reflexivity + auto; inversion H7; invert_approx; reflexivity.
+    1: inversion H; inversion H4; subst; invert_approx; constructor; reflexivity + auto; inversion H8; invert_approx; reflexivity.
+    inversion H5; subst; constructor; [ reflexivity | auto ].
+Qed.
+
+#[global] Instance LubRep_QueueA {a} : LubRep (QueueA a) (nat * T (listA a) * nat * T (listA a)).
+Proof.
+  intros [] []; reflexivity.
+Qed.
+
+#[global] Instance LubLaw_QueueA {a} : LubLaw (QueueA a).
+Proof.
+  exact LubLaw_LubRep.
+Qed.
+
+(** * Monotonicity *)
+
+(** Making inputs of approximation functions more defined makes the output more defined.
+  These can be used to generalize the demand specifications above to inputs greater than
+  the input demand. *)
+
+(** Proofs of monotonicity are largely automated by the [solve_mon] tactic from the
+  [ApproxM] module. *)
 
 Lemma appendA__mon {a} (xsA xsA' : listA a) (ysA ysA' : T (listA a))
   : xsA `less_defined` xsA' ->
@@ -244,8 +277,9 @@ Qed.
 
 (**)
 
-(* Well-formedness *)
+(** * Well-formedness *)
 
+(** Invariants on [Queue] *)
 Record well_formed {a} (q : Queue a) : Prop :=
   { skew : nback q <= nfront q
   ; frontn : nfront q = length (front q)
@@ -287,6 +321,8 @@ Proof.
   - rewrite (frontn wf_q), Ef. reflexivity.
   - apply (backn wf_q).
 Qed.
+
+(** * Demand *)
 
 (* Lazy amortization works by hiding thunks "deep" in the data structure,
    so they cannot be forced immediately, only after performing operations whose
@@ -375,7 +411,11 @@ Definition popD {a} (q : Queue a) (outD : option (T a * T (QueueA a))) : T (Queu
   | _, _ => bottom
   end.
 
-(* The demand is an approximation of the input. *)
+(** ** Soundness of demand functions *)
+
+(** Soundess with respect to pure functions:
+  a demand function [fD] produces an approximation of the input of the corresponding
+  pure function [f]. *)
 
 Lemma appendD_approx {a} (xs ys : list a) (outD : _)
   : outD `is_approx` append xs ys -> appendD xs ys outD `is_approx` (xs, ys).
@@ -844,65 +884,6 @@ Definition GOOD_QUEUE : Prop :=
 
 (* The proof: we first compute the demand. *)
 
-(* Partial function: we assume that both arguments approximate the same list *)
-Fixpoint lub_list {a} (xs ys : listA a) : listA a :=
-  match xs, ys with
-  | NilA, NilA => NilA
-  | ConsA x xs, ConsA y ys => ConsA (lub_T (fun r _ => r) x y) (lub_T lub_list xs ys)
-  | _, _ => NilA  (* silly case *)
-  end.
-
-#[global] Instance Lub_list {a} : Lub (listA a) := lub_list.
-
-#[global] Instance Lub_QueueA {a} : Lub (QueueA a) :=
-  fun q1 q2 =>
-    MkQueueA (nfrontA q1) (lub (frontA q1) (frontA q2)) (nbackA q1) (lub (backA q1) (backA q2)).
-
-Class LubRep a b `{Rep a b,Lub a,Lub b} : Prop :=
-  to_rep_lub : forall x y : a, to_rep (lub x y) = lub (to_rep x) (to_rep y).
-
-Arguments LubRep : clear implicits.
-Arguments LubRep a b {_ _ _}.
-
-#[global] Instance LubLaw_listA {a} : LubLaw (listA a).
-Proof.
-  constructor.
-  - intros x y z Hx; revert y; induction Hx; intros ?; inversion 1; subst; cbn; constructor; auto.
-    1: inversion H; subst; inversion H4; subst; try constructor; auto.
-    1: inversion H; subst; inversion H5; subst; try constructor; auto.
-    inversion H6; constructor; auto.
-  - intros x y [z [ Hx Hy] ]; revert y Hy; induction Hx; intros ?; inversion 1; subst; cbn;
-      constructor; auto.
-    1: inversion H; inversion H3; constructor; reflexivity + auto.
-    1: inversion H; inversion H4; constructor; reflexivity.
-    inversion H5; subst; constructor; [ reflexivity | auto ].
-  - intros x y [z [Hx Hy] ]; revert x Hx; induction Hy; intros ?; inversion 1; subst; cbn;
-      constructor; auto.
-    1: inversion H; inversion H3; subst; invert_approx; constructor; reflexivity + auto; inversion H7; invert_approx; reflexivity.
-    1: inversion H; inversion H4; subst; invert_approx; constructor; reflexivity + auto; inversion H8; invert_approx; reflexivity.
-    inversion H5; subst; constructor; [ reflexivity | auto ].
-Qed.
-
-#[global] Instance LubRep_QueueA {a} : LubRep (QueueA a) (nat * T (listA a) * nat * T (listA a)).
-Proof.
-  intros [] []; reflexivity.
-Qed.
-
-Lemma to_rep_cobounded {a b} `{LessDefinedRep a b}
-  : forall x y : a, Basics.impl (cobounded x y) (cobounded (a := b) (to_rep x) (to_rep y)).
-Proof.
-  intros x y [z [Hx Hy] ]; exists (to_rep z); rewrite <- 2 to_rep_less_defined; auto.
-Qed.
-
-Lemma LubLaw_LubRep a b `{LubRep a b,LessDefinedRep a b (REP := _),LL: !LubLaw b} : LubLaw a.
-Proof.
-  constructor; intros *; rewrite ?to_rep_cobounded, 3? to_rep_less_defined, to_rep_lub; apply LL.
-Qed.
-
-#[global] Instance LubLaw_QueueA {a} : LubLaw (QueueA a).
-Proof.
-  exact LubLaw_LubRep.
-Qed.
 
 Class LubDebt a `{LessDefined a, Lub a, Debitable a} : Prop :=
   lub_debt : forall x y : a, cobounded x y -> debt (lub x y) <= debt x + debt y.
