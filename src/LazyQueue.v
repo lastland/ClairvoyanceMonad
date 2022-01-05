@@ -153,7 +153,7 @@ Proof. exact PreOrder_Rep. Qed.
 #[global] Instance ExactMaximal_QueueA {a} : ExactMaximal (QueueA a) (Queue a).
 Proof.
   red; intros * []; cbn in *.
-  apply exact_maximal in ld_front0, ld_back0. destruct xA; cbn in *; subst.
+  apply exact_maximal in ld_front0; apply exact_maximal in ld_back0. destruct xA; cbn in *; subst.
   reflexivity.
 Qed.
 

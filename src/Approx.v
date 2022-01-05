@@ -330,7 +330,7 @@ Qed.
 #[global] Instance ExactMaximal_prod {a aA b bA} `{ExactMaximal a aA, ExactMaximal b bA}
   : ExactMaximal (a * b) (aA * bA).
 Proof.
-  intros [] [] [HH1 HH2]; cbn in *. apply exact_maximal in HH1, HH2.
+  intros [] [] [HH1 HH2]; cbn in *. apply exact_maximal in HH1; apply exact_maximal in HH2.
   unfold exact, Exact_prod; cbn. congruence.
 Qed.
 
