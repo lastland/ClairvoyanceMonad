@@ -326,32 +326,34 @@ Qed.
 
 (** * Demand *)
 
-(* Lazy amortization works by hiding thunks "deep" in the data structure,
-   so they cannot be forced immediately, only after performing operations whose
+(* Lazy amortization works by hiding thunks "deep" in the data structure, so
+   they cannot be forced immediately, only after performing operations whose
    cost is propoertional to the cost of the thunk.
 
    However, in the clairvoyance monad, we must decide whether to evaluate thunks
-   right when they are constructed, so we have to predict the future to know whether
-   it will be used.
+   right when they are constructed, so we have to predict the future to know
+   whether it will be used.
 
-   In other words, a user of the cost specification must first decide what the demand
-   on the outputs will be. The demand will be modeled by an approximation value (T (QueueA a)).
-   The higher the demand, the higher the cost, which will be amortized since the only
-   way to have high demand is to perform many operations in the future.
-*)
+   In other words, a user of the cost specification must first decide what the
+   demand on the outputs will be. The demand will be modeled by an approximation
+   value (T (QueueA a)).  The higher the demand, the higher the cost, which will
+   be amortized since the only way to have high demand is to perform many
+   operations in the future.  *)
 
-(* Before modeling cost, we must model demand. The caller of a function makes a demand
-   on its output, which the function translates to a demand on the inputs.
+(* Before modeling cost, we must model demand. The caller of a function makes a
+   demand on its output, which the function translates to a demand on the
+   inputs.
 
    We can thus define a function from output demands to input demands.
 
-   These can also in principled be derived automatically from the initial implementation.
- *)
+   These can also in principle be derived automatically from the initial
+   implementation.  *)
 
 (** ** Demand functions *)
 
-(* A combinator for demand functions. If [f : a -> b] is a demand function with input [a],
-   then [thunkD f : T a -> b] is a demand function with input [T a]. *)
+(* A combinator for demand functions. If [f : a -> b] is a demand function
+   with input [a], then [thunkD f : T a -> b] is a demand function with input [T
+   a]. *)
 Definition thunkD {a b} `{Bottom b} (f : a -> b) (x : T a) : b :=
   match x with
   | Undefined => bottom
@@ -396,8 +398,8 @@ Definition tailX {a} (xs : T (listA a)) : T (listA a) :=
   | _ => Undefined
   end.
 
-(* In [pushA], [q] is always forced, so the first component of the input demand is at least
-   [Thunk]. *)
+(* In [pushA], [q] is always forced, so the first component of the input demand
+   is at least [Thunk]. *)
 Definition pushD {a} (q : Queue a) (x : a) (outD : QueueA a) : T (QueueA a) * T a :=
   let '(frontD, backD) := mkQueueD (nfront q) (front q) (S (nback q)) (x :: back q) outD in
   (Thunk (MkQueueA (nfront q) frontD (nback q) (tailX backD)), Thunk x).
@@ -529,8 +531,8 @@ Qed.
 (** *** Soundness of demand functions with respect to clairvoyant functions. *)
 
 (** Given the output demand, we compute the input demand, and we expect that
-   running the function on those input demands will (optimistically) yield a
-   result at least as defined as the output demand. *)
+    running the function on those input demands will (optimistically) yield a
+    result at least as defined as the output demand. *)
 
 (** These are subsumed by the [_cost] lemmas. *)
 
