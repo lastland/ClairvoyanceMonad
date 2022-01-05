@@ -15,6 +15,8 @@ NEW
 
 *)
 
+From Equations Require Import Equations.
+
 From Coq Require Import Arith List Lia Setoid Morphisms.
 Import ListNotations.
 From Clairvoyance Require Import Core Approx ApproxM List Misc.
@@ -346,6 +348,8 @@ Qed.
    These can also in principled be derived automatically from the initial implementation.
  *)
 
+(** ** Demand functions *)
+
 (* A combinator for demand functions. If [f : a -> b] is a demand function with input [a],
    then [thunkD f : T a -> b] is a demand function with input [T a]. *)
 Definition thunkD {a b} `{Bottom b} (f : a -> b) (x : T a) : b :=
@@ -413,9 +417,13 @@ Definition popD {a} (q : Queue a) (outD : option (T a * T (QueueA a))) : T (Queu
 
 (** ** Soundness of demand functions *)
 
-(** Soundess with respect to pure functions:
-  a demand function [fD] produces an approximation of the input of the corresponding
-  pure function [f]. *)
+(** *** Soundess of demand functions with respect to pure functions *)
+
+(** A demand function [fD] must produce an approximation of the input
+  of the corresponding pure function [f]. *)
+
+(** These proofs should be automatable, the demand functions can be derived from the
+  pure functions. *)
 
 Lemma appendD_approx {a} (xs ys : list a) (outD : _)
   : outD `is_approx` append xs ys -> appendD xs ys outD `is_approx` (xs, ys).
@@ -460,8 +468,6 @@ Qed.
 
 #[global] Instance Proper_tailX {a} : Proper (less_defined ==> less_defined) (@tailX a).
 Proof. exact (@tailX_mon a). Qed.
-
-From Equations Require Import Equations.
 
 Lemma pushD_approx {a} (q : Queue a) (x : a) (outD : QueueA a)
   : outD `is_approx` push q x -> pushD q x outD `is_approx` (q, x).
@@ -520,12 +526,13 @@ Proof.
       destruct t as [ xs' | ]; reflexivity.
 Qed.
 
-(* The following theorems relate the demand functions to the approximation functions.
-   Given the output demand, we compute the input demand, and we expect that
-   running the function on those input demands will (optimistically) yield a
-   result at least as defined as the output demand.
+(** *** Soundness of demand functions with respect to clairvoyant functions. *)
 
-   These are subsumed by the [_cost] lemmas. *)
+(** Given the output demand, we compute the input demand, and we expect that
+   running the function on those input demands will (optimistically) yield a
+   result at least as defined as the output demand. *)
+
+(** These are subsumed by the [_cost] lemmas. *)
 
 Lemma appendD_spec {a} (xs ys : list a) (outD : listA a)
   : forall xsD ysD, (xsD, ysD) = appendD xs ys outD ->
@@ -547,30 +554,22 @@ Lemma popD_spec {a} (q : Queue a) (outD : option (T a * T (QueueA a)))
 Proof.
 Abort.
 
-(* Physicist's method *)
+(** * Lazy Physicist's method *)
 
-(* With an explicit representation of demand, we can attach a notion of "debt",
-   or "negative potential" to it.
-   "Higher" demands cost more to satisfy. Here, the debt must decrease constantly when
-   we pop elements from the front or when we push elements to the back. When the two
-   queues are of equal length, the debt is zero, and we are free to increase it again.
-   A reverse-append costs (length (front q) + length (back q) = 2 * length (front q)),
-   because the two lists have the same length.
-   But because the [reverse], unlike [append], cannot be done incrementally,
-   we must frontload those debits on the first half of the list, hence the factor [2] in
-   [debt].
+(** Unlike a regular physicist, the lazy physicist defines potential only over
+  the fragment of the data structure that will be needed, which we have represented
+  as the "demand". *)
 
-   But we might not need the whole output, in which case we can drop the debits for
-   thunks that won't be reached. This is why the debt is a function of the demand,
-   rather than the complete output, and we look at the partial length ([sizeX])
-   of [frontA] instead of reading the exact length in [nfrontA].
-   *)
+(** The potential should be thought of as "negative potential", or "debt".
+  When an expensive operation occurs, this consumes potential energy/creates debt,
+  which must be recovered in the future. *)
 
-(* TODO: can you increase the debt if it is not yet zero? In Okasaki, no, and that's why
-   the Banker's method is more general. But this seems different. As long as your final
-   demand (at the end of all operations) has debt 0, you can do anything. *)
+(** This works in reverse from the classical physicist's method.
+  Classical physicist: potential is accumulated before it is spent.
+  Lazy physicist: negative potential can be spent whenever (there is no lower bound),
+    but it must eventually be recovered. We do not spend potential/debt we do not plan
+    to pay back, which we can "predict" in our clairvoyant framework. *)
 
-(* This is an algorithm-specific class; another data structure should define its own... *)
 Class Debitable a : Type :=
   debt : a -> nat.
 
@@ -594,11 +593,37 @@ Arguments Debitable_QueueA {a} qA /.
     | Some (_, qA) => debt qA
     end.
 
+(* Here, the debt must decrease constantly when we pop elements from the front
+   or when we push elements to the back. When the two
+   queues are of equal length, the debt is zero, and we are free to increase it again.
+   A reverse-and-append costs (length (front q) + length (back q) = 2 * length (front q)),
+   because the two lists have the same length.
+   But because the [reverse], unlike [append], cannot be done incrementally,
+   we must frontload those debits on the first half of the list, hence the factor [2] in
+   [debt].
+
+   But we might not need the whole output, in which case we can drop the debits for
+   thunks that won't be reached. This is why the debt is a function of the demand,
+   rather than the complete output, and we look at the partial length ([sizeX])
+   of [frontA] instead of reading the exact length in [nfrontA].
+   *)
+
+(* TODO: can you increase the debt if it is not yet zero? In Okasaki, no, and that's why
+   the Banker's method is more general. But this seems different. As long as your final
+   demand (at the end of all operations) has debt 0, you can do anything. *)
+
+(** * Amortized cost specifications (and proofs) *)
+
 (* The two main theorems to prove are [pushA_cost] and [popA_cost].
    We then generalize them by monotonicity into [pushA_cost'] and [popA_cost'],
    where the input doesn't have to be exactly equal to the input demand. *)
 
 Opaque Nat.mul Nat.add Nat.sub.
+
+(** ** Cost specs for auxiliary functions *)
+
+(** [revA] has a simple cost specification: it will have to traverse the list in any case,
+  so we might as well keep the whole result. *)
 
 Lemma revA__cost {a} (xs ys : list a)
   : revA_ (exact xs) (exact ys) [[ fun out cost =>
@@ -619,6 +644,20 @@ Proof.
   unfold revA; mgo'. apply optimistic_thunk_go; mgo'. apply (revA__cost xs nil).
 Qed.
 
+(** [appendA] is our first example where the notion of demand is relevant
+  (so this differs from the spec from our initial paper).
+
+  1. The caller (user of this theorem) must specify a demand [outD] on the
+     output (first condition: [outD] must be an approximation of the pure
+     output [append xs ys]).
+  2. This corresponds to an input demand [(xsA, ysA)], via the demand
+     function [appendD].
+  3. When that input demand is met (i.e., we use [xsA] and [ysA] as the inputs
+     of [appendA]), we can satisfy the output demand: we can (optimistically)
+     produce an output [out] at least as defined as [outD] in time bounded
+     by some function of the output demand (here it is a function of the input
+     demand, which is itself a function of the output demand). *)
+
 Lemma appendA_cost {a} (xs ys : list a) outD
   : outD `is_approx` append xs ys ->
     forall xsA ysA, (xsA, ysA) = appendD xs ys outD ->
@@ -637,6 +676,12 @@ Proof.
       destruct t; cbn in H0; lia.
 Qed.
 
+(** We can then generalize that theorem: the postcondition can be satisfied
+  as long as the input [(xsA',ysA')] is at least as defined as the input demand
+  [(xsA,ysA)]. This is a straightforward consequence of [appendA]'s monotonicity
+  proved earlier. *)
+
+(** Relaxed cost specification *)
 Lemma appendA_cost' {a} (xs ys : list a) outD
   : outD `is_approx` append xs ys ->
     forall xsA ysA, (xsA, ysA) = appendD xs ys outD ->
@@ -650,6 +695,52 @@ Proof.
   - eauto using appendA_cost.
 Qed.
 
+(** Below are similar cost specifications for the queue methods [pushA] and [popA],
+  both relying on a cost specification for [mkQueueA]. These are
+  _amortized cost specifications_: the potential function on the input and output
+  demands adds extra terms in the cost inequality.
+
+[[
+  debt inD + cost <= C + debt outD
+]]
+
+  for some constant [C]. This is of course equivalent to [cost <= c + debt outD - debt inD],
+  but only doing arithmetic in [nat].
+
+  Starting from the empty queue (with debt 0), we can add the costs of a sequence of operations
+
+[[
+  TOTALCOST = debt emptyX + cost1 + cost2 + ... + costn
+]]
+
+  if we call [q1] the queue after the first operation, its amortized cost specification
+  provides the following inequality:
+
+[[
+  debt emptyX + cost1 <= C + debt q1
+]]
+
+  We can bound the above sum by:
+
+[[
+  TOTALCOST <= C + debt q1 + cost2 + cost3 + ... + costn
+]]
+
+  And so on.
+
+[[
+  TOTALCOST <= C + C     + debt q2 + cost3 + ... + costn
+  TOTALCOST <= C + C + C         + debt q3 + ... + costn
+  ...
+  TOTALCOST <= C + C + C + ... + C + debt qn
+]]
+
+  If we make the final demand empty (bottom/undefined), the last term becomes
+  [debt qn = debt _|_ = 0]. Therefore, the final cost is [n * C], for a constant
+  [C]. This is [O(n)]. So the average cost of each operation is [C].
+*)
+
+(* Auxiliary *)
 Lemma size_approx {a} (xs : list a) (xsA : T (listA a))
   : xsA `is_approx` xs -> sizeX 0 xsA <= length xs.
 Proof.
@@ -659,18 +750,21 @@ Proof.
     apply le_n_S. eapply (IHxs (Thunk x)); auto.
 Qed.
 
+(* Auxiliary *)
 Lemma sizeX_up {a} (xs : T (listA a)) n : sizeX n xs <= sizeX 0 xs + n.
 Proof.
   destruct xs as [ xs | ]; cbn; [ | lia ].
   induction xs; cbn; lia.
 Qed.
 
+(* Auxiliary *)
 Lemma sizeX_down {a} (xs : T (listA a)) n : sizeX 0 xs <= sizeX n xs.
 Proof.
   destruct xs as [ xs | ]; cbn; [ | lia ].
   induction xs; cbn; lia.
 Qed.
 
+(** Cost specification for [mkQueueA] *)
 Lemma mkQueueA_cost {a} (nf : nat) (f : list a) (nb : nat) (b : list a) (outD : QueueA a)
   : nf = length f /\ nb = length b /\ nb <= nf + 1 -> outD `is_approx` mkQueue nf f nb b ->
     forall fA bA, (fA, bA) = mkQueueD nf f nb b outD ->
@@ -729,6 +823,7 @@ Proof.
     inversion Hout; cbn in *. lia.
 Qed.
 
+(** Relaxed cost specification *)
 Lemma mkQueueA_cost' {a} (nf : nat) (f : list a) (nb : nat) (b : list a) (outD : QueueA a)
   : nf = length f /\ nb = length b /\ nb <= nf + 1 -> outD `is_approx` mkQueue nf f nb b ->
     forall fA bA, (fA, bA) = mkQueueD nf f nb b outD ->
@@ -749,6 +844,7 @@ Proof.
   inversion 1; subst; constructor. inversion H2; constructor; cbn; [ auto | reflexivity ].
 Qed.
 
+(** Cost specification for [pushA] *)
 Lemma pushA_cost {a} (q : Queue a) (x : a) (outD : QueueA a)
   : well_formed q ->
     outD `is_approx` push q x ->
@@ -772,6 +868,7 @@ Proof.
   unfold debt at 1; cbn. lia.
 Qed.
 
+(** Relaxed cost specification *)
 Lemma pushA_cost' {a} (q : Queue a) (x : a) (outD : QueueA a)
   : well_formed q ->
     outD `is_approx` push q x ->
@@ -786,6 +883,7 @@ Proof.
   - eapply pushA_cost; eassumption.
 Qed.
 
+(** Cost specification for [popA] *)
 Lemma popA_cost {a} (q : Queue a) (outD : option (T a * T (QueueA a)))
   : well_formed q ->
     outD `is_approx` pop q ->
@@ -819,6 +917,7 @@ Proof.
       destruct t; cbn; try lia.
 Qed.
 
+(** Relaxed cost specification *)
 Lemma popA_cost' {a} (q : Queue a) (outD : option (T a * T (QueueA a)))
   : well_formed q ->
     outD `is_approx` pop q ->
@@ -833,6 +932,8 @@ Proof.
   - apply uc_acost.
   - apply popA_cost; assumption.
 Qed.
+
+(** * Validation for persistence *)
 
 (* We want to be able to prove that in any usage of this queue, operations have
    amortized constant cost. We represent "usage" as a tree of operations, where
