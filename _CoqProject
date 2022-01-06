@@ -9,3 +9,4 @@ src/Fix.v
 src/List.v
 src/LazyQueue.v
 src/Eval.v
+src/Demand.v
