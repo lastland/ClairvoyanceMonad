@@ -464,7 +464,7 @@ Ltac invert_eq :=
 
 Ltac solve_approx :=
   repeat (match goal with
-          | _ => solve [eauto]
+          | _ => solve [reflexivity | eauto]
           | [ |- _ `less_defined` _ ] => progress (autorewrite with exact) + (constructor; cbn)
           | [ |- is_defined (Thunk _) ] =>
             reflexivity

@@ -115,26 +115,6 @@ End Setoid_.
 
 (** * Demand functions *)
 
-(*
-Record Tick (a : Type) : Type := MkTick
-  { cost : nat
-  ; val : a
-  }.
-
-Arguments MkTick {a}.
-Arguments cost {a}.
-Arguments val {a}.
-
-#[global] Instance LessDefined_Tick {a} `{LessDefined a} : LessDefined (Tick a) :=
-  fun x y => cost x <= cost y /\ val x `less_defined` val y.
-
-#[global] Instance Transitive_LessDefined_Tick {a} `{LessDefined a}
-  `{!Transitive (less_defined (a := a))} : Transitive (less_defined (a := Tick a)).
-Proof.
-  unfold Transitive, less_defined, LessDefined_Tick; intros * [] []; split; etransitivity; eauto.
-Qed.
-*)
-
 Module Export DFun.
 
 Class Laws {a1 ea1 a2 : Type} `{LessDefined a1, LessDefined a2}
