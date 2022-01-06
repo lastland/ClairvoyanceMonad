@@ -336,7 +336,7 @@ Qed.
 
    In other words, a user of the cost specification must first decide what the
    demand on the outputs will be. The demand will be modeled by an approximation
-   value (T (QueueA a)).  The higher the demand, the higher the cost, which will
+   value [T (QueueA a)].  The higher the demand, the higher the cost, which will
    be amortized since the only way to have high demand is to perform many
    operations in the future.  *)
 
@@ -559,17 +559,23 @@ Abort.
 (** * Lazy Physicist's method *)
 
 (** Unlike a regular physicist, the lazy physicist defines potential only over
-  the fragment of the data structure that will be needed, which we have represented
-  as the "demand". *)
+  the fragment of the data structure that will be needed, which we have
+  represented as the "demand". *)
 
-(** The potential should be thought of as "negative potential", or "debt".
-  When an expensive operation occurs, this consumes potential energy/creates debt,
+(** The potential should be thought of as "negative potential", or "debt".  When
+  an expensive operation occurs, this consumes potential energy/creates debt,
   which must be recovered in the future. *)
 
 (** This works in reverse from the classical physicist's method.
-  Classical physicist: potential is accumulated before it is spent.
-  Lazy physicist: negative potential can be spent whenever (there is no lower bound),
-    but it must eventually be recovered. We do not spend potential/debt we do not plan
+
+    ** Classical physicist
+
+    Potential is accumulated before it is spent.
+
+    ** Lazy physicist
+
+    Negative potential can be spent whenever (there is no lower bound), but it
+    must eventually be recovered. We do not spend potential/debt we do not plan
     to pay back, which we can "predict" in our clairvoyant framework. *)
 
 Class Debitable a : Type :=
@@ -596,23 +602,22 @@ Arguments Debitable_QueueA {a} qA /.
     end.
 
 (* Here, the debt must decrease constantly when we pop elements from the front
-   or when we push elements to the back. When the two
-   queues are of equal length, the debt is zero, and we are free to increase it again.
-   A reverse-and-append costs (length (front q) + length (back q) = 2 * length (front q)),
-   because the two lists have the same length.
-   But because the [reverse], unlike [append], cannot be done incrementally,
-   we must frontload those debits on the first half of the list, hence the factor [2] in
-   [debt].
+   or when we push elements to the back. When the two queues are of equal
+   length, the debt is zero, and we are free to increase it again.  A
+   reverse-and-append costs (length (front q) + length (back q) = 2 * length
+   (front q)), because the two lists have the same length.  But because the
+   [reverse], unlike [append], cannot be done incrementally, we must frontload
+   those debits on the first half of the list, hence the factor [2] in [debt].
 
-   But we might not need the whole output, in which case we can drop the debits for
-   thunks that won't be reached. This is why the debt is a function of the demand,
-   rather than the complete output, and we look at the partial length ([sizeX])
-   of [frontA] instead of reading the exact length in [nfrontA].
-   *)
+   But we might not need the whole output, in which case we can drop the debits
+   for thunks that won't be reached. This is why the debt is a function of the
+   demand, rather than the complete output, and we look at the partial length
+   ([sizeX]) of [frontA] instead of reading the exact length in [nfrontA].  *)
 
-(* TODO: can you increase the debt if it is not yet zero? In Okasaki, no, and that's why
-   the Banker's method is more general. But this seems different. As long as your final
-   demand (at the end of all operations) has debt 0, you can do anything. *)
+(* TODO: can you increase the debt if it is not yet zero? In Okasaki, no, and
+   that's why the Banker's method is more general. But this seems different. As
+   long as your final demand (at the end of all operations) has debt 0, you can
+   do anything. *)
 
 (** * Amortized cost specifications (and proofs) *)
 
@@ -697,50 +702,40 @@ Proof.
   - eauto using appendA_cost.
 Qed.
 
-(** Below are similar cost specifications for the queue methods [pushA] and [popA],
-  both relying on a cost specification for [mkQueueA]. These are
-  _amortized cost specifications_: the potential function on the input and output
-  demands adds extra terms in the cost inequality.
+(** Below are similar cost specifications for the queue methods [pushA] and
+    [popA], both relying on a cost specification for [mkQueueA]. These are
+    _amortized cost specifications_: the potential function on the input and
+    output demands adds extra terms in the cost inequality.
 
-[[
-  debt inD + cost <= C + debt outD
-]]
+[[ debt inD + cost <= C + debt outD ]]
 
-  for some constant [C]. This is of course equivalent to [cost <= c + debt outD - debt inD],
-  but only doing arithmetic in [nat].
+  for some constant [C]. This is of course equivalent to [cost <= c + debt outD -
+  debt inD], but only doing arithmetic in [nat].
 
-  Starting from the empty queue (with debt 0), we can add the costs of a sequence of operations
+  Starting from the empty queue (with debt 0), we can add the costs of a
+  sequence of operations
 
-[[
-  TOTALCOST = debt emptyX + cost1 + cost2 + ... + costn
-]]
+[[ TOTALCOST = debt emptyX + cost1 + cost2 + ... + costn ]]
 
-  if we call [q1] the queue after the first operation, its amortized cost specification
-  provides the following inequality:
+  if we call [q1] the queue after the first operation, its amortized cost
+  specification provides the following inequality:
 
-[[
-  debt emptyX + cost1 <= C + debt q1
-]]
+[[ debt emptyX + cost1 <= C + debt q1 ]]
 
   We can bound the above sum by:
 
-[[
-  TOTALCOST <= C + debt q1 + cost2 + cost3 + ... + costn
-]]
+[[ TOTALCOST <= C + debt q1 + cost2 + cost3 + ... + costn ]]
 
   And so on.
 
-[[
-  TOTALCOST <= C + C     + debt q2 + cost3 + ... + costn
-  TOTALCOST <= C + C + C         + debt q3 + ... + costn
-  ...
-  TOTALCOST <= C + C + C + ... + C + debt qn
-]]
+[[ TOTALCOST <= C + C + debt q2 + cost3 + ... + costn ]]
+[[ TOTALCOST <= C + C + C + debt q3 + ... + costn ]]
+[[ ... ]]
+[[ TOTALCOST <= C + C + C + ... + C + debt qn ]]
 
   If we make the final demand empty (bottom/undefined), the last term becomes
   [debt qn = debt _|_ = 0]. Therefore, the final cost is [n * C], for a constant
-  [C]. This is [O(n)]. So the average cost of each operation is [C].
-*)
+  [C]. This is [O(n)]. So the average cost of each operation is [C].  *)
 
 (* Auxiliary *)
 Lemma size_approx {a} (xs : list a) (xsA : T (listA a))
