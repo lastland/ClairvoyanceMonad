@@ -29,7 +29,7 @@ If you are accessing the artifact via the VM image we provide, you should have
 all the dependencies installed already.
 
 The artifact requires [the Coq proof assistant](https://coq.inria.fr/). The
-artifact is known to work with Coq versions 8.11.2, 8.12.2, and 8.13.2.
+artifact is known to work with Coq versions 8.12.2, 8.13.2, and 8.14.1.
 
 The artifact also requires the [Equations
 library](https://github.com/mattam82/Coq-Equations). To install it via
@@ -39,7 +39,8 @@ OPAM:
 opam repo add coq-released https://coq.inria.fr/opam/released
 opam install coq-equations
 ```
-The artifact is known to work with Equations 1.2.4.
+The artifact is known to work with Equations 1.2.4 (for Coq 8.12 and Coq 8.13)
+and 1.3 (for Coq 8.14).
 
 ### Proof check
 
