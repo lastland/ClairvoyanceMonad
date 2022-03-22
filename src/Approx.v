@@ -368,6 +368,75 @@ Proof.
   intros [] []; inversion 1; subst; cbn; f_equal. apply exact_maximal. auto.
 Qed.
 
+#[global] Instance Exact_list {a aA} `{Exact a aA} : Exact (list a) (list aA) :=
+  map exact.
+
+Inductive list_rel {a b} (r : a -> b -> Prop) : list a -> list b -> Prop :=
+| list_rel_nil : list_rel r nil nil
+| list_rel_cons x y xs ys : r x y -> list_rel r xs ys -> list_rel r (x :: xs) (y :: ys)
+.
+
+#[global] Instance LessDefined_list {a} `{LessDefined a} : LessDefined (list a) :=
+  list_rel less_defined.
+
+Lemma cobounded_cons {a} `{LessDefined a} (x : a) xs y ys
+  : cobounded x y -> cobounded xs ys -> cobounded (x :: xs) (y :: ys).
+Proof.
+  intros (z & Hx & Hy) (zs & Hxs & Hys). exists (z :: zs).
+  split; constructor; eauto.
+Qed.
+
+Lemma cobounded_list_ind a `(LessDefined a) (P : list a -> list a -> Prop)
+  : P nil nil ->
+    (forall x xs y ys,
+      cobounded x y -> cobounded xs ys -> P xs ys -> P (x :: xs) (y :: ys)) ->
+    forall xs ys, cobounded xs ys -> P xs ys.
+Proof.
+  intros Hnil Hcons xs ys (zs & Hxs & Hys).
+  revert ys Hys; induction Hxs as [ | ? ? ? ? ? ? IH ]; intros.
+  - inversion Hys; apply Hnil.
+  - inversion Hys; clear Hys; subst. apply Hcons; eauto.
+Qed.
+
+#[global] Instance PreOrder_list {a} `{LessDefined a} `{!PreOrder (less_defined (a := a))}
+  : PreOrder (less_defined (a := list a)).
+Proof.
+Admitted.
+
+#[global] Instance ExactMaximal_list {a aA} `{ExactMaximal aA a}
+  : ExactMaximal (list aA) (list a).
+Proof.
+Admitted.
+
+Fixpoint zip_with {a b c} (f : a -> b -> c) (xs : list a) (ys : list b) : list c :=
+  match xs, ys with
+  | x :: xs, y :: ys => f x y :: zip_with f xs ys
+  | _, _ => nil
+  end.
+
+#[global] Instance Lub_list {a} `{Lub a} : Lub (list a) :=
+  zip_with lub.
+
+#[global] Instance LubLaw_list {a} `{LubLaw a} : LubLaw (list a).
+Proof.
+  constructor.
+  - intros x y z Hxz; revert y; induction Hxz as [ | ? ? ? ? ? ? IH ]; cbn.
+    + constructor.
+    + intros ? Hy; inversion Hy; clear Hy; subst.
+      constructor; [ apply lub_least_upper_bound; auto | ].
+      apply IH; auto.
+  - intros x y (z & Hx & Hy). revert y Hy; induction Hx as [ | ? ? ? ? ? ? IH ]; cbn.
+    + constructor.
+    + intros ? Hy; inversion Hy; clear Hy; subst.
+      constructor; [ apply lub_upper_bound_l; eauto | ].
+      apply IH; auto.
+  - intros x y (z & Hx & Hy). revert x Hx; induction Hy as [ | ? ? ? ? ? ? IH ]; cbn.
+    + destruct x; constructor.
+    + intros ? Hx; inversion Hx; clear Hx; subst.
+      constructor; [ apply lub_upper_bound_r; eauto | ].
+      apply IH; auto.
+Qed.
+
 (** In this part, we prove that any type [a] is also an [exact] of itself. We
     define this instance so that [listA a] would be an approximation of [list
     a]---so that we do not need to consider the approximation of [a]. A useful
