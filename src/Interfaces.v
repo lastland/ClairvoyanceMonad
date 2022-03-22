@@ -53,14 +53,20 @@ Module Cost.
 Record Impl (op : Type) : Type :=
   { impl :> Pure.Impl op
     (* The cost may depend on the input *)
-  ; cost : op -> list impl.(value) -> nat
+  ; raw_cost : op -> list impl.(value) -> nat
   }.
+
+Definition cost {op : Type} {j : Impl op} (o : op) (ns : list nat) (vs : list j.(value)) : nat :=
+  match lookups vs ns with
+  | None => 0
+  | Some xs => j.(raw_cost) o xs
+  end.
 
 Fixpoint eval {op : Type} {j : Impl op} (os : list (op * list nat)) (xs : list j.(value))
   : nat :=
   match os with
   | [] => 0
-  | (o, ns) :: os => j.(cost) o xs + eval os (eval_op o ns xs)
+  | (o, ns) :: os => cost o ns xs + eval os (eval_op o ns xs)
   end.
 
 End Cost.
@@ -69,8 +75,9 @@ End Pure.
 
 Coercion Pure.Cost.impl : Pure.Cost.Impl >-> Pure.Impl.
 
-Notation costop := Pure.Cost.cost.
-Notation costops := Pure.Cost.eval.
+Notation raw_cost_op := Pure.Cost.raw_cost.
+Notation cost_op := Pure.Cost.cost.
+Notation cost_ops := Pure.Cost.eval.
 
 Module Cv.
 
@@ -117,7 +124,7 @@ Class ImplCost (op : Type) (j : Pure.Cost.Impl op) (j' : Cv.Impl op) {IA : ImplA
       exists input, input `is_approx` vs /\
       j'.(Cv.raw_eval_op) o input [[ fun r c =>
         output `less_defined` r /\
-        debts input + c <= j.(costop) o vs + debts output ]]
+        debts input + c <= j.(raw_cost_op) o vs + debts output ]]
   }.
 
 Arguments ImplCost : clear implicits.
@@ -149,10 +156,18 @@ Lemma exact_list_app {a aA} {EE : Exact a aA} (xs1 xs2 : list a)
 Proof. apply map_app. Qed.
 
 Lemma less_defined_lookups {a aA} {EE : Exact a aA} {LD : LessDefined aA}
-    {ns : list nat} {xs ys : list a}
+    {f : aA -> nat} {ns : list nat} {xs ys : list a}
   : lookups xs ns = Some ys ->
     forall ysD : list aA, ysD `is_approx` ys ->
-    exists xsD : list aA, xsD `is_approx` xs /\ lookups xsD ns = Some ysD.
+    exists xsD : list aA, xsD `is_approx` xs /\
+      sumof f xsD <= sumof f ysD /\
+      lookups xsD ns = Some ysD.
+Proof. Admitted.
+
+Lemma less_defined_lookups_None {a aA} {EE : Exact a aA} {LD : LessDefined aA}
+    {ns : list nat} {xs : list a} {xsD : list aA}
+  : lookups xs ns = None ->
+    xsD `is_approx` xs -> lookups xsD ns = None.
 Proof. Admitted.
 
 Lemma nth_lub {a} `{LessDefined a, Lub a} {xs ys : list a} {x : a} {n : nat}
@@ -210,14 +225,14 @@ Lemma eval_cost (o : op) (ns : list nat) (vs : list j.(Pure.value)) output
     exists input, input `is_approx` vs /\
     Cv.eval_op o ns input [[ fun r c =>
       output `less_defined` r /\
-      debts input + c <= j.(costop) o vs (* TODO: not vs, use ns *) + debts output ]].
+      debts input + c <= cost_op o ns vs + debts output ]].
 Proof.
   unfold Cv.eval_op, Pure.eval_op.
   destruct (lookups vs ns) eqn:E; intros Hout.
   - rewrite exact_list_app in Hout. apply less_defined_app_inv in Hout.
     destruct Hout as (out1 & out2 & Hout & Hout1 & Hout2).
     apply raw_eval_cost in Hout2. destruct Hout2 as (input & Hin & HH).
-    destruct (less_defined_lookups E Hin) as (input' & Hin' & HH').
+    destruct (less_defined_lookups (f := debt) E Hin) as (input' & Hin' & Hdebt & HH').
     exists (lub input' out1).
     split; [ apply lub_least_upper_bound; auto | ].
     destruct (lookups_lub (ys := out1) HH') as (y1 & Hx & Hcob1 & Hy);
@@ -232,29 +247,53 @@ Proof.
     relax; [ apply HH | cbn; intros r c [Hr Hc] ].
     split; [ rewrite Hout; apply less_defined_app; [apply lub_upper_bound_r |]; eauto | ].
     rewrite debts_lub by eauto. rewrite Hout, debts_app.
-    unfold debts. (* Need to construct input' more carefully *)
+    unfold debts, cost_op. rewrite E, Hdebt.
+    revert Hc. generalize (raw_cost_op j o l). lia.
+  - exists output. rewrite (less_defined_lookups_None E Hout).
+    split; [ auto | ]. mgo. split; [ reflexivity | lia ].
+Qed.
+
+Lemma eval_ops_mon os
+  : Proper (less_defined ==> less_defined) (Cv.eval_ops os).
+Proof.
 Admitted.
+
+Notation pr := (pointwise_relation _).
+
+Lemma uc_ext {a} `{LessDefined a} : Proper (pr (pr eq) ==> iff) (uc (a := a)).
+Proof.
+  apply proper_sym_impl_iff; [ typeclasses eauto | ].
+  unfold uc; intros ? ? Hf Hg *.
+  rewrite <- Hf. apply Hg.
+Qed.
 
 Lemma ImplCostSoundness_aux
   : forall (os : list (op * list nat)) (vs : list j.(Pure.value)),
     forall output, output `is_approx` Pure.eval_ops os vs ->
     exists input, input `is_approx` vs /\
       Cv.eval_ops os input [[ fun r c =>
-        output `less_defined` r /\ c <= costops (j := j) os vs + debts output ]].
+        output `less_defined` r /\ debts input + c <= cost_ops (j := j) os vs + debts output ]].
 Proof.
   induction os as [ | [o ns] os IH ]; intros vs output Hout; cbn.
   - exists output. split; [apply Hout | ].
-    apply optimistic_ret. split; [ reflexivity | apply Nat.le_0_l ].
+    apply optimistic_ret. split; [ reflexivity | lia ].
   - cbn in Hout. specialize (IH (Pure.eval_op o ns vs) output Hout).
     destruct IH as (input & Hin & IH).
-    apply eval_cost in Hin.
-Admitted.
+    destruct (eval_cost _ _ _ Hin) as (inp & Hinp & HH).
+    exists inp. split; [ auto | ].
+    mgo. relax; [ apply HH | cbn; intros ? ? [HI HJ] ].
+    eapply optimistic_corelax; [ apply eval_ops_mon; eassumption | | ].
+    { eapply uc_ext; [ intros ? ?; rewrite Nat.add_assoc; reflexivity | apply uc_acost ]. }
+    relax; [ apply IH | cbn; intros ? ? [HK HL] ].
+    split; [ auto | ].
+    lia.
+Qed.
 
 Theorem ImplCostSoundness
   : forall os : list (op * list nat),
     forall d, d `is_approx` Pure.eval_ops os [] ->
       Cv.eval_ops os [] [[ fun r c =>
-        d `less_defined` r /\ c <= costops (j := j) os [] + debts d ]].
+        d `less_defined` r /\ c <= cost_ops (j := j) os [] + debts d ]].
 Proof.
   intros os d Hd. destruct (ImplCostSoundness_aux os [] Hd) as (d0 & Hd0 & HH).
   inversion Hd0; clear Hd0; subst.
