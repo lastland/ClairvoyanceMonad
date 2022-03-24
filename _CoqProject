@@ -7,7 +7,8 @@ src/ApproxM.v
 src/Translation.v
 src/Fix.v
 src/List.v
-src/LazyQueue.v
+src/BankersQueue.v
+src/RealtimeBankersQueue.v
 src/Eval.v
 src/Demand.v
 src/Interfaces.v
