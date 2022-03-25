@@ -303,6 +303,32 @@ Qed.
 
 Set Typeclasses Strict Resolution.
 
+(** * Cost specifications *)
+
+Definition at_most {a} `{LessDefined a} (u : M a) '((x, n) : a * nat) : Prop :=
+  exists y m, u y m /\ x `less_defined` y /\ m <= n.
+
+Definition at_least {a} `{LessDefined a} (u : M a) '((x, n) : a * nat) : Prop :=
+  forall y m, u y m -> x `less_defined` y -> n <= m.
+
+Infix "`at_most`" := at_most (at level 80).
+Infix "`at_least`" := at_least (at level 80).
+
+Definition costs {a} `{LessDefined a} (u : M a) (xn : a * nat) : Prop :=
+  u `at_most` xn /\ u `at_least` xn.
+
+Definition at_most0 {a} `{LessDefined a} (u : M a) (n : nat) : Prop :=
+  exists y m, u y m /\ m <= n.
+
+Definition at_least0 {a} `{LessDefined a} (u : M a) (n : nat) : Prop :=
+  forall y m, u y m -> n <= m.
+
+Infix "`at_most0`" := at_most0 (at level 80).
+Infix "`at_least0`" := at_least0 (at level 80).
+
+Definition costs0 {a} `{LessDefined a} (u : M a) (n : nat) : Prop :=
+  u `at_most0` n /\ u `at_least0` n.
+
 (** * Instances for standard types *)
 
 Inductive option_rel {a b} (r : a -> b -> Prop) : option a -> option b -> Prop :=

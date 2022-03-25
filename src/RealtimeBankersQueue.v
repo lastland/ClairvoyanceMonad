@@ -16,6 +16,11 @@ Set Implicit Arguments.
 Set Contextual Implicit.
 Set Maximal Implicit Insertion.
 
+#[local] Existing Instance Exact_id | 1.
+#[local] Existing Instance LessDefined_id | 100.
+#[local] Existing Instance PreOrder_LessDefined_id | 100.
+#[local] Existing Instance ExactMaximal_id | 100.
+
 Record Queue (a : Type) : Type := MkQueue
   { front : list a
   ; back : list a
@@ -141,3 +146,29 @@ Definition popD {a} (q : Queue a) (out : option (T (QueueA a) * T a)) : Tick (T 
     | None => bottom
     end
   end.
+
+#[global] Instance Exact_Queue {a aA} `{Exact a aA} : Exact (Queue a) (QueueA aA) :=
+  fun q => MkQueueA (exact (front q)) (exact (back q)) (exact (schedule q)).
+
+Record less_defined_QueueA {a} `{LessDefined a} (q1 q2 : QueueA a) : Prop :=
+  { ld_frontA : frontA q1 `less_defined` frontA q2
+  ; ld_backA : backA q1 `less_defined` backA q2
+  ; ld_scheduleA : scheduleA q1 `less_defined` scheduleA q2
+  }.
+
+#[global] Instance LessDefined_QueueA {a} `{LessDefined a} : LessDefined (QueueA a) :=
+  less_defined_QueueA.
+
+Lemma pushD_spec {a} (q : Queue a) (x : a) (outD : QueueA a)
+  : outD `is_approx` push q x ->
+    forall qD xD dcost, Tick.MkTick dcost (qD, xD) = pushD q x outD ->
+    pushA qD xD {{ fun out cost => outD `less_defined` out /\ cost <= dcost }}.
+Proof.
+Admitted.
+
+Lemma pushD_lowspec {a} (q : Queue a) (x : a) (outD : QueueA a)
+  : outD `is_approx` push q x ->
+    forall qD xD dcost, Tick.MkTick dcost (qD, xD) = pushD q x outD ->
+    pushA qD xD [[ fun out cost => outD `less_defined` out -> dcost <= cost ]].
+Proof.
+Admitted.
