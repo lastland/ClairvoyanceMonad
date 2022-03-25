@@ -437,6 +437,17 @@ Proof.
       apply IH; auto.
 Qed.
 
+Notation resp r1 r2 f f' := (forall x x', r1 x x' -> r2 (f x) (f' x')) (only parsing).
+
+#[global] Instance LessDefined_fun {a b} `{LessDefined a, LessDefined b}
+  : LessDefined (a -> b) :=
+  fun f f' => resp less_defined less_defined f f'.
+
+#[global] Instance Lub_fun {a b} `{Lub b} : Lub (a -> b) :=
+  fun f f' x => lub (f x) (f' x).
+
+#[global] Instance Bottom_fun {a b} `{Bottom b} : Bottom (a -> b) := fun _ => bottom.
+
 (** In this part, we prove that any type [a] is also an [exact] of itself. We
     define this instance so that [listA a] would be an approximation of [list
     a]---so that we do not need to consider the approximation of [a]. A useful

@@ -5,7 +5,7 @@ From Equations Require Import Equations.
 
 From Coq Require Import Arith List Lia Setoid Morphisms.
 Import ListNotations.
-From Clairvoyance Require Import Core Approx ApproxM List Misc LazyQueue.
+From Clairvoyance Require Import Core Approx ApproxM List Misc BankersQueue.
 
 Set Primitive Projections.
 Set Implicit Arguments.

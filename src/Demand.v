@@ -1,6 +1,6 @@
 (** * The category of demand functions *)
 
-(** The naive demand functions in LazyQueue have types of the form
+(** The naive demand functions in BankersQueue have types of the form
     [input -> outputA -> nat * inputA].
     But to be able to define a total translation of the lazy lambda calculus,
     we need a CCC. The definition of exponential objects necessitates
@@ -22,20 +22,9 @@ Infix "`is_approx`" := is_approx : approx_scope.
   : IsApprox (a * b) (ea * eb) :=
   pair_rel is_approx is_approx.
 
-Notation resp r1 r2 f f' := (forall x x', r1 x x' -> r2 (f x) (f' x')) (only parsing).
-
 #[global] Instance IsApprox_fun {a ea b eb} `{IsApprox a ea, IsApprox b eb}
   : IsApprox (a -> b) (ea -> eb) :=
   fun f ef => resp is_approx is_approx f ef.
-
-#[global] Instance LessDefined_fun {a b} `{LessDefined a, LessDefined b}
-  : LessDefined (a -> b) :=
-  fun f f' => resp less_defined less_defined f f'.
-
-#[global] Instance Lub_fun {a b} `{Lub b} : Lub (a -> b) :=
-  fun f f' x => lub (f x) (f' x).
-
-#[global] Instance Bottom_fun {a b} `{Bottom b} : Bottom (a -> b) := fun _ => bottom.
 
 #[global] Instance IsApprox_M {a e : Type} `{IsApprox a e} : IsApprox (M a) e :=
   fun u ex => u {{ fun x _ => x `is_approx` ex }}.
