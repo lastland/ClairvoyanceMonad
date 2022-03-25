@@ -159,18 +159,14 @@ Proof.
 Qed.
 
 (* Partial function: we assume that both arguments approximate the same list *)
-Fixpoint lub_list {a} (xs ys : listA a) : listA a :=
+Fixpoint lub_listA {a} (xs ys : listA a) : listA a :=
   match xs, ys with
   | NilA, NilA => NilA
-  | ConsA x xs, ConsA y ys => ConsA (lub_T (fun r _ => r) x y) (lub_T lub_list xs ys)
+  | ConsA x xs, ConsA y ys => ConsA (lub_T (fun r _ => r) x y) (lub_T lub_listA xs ys)
   | _, _ => NilA  (* silly case *)
   end.
 
-#[global] Instance Lub_list {a} : Lub (listA a) := lub_list.
-
-#[global] Instance Lub_QueueA {a} : Lub (QueueA a) :=
-  fun q1 q2 =>
-    MkQueueA (nfrontA q1) (lub (frontA q1) (frontA q2)) (nbackA q1) (lub (backA q1) (backA q2)).
+#[global] Instance Lub_listA {a} : Lub (listA a) := lub_listA.
 
 #[global] Instance LubLaw_listA {a} : LubLaw (listA a).
 Proof.
@@ -190,6 +186,10 @@ Proof.
     1: inversion H; inversion H4; subst; invert_approx; constructor; reflexivity + auto; inversion H8; invert_approx; reflexivity.
     inversion H5; subst; constructor; [ reflexivity | auto ].
 Qed.
+
+#[global] Instance Lub_QueueA {a} : Lub (QueueA a) :=
+  fun q1 q2 =>
+    MkQueueA (nfrontA q1) (lub (frontA q1) (frontA q2)) (nbackA q1) (lub (backA q1) (backA q2)).
 
 #[global] Instance LubRep_QueueA {a} : LubRep (QueueA a) (nat * T (listA a) * nat * T (listA a)).
 Proof.
