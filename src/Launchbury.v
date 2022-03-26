@@ -11,45 +11,43 @@ Set Implicit Arguments.
 Set Contextual Implicit.
 Set Maximal Implicit Insertion.
 
-Record T (a : Type) : Type := Ref
-  { deref : nat }.
-
-Inductive LF (m : Type -> Type) (a : Type) : Type :=
+Inductive LF (t m : Type -> Type) (a : Type) : Type :=
 | Ret (r : a)
-| LetLazy {b : Type} (u : m b) (k : T b -> m a)
-| LetForce {b : Type} (t : T b) (k : b -> m a)
+| Bind {b : Type} (u : m b) (k : b -> m a)
+| LetLazy {b : Type} (u : m b) (k : t b -> m a)
+| Force (th : t a)
 | Tick (u : m a)
 .
+(* Replacing LetLazy with Lazy : m a -> LF m (R a) would make LF an indexed type
+   and annoyingly require dependently-typed programming in the definition of [eval]. *)
 
-CoInductive L (a : Type) : Type := Step
-  { exec : LF L a }.
+CoInductive L (t : Type -> Type) (a : Type) : Type := Step
+  { exec : LF t (L t) a }.
 
-Definition ret {a} (x : a) : L a :=
+Definition ret {t a} (x : a) : L t a :=
   Step (Ret x).
 
-Definition subst {a b} (k : a -> L b) : L a -> L b :=
-  cofix subst_k (u : L a) : L b := Step
-    match exec u with
-    | Ret r => exec (k r)
-    | LetLazy u h => LetLazy u (fun x => subst_k (h x))
-    | LetForce u h => LetForce u (fun x => subst_k (h x))
-    | Tick u => Tick (subst_k u)
-    end.
+Definition bind {t a b} (u : L t a) (k : a -> L t b) : L t b :=
+  Step (Bind u k).
 
-Definition bind {a b} (u : L a) (k : a -> L b) : L b := subst k u.
-
-Definition let_lazy {a b} (u : L a) (k : T a -> L b) : L b :=
+Definition let_lazy {t a b} (u : L t a) (k : t a -> L t b) : L t b :=
   Step (LetLazy u k).
 
-Definition let_force {a b} (t : T a) (k : a -> L b) : L b :=
-  Step (LetForce t k).
+Definition force {t a} (th : t a) : L t a :=
+  Step (Force th).
 
-Definition tick : L unit := Step (Tick (Step (Ret tt))).
+Definition tick {t} : L t unit := Step (Tick (Step (Ret tt))).
+
+Notation "'let^' x ':=' t 'in' s" := (bind t (fun x => s)) (x as pattern, at level 90).
+Notation "'let^~' x  ':=' t 'in' s" := (let_lazy t (fun x => s)) (x as pattern, at level 90).
 
 (* Big step semantics *)
+Record R (a : Type) : Type := Ref
+  { deref : nat }.
+
 Inductive thunk : Type :=
 | Val {a : Type} (x : a)
-| Thunk {a : Type} (u : L a).
+| Thunk {a : Type} (u : L R a).
 
 Definition heap : Type := list thunk.
 
@@ -63,67 +61,146 @@ Definition bind {a b} (u : N a) (k : a -> N b) : N b := fun h h'' n y =>
   exists h' m x m',
     u h h' m x /\ k x h' h'' m' y /\ n = m + m'.
 
-Definition lazy {a} (u : L a) : N (T a) := fun h h' n x =>
+Definition lazy {a} (u : L R a) : N (R a) := fun h h' n x =>
   h' = h ++ [Thunk u] /\ n = 0 /\ x = {| deref := List.length h |}.
 
-Inductive force_ (_evalF : forall {a : Type}, L a -> N a)
-  {a} (t : T a) (h h' : heap) (n : nat) (x : a) : Prop :=
+Inductive force_ (_evalF : forall {a : Type}, L R a -> N a)
+  {a} (t : R a) (h h' : heap) (n : nat) (x : a) : Prop :=
 | ForceVal :
     nth_error h (deref t) = Some (Val x) -> h = h' -> n = 0 -> force_ (@_evalF) t h h' n x
 | ForceThunk u :
     nth_error h (deref t) = Some (Thunk u) -> _evalF u h h' n x -> force_ (@_evalF) t h h' n x.
 
-Definition force _evalF {a} : T a -> N a := force_ _evalF.
+Definition force _evalF {a} : R a -> N a := force_ _evalF.
 
 Definition tick : N unit := fun h h' n _ =>
   h = h' /\ n = 1.
  
 End N.
 
-Definition evalF (_evalF : forall {a : Type}, L a -> N a) {a} (u : L a) : N a :=
+Definition evalF (_evalF : forall {a : Type}, L R a -> N a) {a} (u : L R a) : N a :=
   match exec u with
   | Ret r => N.ret r
+  | Bind u k => N.bind (_evalF u) (fun x => _evalF (k x))
   | LetLazy u k => N.bind (N.lazy u) (fun t => _evalF (k t))
-  | LetForce u k => N.bind (N.force (@_evalF) u) (fun x => _evalF (k x))
+  | Force th => N.force (@_evalF) th
   | Tick u => N.bind N.tick (fun _ => _evalF u)
   end.
 
-Section Fix.
+Module Fix6.
+Section Fix6.
 Context {b : Type -> Type} {c d e : Type}.
 Notation Pred := (forall (a : Type), b a -> c -> d -> e -> a -> Prop).
 Definition imp (P Q : Pred) : Prop :=
-  forall a xb xc xd xe x, P a xb xc xd x xe -> Q a xb xc xd x xe.
+  forall a xb xc xd xe x, P a xb xc xd xe x -> Q a xb xc xd xe x.
 Hint Unfold imp : core.
 Infix "-->" := imp (at level 90).
-Inductive fix6 (gf : Pred -> Pred) (a : Type) xb xc xd xe x : Prop :=
-| InFix6 {Q : Pred} (_ : gf Q a xb xc xd xe x) (_ : Q --> fix6 gf)
+Inductive F (gf : Pred -> Pred) (a : Type) xb xc xd xe x : Prop :=
+| InF {Q : Pred} (_ : gf Q a xb xc xd xe x) (_ : Q --> F gf)
 .
 
-Definition monotone6 (gf : Pred -> Pred) : Prop :=
+Definition monotone (gf : Pred -> Pred) : Prop :=
   forall P Q : Pred, (P --> Q) -> (gf P --> gf Q).
 
-Theorem fix6_fold (gf : Pred -> Pred) : gf (@fix6 gf) --> @fix6 gf.
+Theorem fold (gf : Pred -> Pred) : gf (@F gf) --> @F gf.
 Proof.
-  red; intros * Hgf. apply (InFix6 (Q := @fix6 gf)); auto.
+  red; intros * Hgf. apply (InF (Q := @F gf)); auto.
 Qed.
 
-Theorem fix6_unfold (gf : Pred -> Pred) (MON : monotone6 gf) : @fix6 gf --> gf (@fix6 gf).
+Theorem unfold (gf : Pred -> Pred) (MON : monotone gf) : @F gf --> gf (@F gf).
 Proof.
   red; intros * Hfix; destruct Hfix.
   revert H; apply MON. auto.
 Qed.
 
-Theorem fix6_induction (gf : Pred -> Pred) (MON : monotone6 gf)
-  : forall P : Pred, (gf P --> P) -> (@fix6 gf --> P).
+Theorem induction (gf : Pred -> Pred) (MON : monotone gf)
+  : forall P : Pred, (gf P --> P) -> (@F gf --> P).
 Proof.
   intros P alg. red. fix SELF 7. intros * [Q Hgf Hext].
   apply alg. revert Hgf; apply MON. auto.
 Qed.
-End Fix.
+End Fix6.
+End Fix6.
 
-Definition eval {a : Type} : L a -> N a := fix6 evalF.
+Definition eval {a : Type} : L R a -> N a := Fix6.F evalF.
+
+Variant listF (a : Type) (t : Type -> Type) list_ : Type :=
+| NilF
+| ConsF (x : t a) (xs : t list_).
+
+Class Data (t : Type -> Type) (dF : (Type -> Type) -> Type -> Type) : Type :=
+  { d_ : Type
+  ; des : d_ -> dF t d_
+  ; con : dF t d_ -> d_
+  }.
+
+Coercion d_ : Data >-> Sortclass.
+
+(* #[global] Hint Mode IsData ! ! : typeclass_instances. *)
 
 Inductive listL (a : Type) : Type :=
 | NilL
-| ConsL (x : T a) (xs : T (listL a))  (* not actually recursive: T (listL a) = nat *)
+| ConsL (x : R a) (xs : R (listL a))  (* not actually recursive: R (listL a) = nat *)
 .
+
+#[global] Instance Data_listL {a} : Data R (listF a) :=
+  {| d_ := listL a
+  ; des x := match x with ConsL x xs => ConsF x xs | NilL => NilF end
+  ; con x := match x with ConsF x xs => ConsL x xs | NilF => NilL end
+  |}.
+
+CoFixpoint appendL {t : Type -> Type} {list_ : forall a, Data t (listF a)}
+    {a} (xs ys : t (list_ a)) : L t (list_ a) :=
+  let^ xs := force xs in
+  match des xs with
+  | NilF => force ys
+  | ConsF x xs => let^~ zs := appendL xs ys in ret (con (ConsF x zs))
+  end.
+
+Module Fix4.
+Section Fix4.
+Context {b : Type -> Type} {c : Type}.
+Notation Pred := (forall (a : Type), b a -> a -> c -> Prop).
+Definition imp (P Q : Pred) : Prop :=
+  forall a xb xc x, P a xb xc x -> Q a xb xc x.
+Hint Unfold imp : core.
+Infix "-->" := imp (at level 90).
+Inductive F (gf : Pred -> Pred) (a : Type) xb xc x : Prop :=
+| InF {Q : Pred} (_ : gf Q a xb xc x) (_ : Q --> F gf)
+.
+
+Definition monotone (gf : Pred -> Pred) : Prop :=
+  forall P Q : Pred, (P --> Q) -> (gf P --> gf Q).
+
+Theorem fold (gf : Pred -> Pred) : gf (@F gf) --> @F gf.
+Proof.
+  red; intros * Hgf. apply (InF (Q := @F gf)); auto.
+Qed.
+
+Theorem unfold (gf : Pred -> Pred) (MON : monotone gf) : @F gf --> gf (@F gf).
+Proof.
+  red; intros * Hfix; destruct Hfix.
+  revert H; apply MON. auto.
+Qed.
+
+Theorem induction (gf : Pred -> Pred) (MON : monotone gf)
+  : forall P : Pred, (gf P --> P) -> (@F gf --> P).
+Proof.
+  intros P alg. red. fix SELF 5. intros * [Q Hgf Hext].
+  apply alg. revert Hgf; apply MON. auto.
+Qed.
+End Fix4.
+End Fix4.
+
+Import Clairvoyance.Core.
+
+Definition evalMF (_evalMF : forall {a : Type}, L T a -> M a) {a} (u : L T a) : M a :=
+  match exec u with
+  | Ret r => ret r
+  | Bind u k => bind (_evalMF u) (fun x => _evalMF (k x))
+  | LetLazy u k => bind (Core.thunk (_evalMF u)) (fun t => _evalMF (k t))
+  | Force th => force th
+  | Tick u => bind tick (fun _ => _evalMF u)
+  end.
+
+Definition evalM {a} : L T a -> M a := Fix4.F evalMF.
