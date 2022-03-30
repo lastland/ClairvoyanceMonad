@@ -24,6 +24,9 @@ Inductive LF (t m : Type -> Type) (a : Type) : Type :=
 CoInductive L (t : Type -> Type) (a : Type) : Type := Step
   { exec : LF t (L t) a }.
 
+(* L for Lazy and for Launchbury *)
+Module Import L.
+
 Definition ret {t a} (x : a) : L t a :=
   Step (Ret x).
 
@@ -38,8 +41,14 @@ Definition force {t a} (th : t a) : L t a :=
 
 Definition tick {t} : L t unit := Step (Tick (Step (Ret tt))).
 
+Module Notations.
 Notation "'let^' x ':=' t 'in' s" := (bind t (fun x => s)) (x as pattern, at level 90).
 Notation "'let^~' x  ':=' t 'in' s" := (let_lazy t (fun x => s)) (x as pattern, at level 90).
+End Notations.
+
+End L.
+
+Import L.Notations.
 
 (* Big step semantics *)
 Record R (a : Type) : Type := Ref
@@ -124,35 +133,35 @@ End Fix6.
 
 Definition eval {a : Type} : L R a -> N a := Fix6.F evalF.
 
-Variant listF (a : Type) (t : Type -> Type) list_ : Type :=
+Variant listF (t : Type -> Type) (a : Type) (list_ : Type) : Type :=
 | NilF
 | ConsF (x : t a) (xs : t list_).
 
-Class Data (t : Type -> Type) (dF : (Type -> Type) -> Type -> Type) : Type :=
+Class Data (dF : Type -> Type) : Type :=
   { d_ : Type
-  ; des : d_ -> dF t d_
-  ; con : dF t d_ -> d_
+  ; des : d_ -> dF d_
+  ; con : dF d_ -> d_
   }.
 
 Coercion d_ : Data >-> Sortclass.
 
-(* #[global] Hint Mode IsData ! ! : typeclass_instances. *)
+#[global] Hint Mode Data ! : typeclass_instances.
 
 Inductive listL (a : Type) : Type :=
 | NilL
 | ConsL (x : R a) (xs : R (listL a))  (* not actually recursive: R (listL a) = nat *)
 .
 
-#[global] Instance Data_listL {a} : Data R (listF a) :=
+#[global] Instance Data_listL {a} : Data (listF R a) :=
   {| d_ := listL a
   ; des x := match x with ConsL x xs => ConsF x xs | NilL => NilF end
   ; con x := match x with ConsF x xs => ConsL x xs | NilF => NilL end
   |}.
 
-CoFixpoint appendL {t : Type -> Type} {list_ : forall a, Data t (listF a)}
+CoFixpoint appendL {t : Type -> Type} {list_ : forall a, Data (listF t a)}
     {a} (xs ys : t (list_ a)) : L t (list_ a) :=
   let^ xs := force xs in
-  match des xs with
+  match des xs return L t (list_ a) with
   | NilF => force ys
   | ConsF x xs => let^~ zs := appendL xs ys in ret (con (ConsF x zs))
   end.
