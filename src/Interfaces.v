@@ -302,6 +302,14 @@ Qed.
 
 End Soundness.
 
+Definition ImplRealTimeCost
+    (op : Type) (j : Pure.Cost.Impl op) (j' : Cv.Impl op) {IA : ImplApprox j j'}
+  : Prop :=
+  forall (os : list (op * list nat)) (o : op) (ns : list nat),
+    ( cost_of (Cv.eval_ops (os ++ [(o, ns)]) [])
+    = cost_of (Cv.eval_ops os []) + cost_op o ns (Pure.eval_ops (j := j) os [])
+    )%NAT.
+
 (* Example *)
 Module Queue.
 
