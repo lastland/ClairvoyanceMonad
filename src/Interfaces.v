@@ -5,7 +5,7 @@ From Equations Require Import Equations.
 
 From Coq Require Import Arith List Lia Setoid Morphisms.
 Import ListNotations.
-From Clairvoyance Require Import Core Approx ApproxM List Misc BankersQueue.
+From Clairvoyance Require Import Core Approx ApproxM List Misc BankersQueue Launchbury.
 
 Set Primitive Projections.
 Set Implicit Arguments.
@@ -302,12 +302,59 @@ Qed.
 
 End Soundness.
 
+(* Stateful semantics of laziness *)
+Module St.
+
+Import L.Notations.
+
+Record Impl (op : Type) : Type :=
+  { value : Type
+  ; raw_eval_op : op -> list value -> L R (list value)
+  }.
+
+Definition eval_op {op : Type} {j : Impl op} (o : op) (ns : list nat) (xs : list j.(value))
+  : L R (list j.(value)) :=
+  match lookups xs ns with
+  | None => L.ret xs  (* noop *)
+  | Some vs => let^ vs := j.(raw_eval_op) o vs in L.ret (xs ++ vs)
+  end.
+
+Fixpoint eval_ops {op : Type} {j : Impl op} (os : list (op * list nat)) (xs : list j.(value))
+  : L R (list j.(value)) :=
+  match os with
+  | [] => L.ret xs
+  | (o, ns) :: os => let^ xs := eval_op o ns xs in eval_ops os xs
+  end.
+
+(* The cost of "evaluating to WHNF": start with an empty heap, run the computation,
+   it doesn't matter what the final heap [h] and result [x] are. *)
+Definition cost_from {a} (u : L R a) (h : heap) : NAT.t :=
+  fun c => exists x, eval u empty_heap h c x.
+
+End St.
+
+Section RealTimeCost.
+
+Context {op : Type} (j : Pure.Cost.Impl op) (j' : St.Impl op).
+
+Notation op' := (op * list nat)%type.
+
+Definition RealTimeCost : Prop :=
+  forall (os : list op') (o : op) (ns : list nat),
+  forall h c0 xs,
+    eval (St.eval_ops (j := j') os []) empty_heap h c0 xs ->
+    ( St.cost_from (St.eval_op o ns xs) h
+    <= NAT.of_nat (cost_op (j := j) o ns (Pure.eval_ops os []))
+    )%NAT.
+
+End RealTimeCost.
+
 Definition ImplRealTimeCost
     (op : Type) (j : Pure.Cost.Impl op) (j' : Cv.Impl op) {IA : ImplApprox j j'}
   : Prop :=
   forall (os : list (op * list nat)) (o : op) (ns : list nat),
     ( cost_of (Cv.eval_ops (os ++ [(o, ns)]) [])
-    = cost_of (Cv.eval_ops os []) + cost_op o ns (Pure.eval_ops (j := j) os [])
+    <= cost_of (Cv.eval_ops os []) + cost_op o ns (Pure.eval_ops (j := j) os [])
     )%NAT.
 
 (* Example *)
@@ -362,7 +409,7 @@ Definition raw_eval (o : Queue.Op) (vs : list Value) : M (list Value) :=
     | None => ret []
     | Some (x, q) => ret [E x; Q q]
     end
-  | Init x, _ => ret [E (Thunk x)]
+  | Init x, _ => ret [E (Core.Thunk x)]
   | _, _ => ret []
   end.
 

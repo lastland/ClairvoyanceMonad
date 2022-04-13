@@ -60,6 +60,8 @@ Inductive thunk : Type :=
 
 Definition heap : Type := list thunk.
 
+Definition empty_heap : heap := [].
+
 Definition N (a : Type) : Type := heap -> heap -> nat -> a -> Prop.
 
 Module N.
