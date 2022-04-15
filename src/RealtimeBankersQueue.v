@@ -5,7 +5,7 @@
 (* TODO: following BankersQueue we can formalize the amortized complexity bounds.
    But how can we formalize the stronger non-amortized bounds? *)
 
-From Coq Require Import List.
+From Coq Require Import List Lia.
 From Clairvoyance Require Import Core Approx ApproxM List Misc BankersQueue.
 From Clairvoyance Require Launchbury.
 
@@ -173,6 +173,100 @@ Lemma pushD_lowspec {a} (q : Queue a) (x : a) (outD : QueueA a)
     pushA qD xD [[ fun out cost => outD `less_defined` out -> dcost <= cost ]].
 Proof.
 Admitted.
+
+Definition debt_ {a} (q : Queue a) (qA : QueueA a) : nat :=
+  max (sizeX 0 (scheduleA qA)) (sizeX 0 (frontA qA) - length (back q)).
+
+Definition debt {a} (q : Queue a) (qA : T (QueueA a)) : nat :=
+  match qA with
+  | Undefined => 0
+  | Thunk qA => debt_ q qA
+  end.
+
+Definition rpost (a a' : Type) : Type := a -> a' -> nat -> nat -> Prop.
+
+(* "Relational specification" *)
+Definition rspec {a} (u u' : Tick a) (P : rpost a a) : Prop :=
+  P (Tick.val u) (Tick.val u') (Tick.cost u) (Tick.cost u').
+
+Lemma bind_rspec {a b} (u u' : Tick a) (k k' : a -> Tick b) (P : rpost b b)
+  : rspec u u' (fun x x' nx nx' =>
+      rspec (k x) (k' x') (fun y y' ny ny' =>
+        P y y' (nx + ny) (nx' + ny'))) ->
+    rspec (Tick.bind u k) (Tick.bind u' k') P.
+Admitted.
+
+Lemma ret_rspec {a} (x x' : a) (P : rpost a a)
+  : P x x' 0 0 -> rspec (Tick.ret x) (Tick.ret x') P.
+Proof. exact (fun H => H). Qed.
+
+Lemma tick_rspec (P : rpost unit unit)
+  : P tt tt 1 1 -> rspec Tick.tick Tick.tick P.
+Proof. exact (fun H => H). Qed.
+
+(*
+Lemma thunkD_rspec {a b} `{Bottom b} (f f' : a -> Tick b) (P : rpost b b) (d d' : T a)
+  : (forall e e', d = Thunk e -> d' = Thunk e' -> rspec (f e) (f' e') P) ->
+    rspec (thunkD f d) (thunkD f d') P.
+*)
+
+Lemma mono_rspec {a} (u u' : Tick a) (P Q : rpost a a)
+  : (forall x x' n n', P x x' n n' -> Q x x' n n') -> rspec u u' P -> rspec u u' Q.
+Proof. exact (fun H => H _ _ _ _). Qed.
+
+Lemma rotateD_rcost {a} (f b d : list a) (outD outD' : listA a)
+  : S (length f) = length b ->
+    outD' `is_approx` rotate f b d ->
+    outD `less_defined` outD' ->
+    rspec (rotateD f b d outD) (rotateD f b d outD') (fun '(fD, bD, dD) '(fD', bD', dD') n n' =>
+       n' + sizeX 0 fD <= n  + sizeX 0 fD').
+Proof.
+Admitted.
+
+Lemma mkQueueD_rcost {a} (f b s : list a) (outD outD' : QueueA a)
+  : outD' `is_approx` mkQueue f b s ->
+    outD `less_defined` outD' ->
+    rspec (mkQueueD f b s outD) (mkQueueD f b s outD') (fun '(fD, bD, sD) '(fD', bD', sD') n n' =>
+       n' + max (sizeX 0 sD') (sizeX 0 fD' - length b) + debt_ (mkQueue f b s) outD
+    <= n  + max (sizeX 0 sD ) (sizeX 0 fD  - length b) + debt_ (mkQueue f b s) outD').
+Proof.
+  intros Hout Hout'.
+  apply bind_rspec, tick_rspec.
+  destruct s.
+  - apply bind_rspec.
+    assert (Hlub : lub (frontA outD) (scheduleA outD) `less_defined` lub (frontA outD') (scheduleA outD')).
+    { admit. }
+    inversion Hlub.
+    + cbn. admit.
+    + cbn. eapply mono_rspec; [ | apply rotateD_rcost; auto ]; cbn.
+      2,3: admit.
+      intros [ [fD bD] dD] [ [fD' bD'] dD'] n n' Hrotate.
+      apply ret_rspec. cbn.
+      admit. (* This makes no sense?! *)
+  - admit.
+Admitted.
+
+Lemma pushD_rcost {a} (q : Queue a) (x : a) (outD outD' : QueueA a)
+  : outD' `is_approx` push q x ->
+    outD `less_defined` outD' ->
+    rspec (pushD q x outD) (pushD q x outD') (fun '(qD, xD) '(qD', xD') n n' =>
+       n' + debt q qD' + debt_ (push q x) outD
+    <= n  + debt q qD  + debt_ (push q x) outD').
+Proof.
+  intros Hout Hout'.
+  unfold pushD, push.
+  apply bind_rspec, tick_rspec.
+  apply bind_rspec. eapply mono_rspec; [ | apply mkQueueD_rcost; solve [auto] ]; cbn.
+  intros [ [fD bD] sD] [ [fD' bD'] sD'] n n' HmkQueue.
+  apply ret_rspec. revert HmkQueue; cbn.
+  remember (debt_ (mkQueue _ _ _) outD).
+  remember (debt_ (mkQueue _ _ _) outD').
+  unfold debt_; cbn.
+  assert (HH : sizeX 0 fD <= sizeX 0 fD'). admit.
+  admit.
+Admitted.
+
+(*********************************)
 
 Import Clairvoyance.Launchbury.
 Import L.Notations.
