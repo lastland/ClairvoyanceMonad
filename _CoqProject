@@ -14,3 +14,4 @@ src/Demand.v
 src/Interfaces.v
 src/Launchbury.v
 src/Fuel.v
+src/LazyT.v
