@@ -28,9 +28,9 @@ jobs:
           path: ~/.opam
           key: opam-${{ runner.os }}-coq${{ matrix.coq }}
       - name: Set up OCaml
-        uses: avsm/setup-ocaml@v1
+        uses: avsm/setup-ocaml@v2
         with:
-          ocaml-version: ${{ matrix.ocaml }}
+          ocaml-compiler: ${{ matrix.ocaml }}
       - name: Initialize OPAM
         if: steps.caching-opam.outputs.cache-hit != 'true'
         run: |
