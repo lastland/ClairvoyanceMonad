@@ -301,7 +301,8 @@ Proof.
   intros Hout Hout'.
   unfold pushD, push.
   apply bind_rspec, tick_rspec.
-  apply bind_rspec. eapply mono_rspec; [ | apply mkQueueD_rcost; solve [auto] ]; cbn.
+  apply bind_rspec. eapply mono_rspec; [ | apply mkQueueD_rcost; auto ]; cbn.
+  2: admit.
   intros [ [fD bD] sD] [ [fD' bD'] sD'] n n' HmkQueue.
   apply ret_rspec. revert HmkQueue; cbn.
   remember (debt_ (mkQueue _ _ _) outD).
