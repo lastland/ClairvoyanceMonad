@@ -5,7 +5,7 @@
 (* TODO: following BankersQueue we can formalize the amortized complexity bounds.
    But how can we formalize the stronger non-amortized bounds? *)
 
-From Coq Require Import List Lia.
+From Coq Require Import List Arith Lia.
 From Clairvoyance Require Import Core Approx ApproxM List Misc BankersQueue.
 From Clairvoyance Require Launchbury.
 
@@ -183,6 +183,9 @@ Definition debt {a} (q : Queue a) (qA : T (QueueA a)) : nat :=
   | Thunk qA => debt_ q qA
   end.
 
+Definition wf_Queue {a} (q : Queue a) : Prop :=
+  length (front q) = length (back q) + length (schedule q).
+
 Definition rpost (a a' : Type) : Type := a -> a' -> nat -> nat -> Prop.
 
 (* "Relational specification" *)
@@ -214,23 +217,64 @@ Lemma mono_rspec {a} (u u' : Tick a) (P Q : rpost a a)
   : (forall x x' n n', P x x' n n' -> Q x x' n n') -> rspec u u' P -> rspec u u' Q.
 Proof. exact (fun H => H _ _ _ _). Qed.
 
+(* Direct approach: find simple formulas for the demand functions *)
+
+Lemma rotateD_cost {a} (f b d : list a) (outD : listA a)
+  : outD `is_approx` rotate f b d ->
+    Tick.cost (rotateD f b d outD) = min (sizeX' 1 outD) (S (length f)).
+Proof.
+  revert b d outD; induction f as [ | x f IH ]; intros [ | y b] * Hout; cbn in *; f_equal.
+  - destruct outD as [ | ? [] ]; cbn; try rewrite Nat.min_0_r; reflexivity.
+  - rewrite exact_list_unfold_cons in Hout. inversion Hout; subst; cbn.
+    destruct xs; cbn; [ rewrite Nat.min_0_r | ]; reflexivity.
+  - rewrite exact_list_unfold_nil in Hout. inversion Hout; subst; cbn. reflexivity.
+  - rewrite exact_list_unfold_cons in Hout. inversion Hout; subst; cbn.
+    inversion H3; subst; cbn; [ reflexivity | ].
+    rewrite IH; auto.
+    destruct (Tick.val _) as [ [? ?] ? ]; cbn. rewrite Nat.add_0_r; reflexivity.
+Qed.
+
+Lemma mkQueueD_cost {a} (f b s : list a) (outD : QueueA a)
+  : outD `is_approx` mkQueue f b s ->
+    Tick.cost (mkQueueD f b s outD) =
+      match s with
+      | [] => 1 + min (sizeX 1 (lub (frontA outD) (scheduleA outD))) (S (length f))
+      | _ :: _ => 1
+      end.
+Proof.
+  unfold mkQueue, mkQueueD. intros Hout.
+  destruct s; cbn; [ | reflexivity ].
+  unfold exact, Exact_Queue in Hout; cbn in Hout. destruct Hout; cbn in *.
+  f_equal. destruct (lub _ _) eqn:H; cbn in *; [ | reflexivity ].
+  rewrite rotateD_cost; auto.
+  { destruct (Tick.val _) as [ [? ?] ?]; cbn; rewrite Nat.add_0_r; reflexivity. }
+  { apply less_defined_Thunk_inv. rewrite <- H.
+    apply lub_least_upper_bound; auto. }
+Qed.
+
+(* Relational approach: ???
+   (should be more general/mechanizable) *)
+
 Lemma rotateD_rcost {a} (f b d : list a) (outD outD' : listA a)
   : S (length f) = length b ->
     outD' `is_approx` rotate f b d ->
     outD `less_defined` outD' ->
     rspec (rotateD f b d outD) (rotateD f b d outD') (fun '(fD, bD, dD) '(fD', bD', dD') n n' =>
-       n' + sizeX 0 fD <= n  + sizeX 0 fD').
+       n' + min (sizeX' 1 outD) (length f) <= n  + min (sizeX' 1 outD') (length f)).
 Proof.
 Admitted.
 
+(* need rotateD_spec (result is approximation of input) *)
 Lemma mkQueueD_rcost {a} (f b s : list a) (outD outD' : QueueA a)
-  : outD' `is_approx` mkQueue f b s ->
+  : S (length f) = length b + length s ->
+    outD' `is_approx` mkQueue f b s ->
     outD `less_defined` outD' ->
     rspec (mkQueueD f b s outD) (mkQueueD f b s outD') (fun '(fD, bD, sD) '(fD', bD', sD') n n' =>
        n' + max (sizeX 0 sD') (sizeX 0 fD' - length b) + debt_ (mkQueue f b s) outD
     <= n  + max (sizeX 0 sD ) (sizeX 0 fD  - length b) + debt_ (mkQueue f b s) outD').
 Proof.
-  intros Hout Hout'.
+  unfold mkQueue, mkQueueD.
+  intros Hf Hout Hout'.
   apply bind_rspec, tick_rspec.
   destruct s.
   - apply bind_rspec.
@@ -242,8 +286,9 @@ Proof.
       2,3: admit.
       intros [ [fD bD] dD] [ [fD' bD'] dD'] n n' Hrotate.
       apply ret_rspec. cbn.
-      admit. (* This makes no sense?! *)
-  - admit.
+      unfold debt_; cbn.
+      admit.
+  - apply ret_rspec. cbn. admit.
 Admitted.
 
 Lemma pushD_rcost {a} (q : Queue a) (x : a) (outD outD' : QueueA a)
