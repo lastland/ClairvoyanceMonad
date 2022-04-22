@@ -175,7 +175,7 @@ Proof.
 Admitted.
 
 Definition debt_ {a} (q : Queue a) (qA : QueueA a) : nat :=
-  max (sizeX 0 (scheduleA qA)) (sizeX 0 (frontA qA) - length (back q)).
+  max (sizeX 1 (scheduleA qA)) (sizeX 1 (frontA qA) - length (back q)).
 
 Definition debt {a} (q : Queue a) (qA : T (QueueA a)) : nat :=
   match qA with
@@ -270,35 +270,48 @@ Lemma mkQueueD_rcost {a} (f b s : list a) (outD outD' : QueueA a)
     outD' `is_approx` mkQueue f b s ->
     outD `less_defined` outD' ->
     rspec (mkQueueD f b s outD) (mkQueueD f b s outD') (fun '(fD, bD, sD) '(fD', bD', sD') n n' =>
-       n' + max (sizeX 0 sD') (sizeX 0 fD' - length b) + debt_ (mkQueue f b s) outD
-    <= n  + max (sizeX 0 sD ) (sizeX 0 fD  - length b) + debt_ (mkQueue f b s) outD').
+       n' + max (sizeX 1 sD') (1 + sizeX 1 fD' - length b) + debt_ (mkQueue f b s) outD
+    <= n  + max (sizeX 1 sD ) (1 + sizeX 1 fD  - length b) + debt_ (mkQueue f b s) outD').
 Proof.
   unfold mkQueue, mkQueueD.
   intros Hf Hout Hout'.
   apply bind_rspec, tick_rspec.
-  destruct s.
+  destruct s eqn:Es.
   - apply bind_rspec.
     assert (Hlub : lub (frontA outD) (scheduleA outD) `less_defined` lub (frontA outD') (scheduleA outD')).
     { admit. }
     inversion Hlub.
     + cbn. admit.
-    + cbn. eapply mono_rspec; [ | apply rotateD_rcost; auto ]; cbn.
+    + eapply mono_rspec; [ | apply rotateD_rcost; auto ].
       2,3: admit.
       intros [ [fD bD] dD] [ [fD' bD'] dD'] n n' Hrotate.
-      apply ret_rspec. cbn.
-      unfold debt_; cbn.
-      admit.
-  - apply ret_rspec. cbn. admit.
+      apply ret_rspec; unfold debt_; cbn [front back schedule sizeX sizeX'].
+      assert (sizeX 1 fD' < length b).
+      { admit. }
+      assert (sizeX 1 fD < length b).
+      { admit. }
+      assert (sizeX' 1 x = max (sizeX 1 (scheduleA outD)) (sizeX 1 (frontA outD))).
+      { admit. }
+      assert (sizeX' 1 y = max (sizeX 1 (scheduleA outD')) (sizeX 1 (frontA outD'))).
+      { admit. }
+      rewrite 2 Nat.sub_0_r, <- H4, <- H5.
+      assert (sizeX' 1 x <= sizeX' 1 y).
+      { admit. }
+      lia.
+  - apply ret_rspec. unfold debt_.
+    destruct Hout' as [Hfront Hback Hsch].
+    do 2 destruct (scheduleA _); cbn [sizeX' sizeX back]; lia.
 Admitted.
 
 Lemma pushD_rcost {a} (q : Queue a) (x : a) (outD outD' : QueueA a)
-  : outD' `is_approx` push q x ->
+  : wf_Queue q ->
+    outD' `is_approx` push q x ->
     outD `less_defined` outD' ->
     rspec (pushD q x outD) (pushD q x outD') (fun '(qD, xD) '(qD', xD') n n' =>
        n' + debt q qD' + debt_ (push q x) outD
     <= n  + debt q qD  + debt_ (push q x) outD').
 Proof.
-  intros Hout Hout'.
+  intros Hq Hout Hout'.
   unfold pushD, push.
   apply bind_rspec, tick_rspec.
   apply bind_rspec. eapply mono_rspec; [ | apply mkQueueD_rcost; auto ]; cbn.
@@ -308,8 +321,7 @@ Proof.
   remember (debt_ (mkQueue _ _ _) outD).
   remember (debt_ (mkQueue _ _ _) outD').
   unfold debt_; cbn.
-  assert (HH : sizeX 0 fD <= sizeX 0 fD'). admit.
-  admit.
+  lia.
 Admitted.
 
 (*********************************)
