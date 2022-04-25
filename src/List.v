@@ -71,7 +71,7 @@ Fixpoint foldrA' {a b} (n : M b) (c : T a -> T b -> M b) (x' : listA a) : M b :=
   tick >>
   match x' with
   | NilA => n
-  | ConsA x1 x2 => 
+  | ConsA x1 x2 =>
     let~ y2 := foldrA' n c $! x2 in
     c x1 y2
   end.
@@ -88,7 +88,7 @@ Fixpoint append_ {a : Type} (xs' : listA a) (ys : T (listA a)) : M (listA a) :=
   | NilA => force ys
   | ConsA x xs1 =>
     let~ t := (fun xs1' => append_ xs1' ys) $! xs1 in
-    ret (ConsA x t)    
+    ret (ConsA x t)
   end.
 
 Definition appendA {a : Type} (xs ys : T (listA a)) : M (listA a) :=
@@ -101,7 +101,7 @@ Fixpoint take_ {a : Type} (n : nat) (xs' : listA a) : M (listA a) :=
   | S _, NilA => ret NilA
   | S n1, ConsA x xs1 =>
     let~ t := take_ n1 $! xs1 in
-    ret (ConsA x t)  
+    ret (ConsA x t)
   end.
 
 Definition takeA {a : Type} (n : nat) (xs : T (listA a)) : M (listA a) :=
@@ -117,7 +117,7 @@ End TranslationExample.
 (* ----------------- Section 5.3 ----------------- *)
 
 (** * Figure 16.
-    
+
     As pointed out by the footnote of the figure, [T (listA A)] is not a
     recursive type, so we need to define a separate helper function [sizeX']
     that recurses on [listA]. *)
@@ -145,7 +145,7 @@ Qed.
 
 Lemma sizeX_ge_1 {a} : forall (xs : listA a),
     1 <= sizeX 1 (Thunk xs).
-Proof. 
+Proof.
   simpl; auto.
 Qed.
 
@@ -266,6 +266,26 @@ Ltac mgo_list := mgo ltac:(autorewrite with exact).
 #[local] Existing Instance LessDefined_id | 100.
 #[local] Existing Instance ExactMaximal_id | 100.
 
+Lemma sizeX'_length {a} : forall (xs : list a) (xsA : listA a),
+    xsA `is_approx` xs -> sizeX' 0 xsA <= length xs.
+Proof.
+  induction xs.
+  - cbn. inversion 1; subst. cbn; lia.
+  - cbn. inversion 1; subst. inversion H4; subst.
+    + cbn. lia.
+    + specialize (IHxs x0 H2). cbn.
+      cbn in IHxs. lia.
+Qed.
+
+Lemma sizeX_length {a} : forall (xs : list a) (xsA : T (listA a)),
+    xsA `is_approx` xs -> sizeX 0 xsA <= length xs.
+Proof.
+  destruct xsA.
+  - cbn; intros. apply sizeX'_length.
+    apply less_defined_Thunk_inv; assumption.
+  - cbn; lia.
+Qed.
+
 (* ----------------- Section 5.4 ----------------- *)
 
 (** * Figure 15.
@@ -310,7 +330,7 @@ Qed.
 
 (** The pessimistic specification for the cost + functional correctness of
     [appendA] can be obtained using the conjunction rule. *)
-Theorem appendA_spec {a} :  
+Theorem appendA_spec {a} :
   forall (xs ys : list a) (xsA ysA : T (listA a)),
     xsA `is_approx` xs ->
     ysA `is_approx` ys ->
@@ -319,7 +339,7 @@ Proof.
   intros. apply pessimistic_conj.
   - apply appendA_correct_partial; assumption.
   - apply appendA_cost_interval.
-Qed.    
+Qed.
 
 
 Theorem appendA_whnf_cost {a} : forall (xsA ysA : T (listA a)),
@@ -329,7 +349,7 @@ Proof.
 (** This is a naive version of spec in the paper and it is in fact not provable
     because it's wrong (when [xsA] is undefined). The specs we actually use are
     [appendA_prefix_cost] and [appendA_full_cost].  *)
-Abort.  
+Abort.
 
 (** [appendA_prefix_cost] as described in the paper. This is the case when the
     execution of [appendA] does not reach the end of [xsA]. *)
@@ -347,7 +367,7 @@ Proof.
       relax. apply IHx with (n:=n-1); lia.
       mgo_list.
 Qed.
-  
+
 (** [appendA_full_cost] as described in the paper. This is the case when the
     execution of [appendA] does reach the end of [xsA]. *)
 Theorem appendA_full_cost {a} : forall (xs : list a) (xsA := exact xs) ysA,
@@ -363,7 +383,7 @@ Qed.
 (* ----------------------------- Section 6: Tail Recursion ------------------- *)
 
 (** * Tail recursive [take].
-    
+
     The first case study shown in Section 6. *)
 Module TakeCompare.
 
@@ -414,7 +434,7 @@ Fixpoint take'A_ {a : Type} (n : nat) (xs : listA a) (acc : T (listA a)) : M (li
         | O => revA acc
         | S n' => match xs with
                  | NilA => revA acc
-                 | ConsA x xs' => 
+                 | ConsA x xs' =>
                    (fun xs'' =>
                       let~ acc' := ret (ConsA x acc) in
                       take'A_ n' xs'' acc') $! xs'
@@ -427,7 +447,7 @@ Definition take'A {a : Type} (n : nat) (xs : T (listA a)) : M (listA a) :=
 
 (** The pessimistic specification for [take'A] and the proof that [take'A]
     satisfies the spec, as stated in the paper. *)
-Theorem take'A__pessim {a} : 
+Theorem take'A__pessim {a} :
 forall (n : nat) (xs : list a) (xsA : listA a) (acc : list a) (accA : T (listA a)),
   xsA `is_approx` xs ->  accA `is_approx` acc ->
   (take'A_ n xsA accA) {{ fun zsA cost => cost = min n (length xs) + 1 }}.
@@ -448,22 +468,37 @@ Qed.
 
 (** The pessimistic specification for [takeA] and the proof that [takeA]
     satisfies the spec, as stated in the paper. *)
-Definition takeA__pessim {a} : 
+Definition takeA__pessim {a} :
 forall (n : nat) (xs : list a) (xsA : T (listA a)),
   xsA `is_approx` xs ->
+  (takeA n xsA) {{ fun zsA cost => zsA `is_approx` take n xs /\ 1 <= cost /\ cost <= min n (sizeX 0 xsA) + 1 }}.
+Proof.
+  (** The proof can be simpler. *)
+  unfold takeA. induction n; [mgo_list|].
+  - intuition; solve_approx.
+  - intros xs. induction xs as [ | x xs IH]; mgo_list.
+    + intuition; solve_approx.
+    + specialize (IHn xs (Thunk x0)). cbn in IHn.
+      relax_apply IHn; [ solve_approx | ].
+      mgo_list. intuition; solve_approx.
+    + intuition; solve_approx.
+Qed.
+
+Definition takeA_cost_interval {a} :
+forall (n : nat) (xsA : T (listA a)),
   (takeA n xsA) {{ fun zsA cost => cost <= min n (sizeX 0 xsA) + 1 }}.
 Proof.
   unfold takeA. induction n; [mgo_list|].
-  intros xs. induction xs as [ | x xs IH]; mgo_list.
-  specialize (IHn xs (Thunk x0)). cbn in IHn.
-  relax_apply IHn; [ solve_approx | ].
-  mgo_list.
+  destruct xsA; [|mgo_list].
+  induction x; mgo_list.
+  specialize (IHn (Thunk x)). cbn in IHn.
+  relax_apply IHn. mgo_list.
 Qed.
 
 (** The optimistic specification for [takeA] and the proof that [takeA]
     satisfies the spec, as stated in the paper. This shows that there _exists_ a
     cost of [takeA] that is indeed smaller. *)
-Definition takeA__optim {a} : 
+Definition takeA__optim {a} :
 forall (n m : nat) (xs : list a) (xsA : T (listA a)),
   1 <= m ->  m <= min (n + 1) (sizeX 1 xsA) ->
   xsA `is_approx` xs ->
@@ -503,7 +538,7 @@ Fixpoint appendA'_ {a : Type} (xs' : listA a) (ys : T (listA a)) : M (listA a) :
   | NilA => force ys
   | ConsA x xs1 =>
     let~ t := (fun xs1' => appendA'_ xs1' ys) $! xs1 in
-    ret (ConsA x t)    
+    ret (ConsA x t)
   end.
 
 Definition appendA' {a : Type} (xs ys : T (listA a)) : M (listA a) :=
@@ -631,7 +666,7 @@ Fixpoint foldrA_ {a b} (f : T a -> T b -> M b) (v : T b) (xs : listA a) : M b :=
   | ConsA x xs => let~ t := foldrA_ f v $! xs in
                  f x t
   end.
-  
+
 Definition foldrA {a b} (f : T a -> T b -> M b) (v : T b) (xs : T (listA a)) : M b :=
   foldrA_ f v $! xs.
 
@@ -705,3 +740,29 @@ Proof.
 Qed.
 
 End CaseStudyFolds.
+
+Section ExampleP.
+
+Variable a : Type.
+
+Theorem pA_pessim :
+  forall n (xs ys : list a) (xsA ysA : T (listA a)),
+    xsA `is_approx` xs ->
+    ysA `is_approx` ys ->
+    pA n xsA ysA {{ fun zsA cost =>
+                      zsA `is_approx` exact (p n xs ys) /\
+                      1 <= cost /\ cost <= sizeX 1 xsA + min n (length (append xs ys)) + 2}}.
+Proof.
+  destruct xsA; unfold pA; [|mgo_list].
+  Opaque appendA. Opaque takeA.
+  mgo_list.
+  - relax_apply (@appendA_spec a); solve_approx. mgo_list.
+    destruct H as [Happrox Hcost].
+    relax_apply (@TakeCompare.takeA__pessim a n (append xs ys)); solve_approx.
+    cbn; intros. unfold p. intuition.
+    pose proof (@sizeX'_length a (append xs ys) x0 Happrox).
+    lia.
+  - Transparent takeA. mgo_list.
+Qed.
+
+End ExampleP.
