@@ -37,7 +37,7 @@ jobs:
           opam init -j 2 -n -y
       - name: Set up Coq
         run: |
-          opam repo add coq-released http://coq.inria.fr/opam/released || true
+          opam repo add coq-released https://coq.inria.fr/opam/released || true
           opam update
           opam install -v -y -j 1 --unlock-base coq.${{ matrix.coq }} || opam install -v -y -j 1 --update-invariant coq.${{ matrix.coq }}
           opam pin coq ${{ matrix.coq }}
