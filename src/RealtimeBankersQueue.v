@@ -278,9 +278,24 @@ Lemma rotateD_rcost {a} (f b d : list a) (outD outD' : listA a)
     outD' `is_approx` rotate f b d ->
     outD `less_defined` outD' ->
     rspec (rotateD f b d outD) (rotateD f b d outD') (fun '(fD, bD, dD) '(fD', bD', dD') n n' =>
-       n' + min (sizeX' 1 outD) (length f) <= n  + min (sizeX' 1 outD') (length f)).
+       n' + min (sizeX' 1 outD) (S (length f)) <= n  + min (sizeX' 1 outD') (S (length f))).
 Proof.
 Admitted.
+
+Lemma rotateD_rcost' {a} (f b d : list a) (outD outD' : T (listA a))
+  : S (length f) = length b ->
+    outD' `is_approx` rotate f b d ->
+    outD `less_defined` outD' ->
+    rspec (thunkD (rotateD f b d) outD) (thunkD (rotateD f b d) outD') (fun '(fD, bD, dD) '(fD', bD', dD') n n' =>
+       n' + min (sizeX 1 outD) (S (length f)) <= n  + min (sizeX 1 outD') (S (length f))).
+Proof.
+  intros Hf Happrox Hld. destruct Hld as [ outD_ | Hld ]; cbn.
+  - destruct outD_; cbn; [ | auto ].
+    destruct (Tick.val _) as [ [fD bD] dD] eqn:Ev.
+    rewrite rotateD_cost; [ lia | ].
+    apply less_defined_Thunk_inv; auto.
+  - apply rotateD_rcost; auto. apply less_defined_Thunk_inv; auto.
+Qed.
 
 Lemma rotateD_sound {a} (f b d : list a) (outD : listA a)
   : outD `is_approx` rotate f b d ->
@@ -309,6 +324,16 @@ Proof.
       * repeat (constructor; cbn; try rewrite exact_list_unfold_cons); auto.
 Qed.
 
+Lemma thunkD_sound {a' a b' b} `{BottomLeast b, Exact b' b, Exact a' a, LessDefined a}
+    (f : a -> Tick b) (x : b') (out : a')
+  : (forall outD_, outD_ `is_approx` out -> Tick.val (f outD_) `is_approx` x) ->
+    forall outD : T a, outD `is_approx` out -> Tick.val (thunkD f outD) `is_approx` x.
+Proof.
+  intros Hf outD Hout. destruct outD; cbn.
+  - apply Hf. apply less_defined_Thunk_inv; auto.
+  - apply bottom_least.
+Qed.
+
 Lemma sizeX1_length {a} (x : T (listA a)) (y : list a)
   : x `is_approx` y -> sizeX 1 x <= 1 + length y.
 Proof.
@@ -330,34 +355,34 @@ Proof.
   - apply bind_rspec.
     assert (Hlub : lub (frontA outD) (scheduleA outD) `less_defined` lub (frontA outD') (scheduleA outD')).
     { admit. }
-    inversion Hlub.
-    + cbn. admit.
-    + cbn [thunkD]. cbn [length] in Hf.
-      assert (x `less_defined` exact (rotate f b [])).
-      { apply less_defined_Thunk_inv. rewrite H. etransitivity; [ apply Hlub | apply lub_least_upper_bound; apply Hout ]. }
-      assert (y `less_defined` exact (rotate f b [])).
-      { apply less_defined_Thunk_inv. rewrite H0. apply lub_least_upper_bound; apply Hout. }
-      eapply mono_rspec; [ | apply and_rspec;
-        [ apply rotateD_rcost; auto | apply and_rspec;
-            [ eapply l_val_rspec with (P := (fun v => v `less_defined` _));
-              apply (@rotateD_sound _ f b [] x)
-            | eapply r_val_rspec with (P := (fun v => v `less_defined` _));
-              apply (@rotateD_sound _ f b [] y) ] ] ]; [ | auto; lia .. ].
-      intros [ [fD bD] dD] [ [fD' bD'] dD'] n n' [Hrotate [ [ [HfD HbD] HdD] [ [HfD' HbD'] HdD'] ] ].
-      cbn [fst snd exact Exact_prod] in *.
-      apply ret_rspec; unfold debt_; cbn [front back schedule sizeX sizeX' length].
-      assert (sizeX 1 fD' <= length b).
-      { apply sizeX1_length in HfD'. lia. }
-      assert (sizeX 1 fD <= length b).
-      { apply sizeX1_length in HfD. lia. }
-      assert (sizeX' 1 x = max (sizeX 1 (scheduleA outD)) (sizeX 1 (frontA outD))).
-      { apply (f_equal (sizeX 1)) in H. admit. }
-      assert (sizeX' 1 y = max (sizeX 1 (scheduleA outD')) (sizeX 1 (frontA outD'))).
-      { admit. }
-      rewrite 2 Nat.sub_0_r, <- H6, <- H7.
-      assert (sizeX' 1 x <= sizeX' 1 y).
-      { admit. }
-      lia.
+    cbn in Hf; rewrite Nat.add_0_r in Hf.
+    remember (lub (frontA outD) (scheduleA outD)) as x eqn:Ex.
+    remember (lub (frontA outD') (scheduleA outD')) as y eqn:Ey.
+    assert (y `less_defined` exact (rotate f b [])).
+    { subst y; apply lub_least_upper_bound; apply Hout. }
+    eapply mono_rspec; [ | apply and_rspec;
+      [ apply rotateD_rcost'; auto | apply and_rspec;
+          [ eapply l_val_rspec with (P := (fun v => v `less_defined` _));
+            eapply thunkD_sound;
+            [ exact (@rotateD_sound _ f b []) | etransitivity; eassumption ]
+          | eapply r_val_rspec with (P := (fun v => v `less_defined` _));
+            eapply thunkD_sound;
+            [ apply (@rotateD_sound _ f b []) | auto ] ] ] ].
+    intros [ [fD bD] dD] [ [fD' bD'] dD'] n n' [Hrotate [ [ [HfD HbD] HdD] [ [HfD' HbD'] HdD'] ] ].
+    cbn [fst snd exact Exact_prod Exact_id id] in *.
+    apply ret_rspec; unfold debt_; cbn [front back schedule sizeX sizeX' length].
+    assert (sizeX 1 fD' <= length b).
+    { apply sizeX1_length in HfD'. lia. }
+    assert (sizeX 1 fD <= length b).
+    { apply sizeX1_length in HfD. lia. }
+    assert (sizeX 1 x = max (sizeX 1 (scheduleA outD)) (sizeX 1 (frontA outD))).
+    { admit. }
+    assert (sizeX 1 y = max (sizeX 1 (scheduleA outD')) (sizeX 1 (frontA outD'))).
+    { admit. }
+    rewrite 2 Nat.sub_0_r, <- H2, <- H3.
+    assert (sizeX 1 x <= sizeX 1 y).
+    { admit. }
+    revert H0 H1 H2 H3 H4 Hrotate; clear; lia.
   - apply ret_rspec. unfold debt_.
     destruct Hout' as [Hfront Hback Hsch].
     do 2 destruct (scheduleA _); cbn [sizeX' sizeX back]; lia.
@@ -375,14 +400,14 @@ Proof.
   unfold pushD, push.
   apply bind_rspec, tick_rspec.
   apply bind_rspec. eapply mono_rspec; [ | apply mkQueueD_rcost; auto ]; cbn.
-  2: admit.
+  2:{ f_equal. apply Hq. }
   intros [ [fD bD] sD] [ [fD' bD'] sD'] n n' HmkQueue.
   apply ret_rspec. revert HmkQueue; cbn.
   remember (debt_ (mkQueue _ _ _) outD).
   remember (debt_ (mkQueue _ _ _) outD').
   unfold debt_; cbn.
   lia.
-Admitted.
+Qed.
 
 (*********************************)
 
