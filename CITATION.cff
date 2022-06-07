@@ -1,0 +1,38 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+- family-names: "Li"
+  given-names: "Yao"
+  orcid: "https://orcid.org/0000-0001-8720-883X"
+- family-names: "Xia"
+  given-names: "Li-yao"
+  orcid: "https://orcid.org/0000-0003-2673-4400"
+- family-names: "Weirich"
+  given-names: "Stephanie"
+  orcid: "https://orcid.org/0000-0002-6756-9168"
+title: "Reasoning about the garden of forking paths (artifact)"
+version: 1.0.1
+doi: 10.5281/zenodo.5154097
+date-released: 2019-8-2
+url: "https://doi.org/10.5281/zenodo.5154097"
+preferred-citation:
+  type: article
+  authors:
+  - family-names: "Li"
+    given-names: "Yao"
+    orcid: "https://orcid.org/0000-0001-8720-883X"
+  - family-names: "Xia"
+    given-names: "Li-yao"
+    orcid: "https://orcid.org/0000-0003-2673-4400"
+  - family-names: "Weirich"
+    given-names: "Stephanie"
+    orcid: "https://orcid.org/0000-0002-6756-9168"
+  doi: "10.1145/3473585"
+  journal: "Proc. ACM Program. Lang."
+  month: 8
+  start: "80:1"
+  end: "80:28"
+  title: "Reasoning about the garden of forking paths"
+  issue: "ICFP"
+  volume: 5
+  year: 2021
