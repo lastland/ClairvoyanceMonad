@@ -57,8 +57,7 @@ Inductive SeqA (a : Type) : Type :=
   | More : T (CrowdA a) -> T (SeqA (TupleA a)) -> T (CrowdA a) -> SeqA a.
 
 
-Definition consA_ {a : Type} (x : T a) (s : SeqA a) : M (SeqA a).
-(*
+Fixpoint consA_ {a : Type} (x : T a) (s : SeqA a) : M (SeqA a) :=
   tick >> 
   match s with 
   | Nil => ret (Unit x)
@@ -69,19 +68,17 @@ Definition consA_ {a : Type} (x : T a) (s : SeqA a) : M (SeqA a).
     | One y => ret (More (Thunk (Two x y)) q u)
     | Two y z => ret (More (Thunk (Three x y z)) q u)
     | Three y z w => 
-      let! q1 := force q in
-      let~ r := consA_ (Thunk (Pair z w)) q1 in 
-      ret (More (Thunk (Two x y)) r u)
+      forcing q (fun q => 
+      let~ r := consA_ (Thunk (Pair z w)) q in 
+      ret (More (Thunk (Two x y)) r u))
     end)
-end. *)
-Admitted.
+end.
 
 Definition consA {a} (x : T a) (s : T (SeqA a)) : M (SeqA a) :=
   let! s := force s in
   consA_ x s.
 
-Definition snocA_ {a: Type} (s: SeqA a) (x:T a) : M (SeqA a).
-(*
+Fixpoint snocA_ {a: Type} (s: SeqA a) (x:T a) : M (SeqA a) :=
  tick >>
  match s with 
    | Nil => ret (Unit x)
@@ -92,12 +89,11 @@ Definition snocA_ {a: Type} (s: SeqA a) (x:T a) : M (SeqA a).
    | (One y) => ret (More u q (Thunk (Two y x)))
    | (Two y z) => ret (More u q (Thunk (Three y z x)))
    | (Three y z w) => 
-       let! q := force q in
+       forcing q (fun q => 
        let~ r := snocA_ q (Thunk (Pair z w)) in
-       ret (More u r (Thunk (Two y x)))
+       ret (More u r (Thunk (Two y x))))
      end)
-end. *)
-Admitted.
+end.
 
 Definition snocA {a} (s : T (SeqA a)) (x : T a)  : M (SeqA a) :=
   let! s := force s in
