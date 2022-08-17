@@ -68,11 +68,11 @@ Fixpoint consA_ {a : Type} (x : T a) (s : SeqA a) : M (SeqA a) :=
     | One y => ret (More (Thunk (Two x y)) q u)
     | Two y z => ret (More (Thunk (Three x y z)) q u)
     | Three y z w => 
-      forcing q (fun q => 
-      let~ r := consA_ (Thunk (Pair z w)) q in 
+      forcing q (fun q =>
+      let~ r := consA_ (Thunk (Pair z w)) q in
       ret (More (Thunk (Two x y)) r u))
     end)
-end.
+  end.
 
 Definition consA {a} (x : T a) (s : T (SeqA a)) : M (SeqA a) :=
   let! s := force s in
