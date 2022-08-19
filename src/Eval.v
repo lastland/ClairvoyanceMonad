@@ -61,7 +61,7 @@ Fixpoint _runN {r a} (u : N a) (tid : ThunkId) (t : trie unit)
   | Ret x => k t x
   | Thunk v h =>
     let run_forced t :=
-           _runN v (true :: tid) (insert tid tt t) (fun t x =>
+           _runN v (true :: tid) t (fun t x =>
            _runN (h (Defined x)) (false :: tid) t k) in
     match lookup tid t with
     | None =>
@@ -69,7 +69,7 @@ Fixpoint _runN {r a} (u : N a) (tid : ThunkId) (t : trie unit)
       | (_, Defined _) as r => r
       | (t, Undefined tid') as r =>
           if tid_eqb tid tid' then
-            run_forced t
+            run_forced (insert tid tt t)
           else
             r
       end
@@ -80,7 +80,82 @@ Fixpoint _runN {r a} (u : N a) (tid : ThunkId) (t : trie unit)
 
 Definition runN {a} (u : N a) : T a := snd (_runN u nil Empty (fun t y => (t, Defined y))).
 
-Definition runM {a} (u : M a) : T (a * nat) := runN (unM u (fun x y => Ret (x, y))).
+Fixpoint incr (xs : ThunkId) : ThunkId :=
+  match xs with
+  | nil => false :: nil
+  | false :: xs => true :: xs
+  | true :: xs => false :: incr xs
+  end.
+
+Definition memo : Type := trie (option ThunkId * option ThunkId * bool).
+Definition Parent : Type := ThunkId * bool.
+
+Definition insert' (k : Parent) (tid : ThunkId) (t : memo) : memo :=
+  let '(k, b) := k in
+  let '(l, r, f) :=
+    match lookup k t with
+    | Some lrf => lrf
+    | None => (None, None, false)
+    end in
+  insert k (if b then (l, Some tid, f) else (Some tid, r, f)) t.
+
+Definition lookup' (k : Parent) (t : memo) : option ThunkId :=
+  let '(k, b) := k in
+  match lookup k t with
+  | Some (l, r, _) => if b then r else l
+  | None => None
+  end.
+
+Definition set_forced (k : ThunkId) (t : memo) : memo :=
+  let '(l, r) :=
+    match lookup k t with
+    | Some (l, r, _) => (l, r)
+    | None => (None, None)
+    end in
+  insert k (l, r, true) t.
+
+Definition get_forced (k : ThunkId) (t : memo) : bool :=
+  match lookup k t with
+  | Some (_, _, f) => f
+  | None => false
+  end.
+
+Definition check_thunk (fresh : ThunkId) (parent : Parent) (t : memo)
+  : ThunkId * ThunkId * bool * memo :=
+  match lookup' parent t with
+  | Some tid => (fresh, tid, get_forced tid t, t)
+  | None => (incr fresh, fresh, false, insert' parent fresh t)
+  end.
+
+(* A variant of runN that allocates ThunkId more parsimoniously *)
+Fixpoint _runN' {r a} (u : N a) (fresh : ThunkId) (parent : Parent) (t : memo)
+    (k : ThunkId -> memo -> a -> ThunkId * memo * T r)
+  : ThunkId * memo * T r :=
+  match u with
+  | Ret x => k fresh t x
+  | Thunk v h =>
+    let '(fresh, tid, forced, t) := check_thunk fresh parent t in
+    let run_forced fresh tid t :=
+      _runN' v fresh (tid, false) t (fun fresh t x =>
+      _runN' (h (Defined x)) fresh (tid, true) t k)
+    in
+    if forced then run_forced fresh tid t
+    else
+      match _runN' (h (Undefined tid)) fresh (tid, true) t k with
+      | (_, _, Defined _) as r => r
+      | (fresh, t, Undefined tid') as r =>
+        if tid_eqb tid tid' then
+          run_forced fresh tid (set_forced tid t)
+        else
+          r
+      end
+  | Thonk tid' => (fresh, t, Undefined tid')
+  end.
+
+Definition runN' {a} (u : N a) : T a :=
+  snd (_runN' u (false :: nil) (nil, true) Empty (fun fresh t y => (fresh, t, Defined y))).
+
+Definition runM {a} (u : M a) : T (a * nat) := runN' (unM u (fun x y => Ret (x, y))).
 
 Definition ret {a} (x : a) : M a :=
   MkM (fun _ c => c x 0).
