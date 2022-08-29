@@ -28,7 +28,7 @@ jobs:
           path: ~/.opam
           key: opam-${{ runner.os }}-coq${{ matrix.coq }}
       - name: Set up OCaml
-        uses: avsm/setup-ocaml@v2
+        uses: avsm/setup-ocaml@v1
         with:
           ocaml-compiler: ${{ matrix.ocaml }}
       - name: Initialize OPAM
@@ -37,13 +37,14 @@ jobs:
           opam init -j 2 -n -y
       - name: Set up Coq
         run: |
-          opam repo add coq-released https://coq.inria.fr/opam/released || true
+          opam repo add coq-released http://coq.inria.fr/opam/released || true
           opam update
-          opam install -v -y -j 1 --unlock-base coq.${{ matrix.coq }} || opam install -v -y -j 1 --update-invariant coq.${{ matrix.coq }}
+          opam install -v -y -j 1 --unlock-base coq.${{ matrix.coq }}
           opam pin coq ${{ matrix.coq }}
           opam install -y coq-equations.${{ matrix.equations }}
       - name: Checkout the repository
         uses: actions/checkout@v2
       - name: Compiling Coq files
         run: |
-          eval $(opam config env) && make
+          eval $(opam config env)
+          make
