@@ -5,7 +5,7 @@ From Equations Require Import Equations.
 
 From Coq Require Import Arith List Lia Setoid Morphisms.
 Import ListNotations.
-From Clairvoyance Require Import Core Approx ApproxM List Misc BankersQueue Launchbury.
+From Clairvoyance Require Import Core Approx ApproxM List Misc BankersQueue Launchbury Cost.
 
 Set Primitive Projections.
 Set Implicit Arguments.
@@ -353,8 +353,8 @@ Definition ImplRealTimeCost
     (op : Type) (j : Pure.Cost.Impl op) (j' : Cv.Impl op) {IA : ImplApprox j j'}
   : Prop :=
   forall (os : list (op * list nat)) (o : op) (ns : list nat),
-    ( cost_of (Cv.eval_ops (os ++ [(o, ns)]) [])
-    <= cost_of (Cv.eval_ops os []) + cost_op o ns (Pure.eval_ops (j := j) os [])
+    ( cost_of (Cv.eval_ops (j := j') (os ++ [(o, ns)]) [])
+    <= cost_of (Cv.eval_ops (j := j') os []) + cost_op o ns (Pure.eval_ops (j := j) os [])
     )%NAT.
 
 (* Example *)

@@ -15,3 +15,5 @@ src/Interfaces.v
 src/Launchbury.v
 src/Fuel.v
 src/LazyT.v
+src/Cost.v
+src/QueueTrace.v

@@ -28,6 +28,8 @@ Record Queue (a : Type) : Type := MkQueue
   ; schedule : list a
   }.
 
+Definition empty {a} : Queue a := MkQueue [] [] [].
+
 (* rotate x y z = x ++ rev y ++ z *)
 (* Assumes 1 + length f = length b *)
 Fixpoint rotate {a} (f b d : list a) : list a :=
@@ -60,6 +62,7 @@ Record QueueA (a : Type) : Type := MkQueueA
 Definition emptyA {a : Type} : QueueA a := let n := Thunk NilA in MkQueueA n n n.
 
 Fixpoint rotateA_ {a} (f b : listA a) (d : T (listA a)) : M (listA a) :=
+  tick >>
   match f, b with
   | NilA, ConsA y _ => ret (ConsA y d)
   | ConsA x f, ConsA y b =>
