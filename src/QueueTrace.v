@@ -98,12 +98,23 @@ Definition evalD_operation {a} (o : operation a (Queue a)) (d : QueueA a)
     Tick.ret (Pop q)
   end.
 
-Definition unsnoc {a} (xs : list a) : option (list a * a).
-Admitted.
+Fixpoint unsnoc {a} (xs : list a) : option (list a * a) :=
+  match xs with
+  | [] => None
+  | x :: xs =>
+    match unsnoc xs with
+    | None => Some ([], x)
+    | Some (xs, y) => Some (x :: xs, y)
+    end
+  end.
 
 Definition lookupsD {a} (o : operation a nat) (s : list (Queue a)) (d : operation a (QueueA a))
-  : Tick (list (QueueA a)).
-Admitted.
+  : list (QueueA a) :=
+  match o, d with
+  | Empty, Empty => List.map (fun _ => emptyA) s
+  | Pop n, Pop q | Push n _, Push q _ => repeat emptyA n ++ q :: repeat emptyA (length s - n - 1)
+  | _, _ => []  (* should not happen *)
+  end.
 
 Definition evalD_trace_from {a} (t : trace a) (s : list (Queue a)) (d : list (QueueA a))
   : Tick (list (QueueA a)) :=
@@ -114,7 +125,7 @@ Definition evalD_trace_from {a} (t : trace a) (s : list (Queue a)) (d : list (Qu
     match unsnoc d with None => Tick.ret []  (* should not happen *)
     | Some (d, qD) =>
       let+ oD := evalD_operation o' qD in
-      let+ d' := lookupsD o s oD in
+      let d' := lookupsD o s oD in
       Tick.ret (lub d d')
     end
   end.
