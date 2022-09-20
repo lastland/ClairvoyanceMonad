@@ -100,7 +100,7 @@ Class ImplApprox : Type :=
   ; ImplPreOrder :> PreOrder (less_defined (a := valueA))
   ; ImplLub :> Lub valueA
   ; ImplLubLaw :> LubLaw valueA
-  ; exec_op_mon : forall o,
+  ; exec_op_mon :> forall o,
       Proper (less_defined ==> less_defined) (exec_op (valueA := valueA) o)
   }.
 
@@ -114,9 +114,9 @@ Context {cost_spec : CostSpec op value}.
 Class HasAmortizedCost {IA : ImplApprox} : Type :=
   { potential : valueA -> nat
   ; potentials := sumof potential
-  ; potential_lub : forall x y, potential (lub x y) <= potential x + potential y
+  ; potential_lub : forall x y, cobounded x y -> potential (lub x y) <= potential x + potential y
 
-    (* Note: lazy evaluation is backwards. We are first given an [output] demand,
+    (* Note: lazy evaluation works backwards. We are first given an [output] demand,
        obtained as an approximation of the reference output via [eval_op],
        and we have to find a matching [input] demand. *)
   ; exec_cost : forall (o : op) (vs : list value),
@@ -194,7 +194,8 @@ Lemma potentials_lub x y : cobounded x y -> potentials (lub x y) <= potentials x
 Proof.
   induction 1 as [ | ? ? ? ? ? ? IH ] using cobounded_list_ind;
     cbn; [ reflexivity | ].
-  rewrite IH, potential_lub. clear. generalize (potential x) (potential y). lia.
+  rewrite IH, potential_lub by assumption.
+  clear. generalize (potential x) (potential y). lia.
 Qed.
 
 Lemma potentials_app x y : potentials (x ++ y) = potentials x + potentials y.
