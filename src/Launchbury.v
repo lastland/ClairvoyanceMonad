@@ -4,7 +4,7 @@
 
 From Coq Require Import List.
 Import ListNotations.
-From Clairvoyance Require Core.
+From Clairvoyance Require Core Interfaces.
 
 Set Primitive Projections.
 Set Implicit Arguments.
@@ -215,3 +215,34 @@ Definition evalMF (_evalMF : forall {a : Type}, L T a -> M a) {a} (u : L T a) : 
   end.
 
 Definition evalM {a} : L T a -> M a := Fix4.F evalMF.
+
+(* Stateful semantics of laziness *)
+Module St.
+
+Import L.Notations.
+
+Record Impl (op : Type) : Type :=
+  { value : Type
+  ; raw_eval_op : op -> list value -> L R (list value)
+  }.
+
+Definition eval_op {op : Type} {j : Impl op} (o : op) (ns : list nat) (xs : list value)
+  : L R (list value) :=
+  match lookups xs ns with
+  | None => L.ret xs  (* noop *)
+  | Some vs => let^ vs := j.(raw_eval_op) o vs in L.ret (xs ++ vs)
+  end.
+
+Fixpoint eval_trace {op : Type} {j : Impl op} (os : list (op * list nat)) (xs : list value)
+  : L R (list value) :=
+  match os with
+  | [] => L.ret xs
+  | (o, ns) :: os => let^ xs := eval_op o ns xs in eval_trace os xs
+  end.
+
+(* The cost of "evaluating to WHNF": start with an empty heap, run the computation,
+   it doesn't matter what the final heap [h] and result [x] are. *)
+Definition cost_from {a} (u : L R a) (h : heap) : NAT.t :=
+  fun c => exists x, eval u empty_heap h c x.
+
+End St.

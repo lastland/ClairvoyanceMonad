@@ -1,4 +1,12 @@
-From Coq Require Import Morphisms Arith.
+From Coq Require Import Morphisms Arith List.
+
+Import ListNotations.
+
+Definition option_bind {A B} (o : option A) (k : A -> option B) : option B :=
+  match o with
+  | None => None
+  | Some a => k a
+  end.
 
 #[global] Instance Proper_add_le : Proper (le ==> le ==> le) Nat.add.
 Proof.
