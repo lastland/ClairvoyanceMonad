@@ -12,6 +12,7 @@ src/RealtimeBankersQueue.v
 src/Eval.v
 src/Demand.v
 src/Interfaces.v
+src/QueueInterface.v
 src/Launchbury.v
 src/Fuel.v
 src/LazyT.v
