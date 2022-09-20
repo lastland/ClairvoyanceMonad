@@ -1,6 +1,5 @@
 From Coq Require Import List Arith Lia RelationClasses.
 From Clairvoyance Require Import Core Approx ApproxM List Misc BankersQueue.
-From Clairvoyance Require Launchbury.
 
 Import ListNotations.
 Import RevCompare.
@@ -128,7 +127,7 @@ Definition headA {a:Type} (t: T (SeqA a)) : M (optionA a) :=
       end)
   end).
 
-Fixpoint map1 {a:Type} (f : T a -> M a) (s : SeqA a) : M (SeqA a) :=
+Definition map1 {a:Type} (f : T a -> M a) (s : SeqA a) : M (SeqA a) :=
   tick >>
   match s with
   | Nil => ret Nil
@@ -150,7 +149,7 @@ Fixpoint map1 {a:Type} (f : T a -> M a) (s : SeqA a) : M (SeqA a) :=
       end)
   end.
 
-Fixpoint more0 {a:Type} (q: SeqA (TupleA a)) (u: CrowdA a) : M (SeqA a) := 
+Definition more0 {a:Type} (q: SeqA (TupleA a)) (u: CrowdA a) : M (SeqA a) :=
   tick >>
   match (q,u) with 
    | (Nil, (One y)) => ret (Unit y)

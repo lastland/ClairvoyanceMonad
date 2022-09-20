@@ -17,3 +17,5 @@ src/Fuel.v
 src/LazyT.v
 src/Cost.v
 src/QueueTrace.v
+src/FingerTree.v
+src/FingerTreeM.v
