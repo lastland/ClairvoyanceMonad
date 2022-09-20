@@ -194,6 +194,20 @@ Definition more0 {a:Type} (q: SeqA (TupleA a)) (u: CrowdA a) : M (SeqA a) :=
        end)
   end.
 
+Definition tailA {a:Type} (t: T (SeqA a)) : M (SeqA a) :=
+  tick >>
+  forcing t (fun t =>
+  match t with
+  | Nil => ret Nil
+  | Unit x => ret Nil
+  | More v q u =>
+    forcing v (fun v =>
+    match v with
+    | One _ => forcing q (fun q => forcing u (fun u => more0 q u))
+    | Two x y => let~ v := ret (One y) in ret (More v q u)
+    | Three x y z => let~ v := ret (Two y z) in ret (More v q u)
+    end)
+  end).
 
 Fixpoint toTuples {a:Type} (la : listA a) : M (listA (TupleA a)) := 
   tick >>
@@ -263,3 +277,16 @@ Definition appendA {a:Type} (q1 : T (SeqA a)) (q2 : T (SeqA a)) : M (SeqA a) :=
   let! q2 := force q2 in
   glue q1 NilA q2.
 
+(** *)
+
+Fixpoint _depthX {a} (t: SeqA a) : nat :=
+  match t with
+  | More _ t _ => 1 + match t with Undefined => 0 | Thunk t => _depthX t end
+  | _ => 0
+  end.
+
+Definition depthX {a} (t: T (SeqA a)) : nat :=
+  match t with
+  | Undefined => 0
+  | Thunk t => _depthX t
+  end.
