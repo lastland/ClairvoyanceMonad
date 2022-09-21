@@ -333,7 +333,7 @@ Proof.
   rewrite <- Hf. apply Hg.
 Qed.
 
-Lemma physicist's_argument_soundness_aux
+Lemma physicist's_method_aux
   : forall (os : trace op) (vs : list value),
     forall output, output `is_approx` eval_trace_from os vs ->
     exists input, input `is_approx` vs /\
@@ -355,10 +355,10 @@ Proof.
     lia.
 Qed.
 
-Theorem physicist's_argument_soundness : HasAmortizedCost cost_spec cv_impl.
+Theorem physicist's_method : HasAmortizedCost cost_spec cv_impl.
 Proof.
   apply has_amortized_cost'.
-  intros os. destruct (physicist's_argument_soundness_aux os [] (bottom_of (exact (eval_trace_from os [])))) as (d0 & Hd0 & HH).
+  intros os. destruct (physicist's_method_aux os [] (bottom_of (exact (eval_trace_from os [])))) as (d0 & Hd0 & HH).
   { apply bottom_is_least. }
   inversion Hd0; clear Hd0; subst.
   apply (optimistic_mon HH); cbn.

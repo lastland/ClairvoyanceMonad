@@ -112,5 +112,5 @@ Admitted.
 Theorem HasAmortizedCost_Queue :
    HasAmortizedCost CostSpec_Queue CvImpl_QueueA.
 Proof.
-  apply physicist's_argument_soundness.
+  apply physicist's_method.
 Qed.

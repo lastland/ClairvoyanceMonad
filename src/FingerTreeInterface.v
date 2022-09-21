@@ -133,5 +133,5 @@ Admitted.
 
 Theorem HasAmortizedCost_Seq : HasAmortizedCost CostSpec_Seq CvImpl_SeqA.
 Proof.
-  apply physicist's_argument_soundness.
+  apply physicist's_method.
 Qed.
