@@ -216,13 +216,13 @@ Lemma mkQueueD_spec {a} (f b s : list a) (outD : QueueA a)
     mkQueueA fD bD sD [[ fun out cost => outD `less_defined` out /\ cost <= dcost ]].
 Proof.
   intros HoutD fD bD sD dcost Hdcost.
-  unfold mkQueueA. mgo.
+  unfold mkQueueA. mgo_.
   unfold mkQueueD in Hdcost.
   destruct s as [| x0 s ].
   - destruct thunkD as [dcost' [ [fD' bD'] sD'] ] eqn:Edcost' in Hdcost.
     unfold Tick.bind in Hdcost; cbn in Hdcost.
     injclear Hdcost; intros -> <- <- ->.
-    mgo.
+    mgo_.
     (* TODO: how to handle thunk *)
     destruct (lub _ _) eqn:Elub in Edcost'; cbn in Edcost'.
     + apply optimistic_thunk_go.
@@ -230,7 +230,7 @@ Proof.
       { eapply rotateD_spec; [ | symmetry; apply Edcost'].
         apply less_defined_Thunk_inv. rewrite <- Elub.
         apply lub_least_upper_bound; apply HoutD. }
-      cbn; intros ? ? [ ]; mgo.
+      cbn; intros ? ? [ ]; mgo_.
       split; [ | lia].
       assert (Hcobounded : cobounded (frontA outD) (scheduleA outD)).
       { exists (exact (rotate f b [])); split; apply HoutD. }
@@ -239,7 +239,7 @@ Proof.
       all: rewrite <- Elub.
       { apply lub_upper_bound_l; assumption. }
       { apply lub_upper_bound_r; assumption. }
-    + apply optimistic_skip. mgo. split; [ | lia ].
+    + apply optimistic_skip. mgo_. split; [ | lia ].
       assert (Hcobounded : cobounded (frontA outD) (scheduleA outD)).
       { exists (exact (rotate f b [])); split; apply HoutD. }
       constructor; cbn.
@@ -247,7 +247,7 @@ Proof.
       { apply HoutD. }
       { rewrite <- Elub; apply lub_upper_bound_r; assumption. }
   - unfold Tick.bind in Hdcost; cbn in Hdcost.
-    injclear Hdcost; intros -> -> -> ->. mgo.
+    injclear Hdcost; intros -> -> -> ->. mgo_.
     split; reflexivity.
 Qed.
 
@@ -258,7 +258,7 @@ Lemma pushD_spec {a} (q : Queue a) (x : a) (outD : QueueA a)
 Proof.
   intros HoutD qD xD dcost Hdcost.
   unfold pushA, pushD in *.
-  mgo.
+  mgo_.
 Admitted.
 
 Lemma pushD_lowspec {a} (q : Queue a) (x : a) (outD : QueueA a)

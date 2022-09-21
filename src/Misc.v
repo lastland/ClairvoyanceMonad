@@ -22,3 +22,5 @@ Qed.
 Proof.
   unfold Proper, respectful; intros; subst; apply Nat.sub_le_mono_r; assumption.
 Qed.
+
+Ltac inv H := inversion H; subst; clear H.

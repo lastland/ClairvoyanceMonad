@@ -305,6 +305,22 @@ Proof.
   constructor; intros *; rewrite ?to_rep_cobounded, 3? to_rep_less_defined, to_rep_lub; apply LL.
 Qed.
 
+Class HasBottom (a : Type) : Type :=
+  bottom_of : a -> a.
+
+#[global] Instance HasBottom_list {a} `{HasBottom a} : HasBottom (list a) :=
+  fix _bottom_of (xs : list a) : list a :=
+    match xs with
+    | [] => []
+    | x :: xs => bottom_of x :: _bottom_of xs
+    end.
+
+#[global] Instance HasBottom_T {a} : HasBottom (T a) := fun _ => Undefined.
+
+Class BottomIsLeast a `{HasBottom a, LessDefined a} : Prop :=
+  bottom_is_least : forall (x : a), bottom_of x `less_defined` x.
+
+#[global] Hint Mode BottomIsLeast ! - - : typeclass_instances.
 
 (** * Instances for standard types *)
 
@@ -439,6 +455,10 @@ Proof.
       constructor; [ apply lub_upper_bound_r; eauto | ].
       apply IH; auto.
 Qed.
+
+#[global] Instance BottomIsLeast_list {a} `{BottomIsLeast a} : BottomIsLeast (list a).
+Proof.
+Admitted.
 
 Lemma less_defined_app {a} {LD : LessDefined a} (xs1 xs2 ys1 ys2 : list a)
   : xs1 `less_defined` ys1 -> xs2 `less_defined` ys2 ->
@@ -583,3 +603,4 @@ Ltac mgo tac := repeat (intros;
                         repeat invert_eq; repeat invert_approx;
                         cbn in *; (mforward tac + solve_approx + lia)).
 Ltac mgo' := mgo idtac.
+Ltac mgo_ := repeat (intros; cbn in *; (mforward idtac + solve_approx + lia)).

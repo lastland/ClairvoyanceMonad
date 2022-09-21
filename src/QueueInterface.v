@@ -9,6 +9,12 @@ Set Implicit Arguments.
 Set Contextual Implicit.
 Set Maximal Implicit Insertion.
 
+#[global] Instance HasBottom_QueueA {a} : HasBottom (QueueA a) :=
+  fun q => MkQueueA (nfrontA q) Undefined (nbackA q) Undefined.
+
+#[global] Instance BottomIsLeast_QueueA {a} : BottomIsLeast (QueueA a).
+Admitted.
+
 Definition a := nat.
 
 Inductive Op : Type :=
@@ -52,7 +58,7 @@ Definition exec_op_queue (o : Op) (vs : list QAa) : M (list QAa) :=
   | _, _ => ret []
   end.
 
-#[global] Instance CvImpl_Queue : CvImpl Op QAa := exec_op_queue.
+#[global] Instance CvImpl_QueueA : CvImpl Op QAa := exec_op_queue.
 
 #[local] Instance exec_op_mon (o : Op) :
   Morphisms.Proper (Morphisms.respectful less_defined less_defined)
@@ -71,23 +77,40 @@ Proof.
     apply ret_mon. constructor; [ assumption | constructor ].
 Qed.
 
-#[global] Instance ImplApprox_Queue : ImplApprox Op (Queue a) QAa.
+#[global] Instance ApproxOrder_Queue : ApproxOrder Op (Queue a) QAa.
 Proof.
   econstructor; try typeclasses eauto.
 Defined.
 
+#[global] Instance MonotoneCvImpl_QueueA : MonotoneCvImpl CvImpl_QueueA.
+Proof.
+Admitted.
+
 (* "debt" in BankersQueue *)
-Definition potential : QAa -> nat := fun qA =>
+#[local] Instance Potential_QueueA : Potential QAa := fun qA =>
   2 * sizeX 0 (frontA qA) - 2 * nbackA qA.
 
-Lemma potential_lub_QueueA : forall qA qA' : QAa, cobounded qA qA' -> potential (lub qA qA') <= potential qA + potential qA'.
+#[local] Instance PotentialLub_QueueA : PotentialLub QAa.
 Proof.
   apply @LubDebt_QueueA.
 Qed.
 
-#[global] Instance HasAmortizedCost_Queue : HasAmortizedCost Op (Queue a) QAa.
+#[local] Instance PotentialBottom_QueueA : PotentialBottom QAa.
+Proof. exact (fun _ => eq_refl). Qed.
+
+#[local] Instance HasPotential_QueueA : HasPotential QAa.
 Proof.
-  apply Build_HasAmortizedCost with (potential := potential).
-  - exact @potential_lub_QueueA.
-  - admit.
+  econstructor; typeclasses eauto.
+Defined.
+
+#[global] Instance Physicist'sArgument_QueueA :
+   Physicist'sArgument CostSpec_Queue CvImpl_QueueA.
+Proof.
+  econstructor.
 Admitted.
+
+Theorem HasAmortizedCost_Queue :
+   HasAmortizedCost CostSpec_Queue CvImpl_QueueA.
+Proof.
+  apply physicist's_argument_soundness.
+Qed.

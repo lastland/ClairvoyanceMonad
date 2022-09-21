@@ -79,7 +79,7 @@ Definition exec_op_SeqA (o : Op) (vs : list SeqA') : M (list SeqA') :=
 
 #[global] Instance CvImpl_SeqA : CvImpl Op SeqA' := exec_op_SeqA.
 
-(** ** [ImplApprox_Seq]: Order structure of [SeqA] *)
+(** ** [ApproxOrder_Seq]: Order structure of [SeqA] *)
 
 #[global] Instance Exact_Seq : Exact (Seq a) (SeqA a).
 Admitted.
@@ -99,24 +99,39 @@ Admitted.
 Proof.
 Admitted.
 
-#[global] Instance ImplApprox_Seq : ImplApprox Op (Seq a) SeqA'.
+
+#[global] Instance HasBottom_SeqA : HasBottom (SeqA a) := fun q =>
+  match q with
+  | Nil => Nil
+  | Unit _ => Unit Undefined
+  | More _ _ _ => More Undefined Undefined Undefined
+  end.
+
+#[global] Instance BottomIsLeast_SeqA : BottomIsLeast (SeqA a).
+Admitted.
+
+#[global] Instance ApproxOrder_Seq : ApproxOrder Op (Seq a) SeqA'.
 Proof.
   econstructor; try typeclasses eauto.
 Defined.
 
 (** * Main theorem: HasAmortizedCost_Seq *)
 
-(* "debt" in BankersSeq *)
-Definition potential : SeqA' -> nat := fun t =>
+#[global] Instance Potential_SeqA : Potential SeqA' := fun t =>
   0 (* TODO *).
 
-Lemma potential_lub_SeqA : forall qA qA' : SeqA', cobounded qA qA' -> potential (lub qA qA') <= potential qA + potential qA'.
-Proof.
+#[global] Instance HasPotential_SeqA : HasPotential SeqA'.
 Admitted.
 
-#[global] Instance HasAmortizedCost_Seq : HasAmortizedCost Op (Seq a) SeqA'.
-Proof.
-  apply Build_HasAmortizedCost with (potential := potential).
-  - exact @potential_lub_SeqA.
-  - admit.
+#[global] Instance MonotoneCvImpl_SeqA : MonotoneCvImpl CvImpl_SeqA.
 Admitted.
+
+#[global] Instance Physicist'sArgument_SeqA : Physicist'sArgument CostSpec_Seq CvImpl_SeqA.
+Proof.
+  econstructor.
+Admitted.
+
+Theorem HasAmortizedCost_Seq : HasAmortizedCost CostSpec_Seq CvImpl_SeqA.
+Proof.
+  apply physicist's_argument_soundness.
+Qed.
