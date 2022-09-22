@@ -305,19 +305,19 @@ Proof.
   constructor; intros *; rewrite ?to_rep_cobounded, 3? to_rep_less_defined, to_rep_lub; apply LL.
 Qed.
 
-Class HasBottom (a : Type) : Type :=
+Class BottomOf (a : Type) : Type :=
   bottom_of : a -> a.
 
-#[global] Instance HasBottom_list {a} `{HasBottom a} : HasBottom (list a) :=
+#[global] Instance BottomOf_list {a} `{BottomOf a} : BottomOf (list a) :=
   fix _bottom_of (xs : list a) : list a :=
     match xs with
     | [] => []
     | x :: xs => bottom_of x :: _bottom_of xs
     end.
 
-#[global] Instance HasBottom_T {a} : HasBottom (T a) := fun _ => Undefined.
+#[global] Instance BottomOf_T {a} : BottomOf (T a) := fun _ => Undefined.
 
-Class BottomIsLeast a `{HasBottom a, LessDefined a} : Prop :=
+Class BottomIsLeast a `{BottomOf a, LessDefined a} : Prop :=
   bottom_is_least : forall (x : a), bottom_of x `less_defined` x.
 
 #[global] Hint Mode BottomIsLeast ! - - : typeclass_instances.

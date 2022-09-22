@@ -1,5 +1,5 @@
 (* Instantiate Interfaces with BankersQueue *)
-From Coq Require Import List RelationClasses.
+From Coq Require Import List.
 From Clairvoyance Require Import Core Approx ApproxM List Misc BankersQueue Cost Interfaces.
 
 Import ListNotations.
@@ -9,22 +9,26 @@ Set Implicit Arguments.
 Set Contextual Implicit.
 Set Maximal Implicit Insertion.
 
-#[global] Instance HasBottom_QueueA {a} : HasBottom (QueueA a) :=
+#[global] Instance BottomOf_QueueA {a} : BottomOf (QueueA a) :=
   fun q => MkQueueA (nfrontA q) Undefined (nbackA q) Undefined.
 
 #[global] Instance BottomIsLeast_QueueA {a} : BottomIsLeast (QueueA a).
 Admitted.
 
 Definition a := nat.
+Definition value := Queue a.
+Definition valueA := QueueA a.
+Notation stack := (list value) (only parsing).
+Notation stackA := (list valueA) (only parsing).
 
-Inductive Op : Type :=
+Inductive op : Type :=
 | Empty
 | Push (x : a)
 | Pop
 .
 
-Definition eval_op_queue (o : Op) (vs : list (Queue a)) : list (Queue a) :=
-  match o, vs with
+Definition eval : Eval op value :=
+  fun (o : op) (args : list value) => match o, args with
   | Empty, _ => [empty]
   | Push x, q :: _ => [push q x]
   | Pop, q :: _ =>
@@ -35,18 +39,13 @@ Definition eval_op_queue (o : Op) (vs : list (Queue a)) : list (Queue a) :=
   | _, _ => []
   end.
 
-#[global] Instance PureImpl_Queue : PureImpl Op (Queue a) := eval_op_queue.
+Definition budget : Budget op value :=
+  fun (o : op) (args : list value) => match o with
+  | Empty | Push _ | Pop => 7
+  end.
 
-#[global] Instance CostSpec_Queue : CostSpec Op (Queue a) :=
-  fun o vs =>
-    match o with
-    | Empty | Push _ | Pop => 1
-    end.
-
-Definition QAa := QueueA a.
-
-Definition exec_op_queue (o : Op) (vs : list QAa) : M (list QAa) :=
-  match o, vs with
+Definition exec : Exec op valueA :=
+  fun (o : op) (args : list valueA) => match o, args with
   | Empty, _ => let! q := emptyA in ret [q]
   | Push x, q :: _ => let! q' := pushA (Thunk q) (Thunk x) in ret [q']
   | Pop, q :: _ =>
@@ -58,11 +57,9 @@ Definition exec_op_queue (o : Op) (vs : list QAa) : M (list QAa) :=
   | _, _ => ret []
   end.
 
-#[global] Instance CvImpl_QueueA : CvImpl Op QAa := exec_op_queue.
+#[export] Existing Instances eval budget exec.
 
-#[local] Instance exec_op_mon (o : Op) :
-  Morphisms.Proper (Morphisms.respectful less_defined less_defined)
-    (exec_op (op := Op) (valueA := QAa) o).
+Lemma monotonic_exec (o : op) : Monotonic (exec o).
 Proof.
   intros ? ? E. destruct o; cbn.
   - reflexivity.
@@ -77,40 +74,30 @@ Proof.
     apply ret_mon. constructor; [ assumption | constructor ].
 Qed.
 
-#[global] Instance ApproxOrder_Queue : ApproxOrder Op (Queue a) QAa.
-Proof.
-  econstructor; try typeclasses eauto.
-Defined.
+Definition approx_algebra : ApproxAlgebra value valueA.
+Proof. econstructor; try typeclasses eauto. Defined.
+#[export] Existing Instance approx_algebra.
 
-#[global] Instance MonotoneCvImpl_QueueA : MonotoneCvImpl CvImpl_QueueA.
-Proof.
-Admitted.
+Lemma well_defined_exec : WellDefinedExec.
+Proof. constructor; exact monotonic_exec. Qed.
+#[export] Existing Instance well_defined_exec.
 
 (* "debt" in BankersQueue *)
-#[local] Instance Potential_QueueA : Potential QAa := fun qA =>
-  2 * sizeX 0 (frontA qA) - 2 * nbackA qA.
+Definition potential : Potential valueA := (* ... *)
+  fun qA => 2 * sizeX 0 (frontA qA) - 2 * nbackA qA.
+#[export] Existing Instance potential.
 
-#[local] Instance PotentialLub_QueueA : PotentialLub QAa.
+Lemma well_defined_potential : WellDefinedPotential.
 Proof.
-  apply @LubDebt_QueueA.
+  constructor; [ apply @LubDebt_QueueA | exact (fun _ => eq_refl) ].
 Qed.
+#[export] Existing Instance well_defined_potential.
 
-#[local] Instance PotentialBottom_QueueA : PotentialBottom QAa.
-Proof. exact (fun _ => eq_refl). Qed.
-
-#[local] Instance HasPotential_QueueA : HasPotential QAa.
+Theorem physicist's_argument : Physicist'sArgument.
 Proof.
-  econstructor; typeclasses eauto.
-Defined.
-
-#[global] Instance Physicist'sArgument_QueueA :
-   Physicist'sArgument CostSpec_Queue CvImpl_QueueA.
-Proof.
-  econstructor.
+  red.
 Admitted.
+#[export] Existing Instance physicist's_argument.
 
-Theorem HasAmortizedCost_Queue :
-   HasAmortizedCost CostSpec_Queue CvImpl_QueueA.
-Proof.
-  apply physicist's_method.
-Qed.
+Theorem amortized_cost : AmortizedCostSpec.
+Proof. apply physicist's_method. Qed.
