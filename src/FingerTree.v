@@ -72,7 +72,7 @@ Definition head {a:Type} (t: Seq a) : option a :=
   | (More (Three x _ _) _ _) => Some x
   end.
 
-Fixpoint map1 {a:Type} (f : a -> a) (s : Seq a) : Seq a :=
+Definition map1 {a:Type} (f : a -> a) (s : Seq a) : Seq a :=
   match s with
   | Nil => Nil
   | (Unit x) => Unit (f x)
@@ -81,7 +81,7 @@ Fixpoint map1 {a:Type} (f : a -> a) (s : Seq a) : Seq a :=
   | (More (Three x y z) q u) => More (Three (f x) y z) q u 
   end.
 
-Fixpoint more0 {a:Type} (q: Seq (Tuple a)) (u: Crowd a) : Seq a := 
+Definition more0 {a:Type} (q: Seq (Tuple a)) (u: Crowd a) : Seq a := 
   match (q,u) with 
    | (Nil, (One y)) => Unit y
    | (Nil, (Two y z)) => More (One y) Nil (One z)
@@ -119,6 +119,15 @@ Fixpoint glue {a:Type} (q1 : Seq a) (la: list a) (q2: Seq a) : Seq a :=
 Definition append {a:Type} (q1 : Seq a) (q2 : Seq a) : Seq a :=
     glue q1 nil q2.
 
+Definition tail {a:Type} (q: Seq a) : Seq a :=
+  match q with 
+| Nil => Nil
+| Unit _ => Nil
+| More (Three _ x y) q u => (More (Two x y) q u)
+| More (Two _ x) q u => (More (One x) q u)
+| More (One _ ) q u => (more0 q u)
+end.
+
 Fixpoint fromTuples {a:Type} (lta : list (Tuple a)) : list a :=
   match lta with 
   | [] => []
@@ -128,3 +137,50 @@ Fixpoint fromTuples {a:Type} (lta : list (Tuple a)) : list a :=
   | (Triple x y z :: xs) => [x; y; z] ++ fromTuples xs
   end.
 
+Fixpoint Seq_toList {a:Type} (q : Seq a) : list a :=
+  match q with 
+  | Nil => []
+  | Unit x => (x :: [])
+  | More r q l => 
+      Crowd_toList r ++ fromTuples (Seq_toList q) ++ Crowd_toList l
+  end.
+
+Lemma nil_spec : forall {a:Type}, Seq_toList (@Nil a) = [].
+Proof. 
+  intros. simpl. auto. Qed.
+
+Lemma cons_spec : forall {a:Type} (x:a)(q: Seq a), Seq_toList (cons x q) = x :: Seq_toList q.
+Proof.
+  intros.
+  induction q; simpl; auto.
+  destruct c; simpl.
+  + f_equal.
+  + f_equal.
+  + f_equal.
+    f_equal.
+    repeat rewrite app_comm_cons.
+    f_equal.
+    rewrite IHq.
+    simpl.
+    destruct (Seq_toList q); auto.
+    destruct t; auto.
+    destruct l; auto.
+Qed.
+
+Lemma more0_spec : forall q c0, Seq_toList (more0 q c0) = fromTuples (Seq_toList q) ++ Crowd_toList c0.
+
+Lemma tail_spec : forall {a:Type} (q: Seq a), Seq_toList (tail q) = tl (Seq_toList q).
+Proof.
+  intros.
+  destruct q; simpl; auto.
+  destruct c; simpl; auto.
+
+Lemma append_spec : 
+
+Lemma map1_spec : forall a (f: a -> a) x (q: Seq a), 
+    map1 f (cons x q) = cons (f x) q.
+Proof.
+  intros.
+  destruct q; simpl; auto.
+  destruct c; simpl; auto.
+Qed.

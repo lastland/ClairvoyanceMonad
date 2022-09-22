@@ -2,6 +2,8 @@ From Coq Require Import List Arith Lia RelationClasses.
 From Clairvoyance Require Import Core Approx ApproxM List Misc BankersQueue.
 From Clairvoyance Require Launchbury.
 
+From Clairvoyance Require Import FingerTree.
+
 Import ListNotations.
 Import RevCompare.
 
@@ -263,4 +265,38 @@ Definition appendA {a:Type} (q1 : T (SeqA a)) (q2 : T (SeqA a)) : M (SeqA a) :=
   let! q1 := force q1 in
   let! q2 := force q2 in
   glue q1 NilA q2.
+
+
+(* -------------------------------- *)
+
+
+Inductive operation (a s : Type) : Type :=
+  | cons : a -> s -> operation a s 
+  | head : s -> operation a s
+.
+
+
+(* Potential functions *)
+
+Definition dang {a : Type} (x : CrowdA a) : nat :=
+  match x with 
+  | (One _) => 1
+  | (Two _ _) => 0
+  | (Three _ _ _) => 1
+  end.
+
+Fixpoint pot {a : Type} (s : SeqA a) : M nat :=
+  match s with 
+  | Nil => ret 0
+  | Unit y => ret 0 
+  | More c q u => 
+    forcing q (fun q1 => 
+      let! c1 := force c in
+      let! u1 := force u in 
+      let! r := pot q1 in
+      ret (dang c1 + r + dang u1))
+  end.
+
+Definition operation_bound (o : operation a (SeqA a)) : nat :=
+  
 

@@ -5,6 +5,8 @@ src/Core.v
 src/Approx.v
 src/ApproxM.v
 src/Translation.v
+src/FingerTree.v
+src/FingerTreeM.v
 src/Fix.v
 src/List.v
 src/BankersQueue.v

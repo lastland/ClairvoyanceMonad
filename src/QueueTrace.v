@@ -1,3 +1,5 @@
+(* Amortized analysis of Realtime Bankers Queue *)
+
 From Clairvoyance Require Import Core Cost RealtimeBankersQueue.
 
 From Coq Require Import List.
@@ -93,7 +95,7 @@ Definition amortized_spec : Prop :=
     cost_of (evalA_trace os) <= total_bound os.
 
 Definition cost_after (os : trace a) (o : operation a nat) : NAT.t :=
-  cost_of (evalA_trace (os ++ [o])) - cost_of (evalA_trace os).
+  cost_of (evalA_trace (os ++ [o])) - cost_of (evalA_trace os).       (* difference between running with the operation and running without *)
 
 Definition bound_after (os : trace a) (o : operation a nat) : nat :=
   let o := lookups o (eval_trace os) empty in
