@@ -341,6 +341,10 @@ Arguments Exec : clear implicits.
 Arguments ApproxAlgebra : clear implicits.
 Arguments Potential : clear implicits.
 
+(* TODO: Can we prove a completeness theorem? For a more sophisticated method perhaps? *)
+(* TODO: Can we prove lower bounds? This would be useful to check that [exec]
+   isn't accidentally doing nothing. Also to know whether our upper bound is tight. *)
+
 (*
 Section RealTimeCost.
 

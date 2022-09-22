@@ -68,9 +68,15 @@ Inductive op : Type :=
 | Append
 .
 
+Notation Eval := (Eval op value).
+Notation Budget := (Budget op value).
+Notation Exec := (Exec op valueA).
+Notation ApproxAlgebra := (ApproxAlgebra value valueA).
+Notation Potential := (Potential valueA).
+
 Import FingerTree.
 
-Definition eval : Eval op value :=
+Definition eval : Eval :=
   fun (o : op) (args : list value) => match o, args with
   | Empty, _ => [Nil]
   | Cons x, q :: _ => [cons x q]
@@ -81,7 +87,7 @@ Definition eval : Eval op value :=
   | _, _ => []
   end.
 
-Definition budget : Budget op value :=
+Definition budget : Budget :=
   fun (o : op) (args : list value) => match o, args with
   | (Empty | Cons _ | Snoc _ | Head | Tail), _ => 1
   | Append, q :: q' :: _ => max (depth q) (depth q')
@@ -90,14 +96,14 @@ Definition budget : Budget op value :=
 
 Import FingerTreeM.
 
-Definition exec : Exec op valueA :=
+Definition exec : Exec :=
   fun (o : op) (args : list valueA) => match o, args with
-  | Empty, _ => ret [Nil]
-  | Cons x, q :: _ => let! q := consA (Thunk x) (Thunk q) in ret [q]
-  | Snoc x, q :: _ => let! q := snocA (Thunk q) (Thunk x) in ret [q]
-  | Head, q :: _ => let! _ := headA (Thunk q) in ret []  (* Doesn't create a new FT *)
-  | Tail, q :: _ => let! q := tailA (Thunk q) in ret [q]
-  | Append, q :: q' :: _ => let! q := appendA (Thunk q) (Thunk q') in ret [q]
+  | Empty, _ => let! s := emptyA in ret [s]
+  | Cons x, s :: _ => let! s := consA (Thunk x) (Thunk s) in ret [s]
+  | Snoc x, s :: _ => let! s := snocA (Thunk s) (Thunk x) in ret [s]
+  | Head, s :: _ => let! _ := headA (Thunk s) in ret []  (* Doesn't create a new FT *)
+  | Tail, s :: _ => let! s := tailA (Thunk s) in ret [s]
+  | Append, s :: s' :: _ => let! s := appendA (Thunk s) (Thunk s') in ret [s]
   | _, _ => ret []
   end.
 
@@ -107,7 +113,7 @@ Lemma monotonic_exec (o : op) : Monotonic (exec o).
 Proof.
 Admitted.
 
-Definition approx_algebra : ApproxAlgebra value valueA.
+Definition approx_algebra : ApproxAlgebra.
 Proof. econstructor; try typeclasses eauto. Defined.
 #[export] Existing Instance approx_algebra.
 
@@ -116,7 +122,7 @@ Proof. constructor; exact monotonic_exec. Qed.
 #[export] Existing Instance well_defined_exec.
 
 (* "debt" in BankersQueue *)
-Definition potential : Potential valueA := (* ... *)
+Definition potential : Potential := (* ... *)
   fun t => _depthX t.
 #[export] Existing Instance potential.
 

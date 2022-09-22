@@ -55,6 +55,8 @@ Inductive SeqA (a : Type) : Type :=
   | Unit : T a -> SeqA a 
   | More : T (CrowdA a) -> T (SeqA (TupleA a)) -> T (CrowdA a) -> SeqA a.
 
+Definition emptyA {a: Type} : M (SeqA a) :=
+  tick >> ret Nil.
 
 Fixpoint consA_ {a : Type} (x : T a) (s : SeqA a) : M (SeqA a) :=
   tick >> 

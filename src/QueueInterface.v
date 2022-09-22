@@ -27,7 +27,13 @@ Inductive op : Type :=
 | Pop
 .
 
-Definition eval : Eval op value :=
+Notation Eval := (Eval op value).
+Notation Budget := (Budget op value).
+Notation Exec := (Exec op valueA).
+Notation ApproxAlgebra := (ApproxAlgebra value valueA).
+Notation Potential := (Potential valueA).
+
+Definition eval : Eval :=
   fun (o : op) (args : list value) => match o, args with
   | Empty, _ => [empty]
   | Push x, q :: _ => [push q x]
@@ -39,12 +45,12 @@ Definition eval : Eval op value :=
   | _, _ => []
   end.
 
-Definition budget : Budget op value :=
+Definition budget : Budget :=
   fun (o : op) (args : list value) => match o with
   | Empty | Push _ | Pop => 7
   end.
 
-Definition exec : Exec op valueA :=
+Definition exec : Exec :=
   fun (o : op) (args : list valueA) => match o, args with
   | Empty, _ => let! q := emptyA in ret [q]
   | Push x, q :: _ => let! q' := pushA (Thunk q) (Thunk x) in ret [q']
@@ -74,7 +80,7 @@ Proof.
     apply ret_mon. constructor; [ assumption | constructor ].
 Qed.
 
-Definition approx_algebra : ApproxAlgebra value valueA.
+Definition approx_algebra : ApproxAlgebra.
 Proof. econstructor; try typeclasses eauto. Defined.
 #[export] Existing Instance approx_algebra.
 
@@ -83,7 +89,7 @@ Proof. constructor; exact monotonic_exec. Qed.
 #[export] Existing Instance well_defined_exec.
 
 (* "debt" in BankersQueue *)
-Definition potential : Potential valueA := (* ... *)
+Definition potential : Potential := (* ... *)
   fun qA => 2 * sizeX 0 (frontA qA) - 2 * nbackA qA.
 #[export] Existing Instance potential.
 
