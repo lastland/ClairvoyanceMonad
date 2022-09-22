@@ -7,7 +7,6 @@
 
 From Coq Require Import List Arith Lia RelationClasses.
 From Clairvoyance Require Import Core Approx ApproxM List Misc BankersQueue.
-From Clairvoyance Require Launchbury.
 
 Import ListNotations.
 Import RevCompare.
@@ -217,13 +216,13 @@ Lemma mkQueueD_spec {a} (f b s : list a) (outD : QueueA a)
     mkQueueA fD bD sD [[ fun out cost => outD `less_defined` out /\ cost <= dcost ]].
 Proof.
   intros HoutD fD bD sD dcost Hdcost.
-  unfold mkQueueA. mgo.
+  unfold mkQueueA. mgo_.
   unfold mkQueueD in Hdcost.
   destruct s as [| x0 s ].
   - destruct thunkD as [dcost' [ [fD' bD'] sD'] ] eqn:Edcost' in Hdcost.
     unfold Tick.bind in Hdcost; cbn in Hdcost.
     injclear Hdcost; intros -> <- <- ->.
-    mgo.
+    mgo_.
     (* TODO: how to handle thunk *)
     destruct (lub _ _) eqn:Elub in Edcost'; cbn in Edcost'.
     + apply optimistic_thunk_go.
@@ -231,7 +230,7 @@ Proof.
       { eapply rotateD_spec; [ | symmetry; apply Edcost'].
         apply less_defined_Thunk_inv. rewrite <- Elub.
         apply lub_least_upper_bound; apply HoutD. }
-      cbn; intros ? ? [ ]; mgo.
+      cbn; intros ? ? [ ]; mgo_.
       split; [ | lia].
       assert (Hcobounded : cobounded (frontA outD) (scheduleA outD)).
       { exists (exact (rotate f b [])); split; apply HoutD. }
@@ -240,7 +239,7 @@ Proof.
       all: rewrite <- Elub.
       { apply lub_upper_bound_l; assumption. }
       { apply lub_upper_bound_r; assumption. }
-    + apply optimistic_skip. mgo. split; [ | lia ].
+    + apply optimistic_skip. mgo_. split; [ | lia ].
       assert (Hcobounded : cobounded (frontA outD) (scheduleA outD)).
       { exists (exact (rotate f b [])); split; apply HoutD. }
       constructor; cbn.
@@ -248,7 +247,7 @@ Proof.
       { apply HoutD. }
       { rewrite <- Elub; apply lub_upper_bound_r; assumption. }
   - unfold Tick.bind in Hdcost; cbn in Hdcost.
-    injclear Hdcost; intros -> -> -> ->. mgo.
+    injclear Hdcost; intros -> -> -> ->. mgo_.
     split; reflexivity.
 Qed.
 
@@ -259,7 +258,7 @@ Lemma pushD_spec {a} (q : Queue a) (x : a) (outD : QueueA a)
 Proof.
   intros HoutD qD xD dcost Hdcost.
   unfold pushA, pushD in *.
-  mgo.
+  mgo_.
 Admitted.
 
 Lemma pushD_lowspec {a} (q : Queue a) (x : a) (outD : QueueA a)
@@ -505,69 +504,3 @@ Proof.
 Qed.
 
 (*********************************)
-
-Import Clairvoyance.Launchbury.
-Import L.Notations.
-
-Record QueueF (t : Type -> Type) (_list : Type) (_Q : Type) : Type := MkQueueF
-  { frontF : t _list
-  ; backF : t _list
-  ; scheduleF : t _list
-  }.
-
-#[global] Instance Data_QueueA {a} : Data (QueueF T (listA a)) :=
-  {| d_ := QueueA a
-  ;  des := fun q => {| frontF := frontA q ; backF := backA q ; scheduleF := scheduleA q |}
-  ;  con := fun q => {| frontA := frontF q ; backA := backF q ; scheduleA := scheduleF q |}
-  |}.
-
-Section F.
-Context {t a} {list_ : Data (listF t a)} {Queue_ : Data (QueueF t list_)}.
-
-Definition emptyF : L t Queue_ :=
-  let^~ f := L.ret (con NilF) in
-  L.ret (con {| frontF := f ; backF := f ; scheduleF := f |}).
-
-CoFixpoint rotateF (f b d : t list_) : L t list_ :=
-  let^ f := L.force f in
-  let^ b := L.force b in
-  match des f, des b with
-  | NilF, ConsF y _ => L.ret (con (ConsF y d))
-  | ConsF x f, ConsF y b =>
-    let^~ d := L.ret (con (ConsF y d)) in
-    let^~ r := rotateF f b d in
-    L.ret (con (ConsF x r))
-  | _, _ => L.ret (con NilF) (* should not happen *)
-  end.
-
-Definition mkQueueF (f b s : t list_) : L t Queue_ :=
-  let^ _ := L.tick in
-  let^ s := L.force s in
-  match des s with
-  | NilF =>
-    let^~ z := L.ret (con NilF) in
-    let^~ f := rotateF f b z in
-    L.ret (con (MkQueueF f z f))
-  | ConsF _ s' => L.ret (con (MkQueueF f b s'))
-  end.
-
-Definition pushF (q : t Queue_) (x : t a) : L t Queue_ :=
-  let^ _ := L.tick in
-  let^ q := L.force q in
-  let q := des q in
-  let^~ b := L.ret (con (ConsF x (backF q))) in
-  mkQueueF (frontF q) b (scheduleF q).
-
-Definition popF (q : t Queue_) : L t (option (t a * t Queue_)) :=
-  let^ _ := L.tick in
-  let^ q := L.force q in
-  let q := des q in
-  let^ f := L.force (frontF q) in
-  match des f with
-  | NilF => L.ret None
-  | ConsF x f =>
-    let^~ q := mkQueueF f (backF q) (scheduleF q) in
-    L.ret (Some (x, q))
-  end.
-
-End F.

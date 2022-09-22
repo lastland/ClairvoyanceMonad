@@ -1,6 +1,5 @@
 From Coq Require Import List Arith Lia RelationClasses.
 From Clairvoyance Require Import Core Approx ApproxM List Misc BankersQueue.
-From Clairvoyance Require Launchbury.
 
 From Clairvoyance Require Import FingerTree.
 
@@ -58,6 +57,8 @@ Inductive SeqA (a : Type) : Type :=
   | Unit : T a -> SeqA a 
   | More : T (CrowdA a) -> T (SeqA (TupleA a)) -> T (CrowdA a) -> SeqA a.
 
+Definition emptyA {a: Type} : M (SeqA a) :=
+  tick >> ret Nil.
 
 Fixpoint consA_ {a : Type} (x : T a) (s : SeqA a) : M (SeqA a) :=
   tick >> 
@@ -130,7 +131,7 @@ Definition headA {a:Type} (t: T (SeqA a)) : M (optionA a) :=
       end)
   end).
 
-Fixpoint map1 {a:Type} (f : T a -> M a) (s : SeqA a) : M (SeqA a) :=
+Definition map1 {a:Type} (f : T a -> M a) (s : SeqA a) : M (SeqA a) :=
   tick >>
   match s with
   | Nil => ret Nil
@@ -152,7 +153,7 @@ Fixpoint map1 {a:Type} (f : T a -> M a) (s : SeqA a) : M (SeqA a) :=
       end)
   end.
 
-Fixpoint more0 {a:Type} (q: SeqA (TupleA a)) (u: CrowdA a) : M (SeqA a) := 
+Definition more0 {a:Type} (q: SeqA (TupleA a)) (u: CrowdA a) : M (SeqA a) :=
   tick >>
   match (q,u) with 
    | (Nil, (One y)) => ret (Unit y)
@@ -197,6 +198,20 @@ Fixpoint more0 {a:Type} (q: SeqA (TupleA a)) (u: CrowdA a) : M (SeqA a) :=
        end)
   end.
 
+Definition tailA {a:Type} (t: T (SeqA a)) : M (SeqA a) :=
+  tick >>
+  forcing t (fun t =>
+  match t with
+  | Nil => ret Nil
+  | Unit x => ret Nil
+  | More v q u =>
+    forcing v (fun v =>
+    match v with
+    | One _ => forcing q (fun q => forcing u (fun u => more0 q u))
+    | Two x y => let~ v := ret (One y) in ret (More v q u)
+    | Three x y z => let~ v := ret (Two y z) in ret (More v q u)
+    end)
+  end).
 
 Fixpoint toTuples {a:Type} (la : listA a) : M (listA (TupleA a)) := 
   tick >>
@@ -264,8 +279,7 @@ Fixpoint glue {a:Type} (q1 : SeqA a) (la: listA a) (q2: SeqA a) : M (SeqA a) :=
 Definition appendA {a:Type} (q1 : T (SeqA a)) (q2 : T (SeqA a)) : M (SeqA a) :=
   let! q1 := force q1 in
   let! q2 := force q2 in
-  glue q1 NilA q2.
-
+  glue q1 NilA 
 
 (* -------------------------------- *)
 
@@ -299,4 +313,18 @@ Fixpoint pot {a : Type} (s : SeqA a) : M nat :=
 
 Definition operation_bound (o : operation a (SeqA a)) : nat :=
   
+
+(** *)
+
+Fixpoint _depthX {a} (t: SeqA a) : nat :=
+  match t with
+  | More _ t _ => 1 + match t with Undefined => 0 | Thunk t => _depthX t end
+  | _ => 0
+  end.
+
+Definition depthX {a} (t: T (SeqA a)) : nat :=
+  match t with
+  | Undefined => 0
+  | Thunk t => _depthX t
+  end.
 

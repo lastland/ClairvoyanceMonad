@@ -1,6 +1,5 @@
 From Coq Require Import List Arith Lia RelationClasses.
 From Clairvoyance Require Import Core Approx ApproxM List Misc BankersQueue.
-From Clairvoyance Require Launchbury.
 
 Import ListNotations.
 Import RevCompare.
@@ -96,6 +95,15 @@ Definition more0 {a:Type} (q: Seq (Tuple a)) (u: Crowd a) : Seq a :=
    | (More (Three (Triple x _ _) _ _) _ _, _) => More (One x) (map1 chop q)u 
    end.
 
+Definition tail {a:Type} (t: Seq a) : Seq a :=
+  match t with
+  | Nil => Nil
+  | Unit x => Nil
+  | More (One _) q u => more0 q u
+  | More (Two x y) q u => More (One y) q u
+  | More (Three x y z) q u => More (Two y z) q u
+  end.
+
 Fixpoint toTuples {a:Type} (la : list a) : list (Tuple a) := 
   match la with
     | [] => []
@@ -136,6 +144,7 @@ Fixpoint fromTuples {a:Type} (lta : list (Tuple a)) : list a :=
   | (Pair x y :: xs) => [x; y] ++ fromTuples xs  (* extra *)
   | (Triple x y z :: xs) => [x; y; z] ++ fromTuples xs
   end.
+
 
 Fixpoint Seq_toList {a:Type} (q : Seq a) : list a :=
   match q with 
@@ -184,3 +193,12 @@ Proof.
   destruct q; simpl; auto.
   destruct c; simpl; auto.
 Qed.
+
+(** Utils *)
+
+Fixpoint depth {a} (t: Seq a) : nat :=
+  match t with
+  | More _ t _ => 1 + depth t
+  | _ => 0
+  end.
+

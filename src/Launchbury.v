@@ -215,3 +215,105 @@ Definition evalMF (_evalMF : forall {a : Type}, L T a -> M a) {a} (u : L T a) : 
   end.
 
 Definition evalM {a} : L T a -> M a := Fix4.F evalMF.
+
+(*
+From Clairvoyance Require Import Interfaces.
+
+(* Stateful semantics of laziness *)
+Module St.
+
+Import L.Notations.
+
+Record Impl (op : Type) : Type :=
+  { value : Type
+  ; raw_eval_op : op -> list value -> L R (list value)
+  }.
+
+Definition eval_op {op : Type} {j : Impl op} (o : op) (ns : list nat) (xs : list value)
+  : L R (list value) :=
+  match lookups xs ns with
+  | None => L.ret xs  (* noop *)
+  | Some vs => let^ vs := j.(raw_eval_op) o vs in L.ret (xs ++ vs)
+  end.
+
+Fixpoint eval_trace {op : Type} {j : Impl op} (os : list (op * list nat)) (xs : list value)
+  : L R (list value) :=
+  match os with
+  | [] => L.ret xs
+  | (o, ns) :: os => let^ xs := eval_op o ns xs in eval_trace os xs
+  end.
+
+(* The cost of "evaluating to WHNF": start with an empty heap, run the computation,
+   it doesn't matter what the final heap [h] and result [x] are. *)
+Definition cost_from {a} (u : L R a) (h : heap) : NAT.t :=
+  fun c => exists x, eval u empty_heap h c x.
+
+End St.
+*)
+
+From Clairvoyance Require Import RealtimeBankersQueue List.
+
+Import L.Notations.
+
+Record QueueF (t : Type -> Type) (_list : Type) (_Q : Type) : Type := MkQueueF
+  { frontF : t _list
+  ; backF : t _list
+  ; scheduleF : t _list
+  }.
+
+#[global] Instance Data_QueueA {a} : Data (QueueF T (listA a)) :=
+  {| d_ := QueueA a
+  ;  des := fun q => {| frontF := frontA q ; backF := backA q ; scheduleF := scheduleA q |}
+  ;  con := fun q => {| frontA := frontF q ; backA := backF q ; scheduleA := scheduleF q |}
+  |}.
+
+Section F.
+Context {t a} {list_ : Data (listF t a)} {Queue_ : Data (QueueF t list_)}.
+
+Definition emptyF : L t Queue_ :=
+  let^~ f := L.ret (con NilF) in
+  L.ret (con {| frontF := f ; backF := f ; scheduleF := f |}).
+
+CoFixpoint rotateF (f b d : t list_) : L t list_ :=
+  let^ f := L.force f in
+  let^ b := L.force b in
+  match des f, des b with
+  | NilF, ConsF y _ => L.ret (con (ConsF y d))
+  | ConsF x f, ConsF y b =>
+    let^~ d := L.ret (con (ConsF y d)) in
+    let^~ r := rotateF f b d in
+    L.ret (con (ConsF x r))
+  | _, _ => L.ret (con NilF) (* should not happen *)
+  end.
+
+Definition mkQueueF (f b s : t list_) : L t Queue_ :=
+  let^ _ := L.tick in
+  let^ s := L.force s in
+  match des s with
+  | NilF =>
+    let^~ z := L.ret (con NilF) in
+    let^~ f := rotateF f b z in
+    L.ret (con (MkQueueF f z f))
+  | ConsF _ s' => L.ret (con (MkQueueF f b s'))
+  end.
+
+Definition pushF (q : t Queue_) (x : t a) : L t Queue_ :=
+  let^ _ := L.tick in
+  let^ q := L.force q in
+  let q := des q in
+  let^~ b := L.ret (con (ConsF x (backF q))) in
+  mkQueueF (frontF q) b (scheduleF q).
+
+Definition popF (q : t Queue_) : L t (option (t a * t Queue_)) :=
+  let^ _ := L.tick in
+  let^ q := L.force q in
+  let q := des q in
+  let^ f := L.force (frontF q) in
+  match des f with
+  | NilF => L.ret None
+  | ConsF x f =>
+    let^~ q := mkQueueF f (backF q) (scheduleF q) in
+    L.ret (Some (x, q))
+  end.
+
+End F.

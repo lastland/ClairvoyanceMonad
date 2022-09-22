@@ -33,6 +33,8 @@
 From Coq Require Import Arith List Lia Morphisms Relations.
 From Clairvoyance Require Import Core.
 
+Import ListNotations.
+
 Set Typeclasses Strict Resolution.
 
 Definition is_defined {a} (t : T a) : Prop :=
@@ -303,6 +305,22 @@ Proof.
   constructor; intros *; rewrite ?to_rep_cobounded, 3? to_rep_less_defined, to_rep_lub; apply LL.
 Qed.
 
+Class BottomOf (a : Type) : Type :=
+  bottom_of : a -> a.
+
+#[global] Instance BottomOf_list {a} `{BottomOf a} : BottomOf (list a) :=
+  fix _bottom_of (xs : list a) : list a :=
+    match xs with
+    | [] => []
+    | x :: xs => bottom_of x :: _bottom_of xs
+    end.
+
+#[global] Instance BottomOf_T {a} : BottomOf (T a) := fun _ => Undefined.
+
+Class BottomIsLeast a `{BottomOf a, LessDefined a} : Prop :=
+  bottom_is_least : forall (x : a), bottom_of x `less_defined` x.
+
+#[global] Hint Mode BottomIsLeast ! - - : typeclass_instances.
 
 (** * Instances for standard types *)
 
@@ -438,6 +456,35 @@ Proof.
       apply IH; auto.
 Qed.
 
+#[global] Instance BottomIsLeast_list {a} `{BottomIsLeast a} : BottomIsLeast (list a).
+Proof.
+Admitted.
+
+Lemma less_defined_app {a} {LD : LessDefined a} (xs1 xs2 ys1 ys2 : list a)
+  : xs1 `less_defined` ys1 -> xs2 `less_defined` ys2 ->
+    (xs1 ++ xs2) `less_defined` (ys1 ++ ys2).
+Proof.
+  intros H J; induction H; cbn; [ auto | constructor; auto ].
+Qed.
+
+Lemma less_defined_app_inv {a} {LD : LessDefined a} (xs0 xs1 xs2 : list a)
+  : xs0 `less_defined` (xs1 ++ xs2) ->
+    exists xs01 xs02, xs0 = xs01 ++ xs02 /\
+      xs01 `less_defined` xs1 /\ xs02 `less_defined` xs2.
+Proof.
+  revert xs0. induction xs1 as [ | x xs1 IH]; intros xs0 Hxs0; cbn.
+  - exists [], xs0. split; [reflexivity | split; [ constructor | assumption ] ].
+  - cbn in Hxs0. inversion Hxs0; clear Hxs0; subst.
+    specialize (IH _ H3). destruct IH as (xs01 & xs02 & Hxs0 & Hxs1 & Hxs2).
+    exists (x0 :: xs01), xs02.
+    split; [ cbn; f_equal; auto | ].
+    split; [ constructor; auto | auto ].
+Qed.
+
+Lemma exact_list_app {a aA} {EE : Exact a aA} (xs1 xs2 : list a)
+  : exact (xs1 ++ xs2) = exact xs1 ++ exact xs2.
+Proof. apply map_app. Qed.
+
 Notation resp r1 r2 f f' := (forall x x', r1 x x' -> r2 (f x) (f' x')) (only parsing).
 
 #[global] Instance LessDefined_fun {a b} `{LessDefined a, LessDefined b}
@@ -556,3 +603,4 @@ Ltac mgo tac := repeat (intros;
                         repeat invert_eq; repeat invert_approx;
                         cbn in *; (mforward tac + solve_approx + lia)).
 Ltac mgo' := mgo idtac.
+Ltac mgo_ := repeat (intros; cbn in *; (mforward idtac + solve_approx + lia)).

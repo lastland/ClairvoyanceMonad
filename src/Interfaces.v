@@ -5,18 +5,25 @@ From Equations Require Import Equations.
 
 From Coq Require Import Arith List Lia Setoid Morphisms.
 Import ListNotations.
-From Clairvoyance Require Import Core Approx ApproxM List Misc BankersQueue Launchbury Cost.
+From Clairvoyance Require Import Core Approx ApproxM List Misc Cost.
 
 Set Primitive Projections.
-Set Implicit Arguments.
-Set Contextual Implicit.
-Set Maximal Implicit Insertion.
 
-Definition option_bind {A B} (o : option A) (k : A -> option B) : option B :=
-  match o with
-  | None => None
-  | Some a => k a
-  end.
+(* * Preamble: miscellaneous definitions *)
+
+(** Order structure on approximation values [valueA].
+    Core operations ([exact], [less_defined], [lub], [bottom_of])
+    and their properties. *)
+Class ApproxAlgebra (t tA : Type) : Type :=
+  { AO_Exact         :> Exact t     tA
+  ; AO_LessDefined   :> LessDefined tA
+  ; AO_Lub           :> Lub         tA
+  ; AO_BottomOf      :> BottomOf    tA
+
+  ; AO_PreOrder      :> PreOrder (less_defined (a := tA))
+  ; AO_LubLaw        :> LubLaw        tA
+  ; AO_BottomIsLeast :> BottomIsLeast tA
+  }.
 
 (* lookups xs [n; m; p] = [xs!!n; xs!!m; xs!!p], or None if out of bounds *)
 Fixpoint lookups {A} (xs : list A) (ns : list nat) : option (list A) :=
@@ -27,133 +34,22 @@ Fixpoint lookups {A} (xs : list A) (ns : list nat) : option (list A) :=
     option_map (cons x) (lookups xs ns))
   end.
 
-Module Pure.
+Definition Monotonic {a b} `{LessDefined a, LessDefined b} (f : a -> b) : Prop :=
+  forall x y, x `less_defined` y -> f x `less_defined` f y.
 
-Record Impl (op : Type) : Type :=
-  { value : Type
-  ; raw_eval_op : op -> list value -> list value
-  }.
-
-Definition eval_op {op : Type} {j : Impl op} (o : op) (ns : list nat) (xs : list j.(value))
-  : list j.(value) :=
-  match lookups xs ns with
-  | None => xs  (* noop *)
-  | Some vs => xs ++ j.(raw_eval_op) o vs
-  end.
-
-Fixpoint eval_ops {op : Type} {j : Impl op} (os : list (op * list nat)) (xs : list j.(value))
-  : list j.(value) :=
-  match os with
-  | [] => xs
-  | (o, ns) :: os => eval_ops os (eval_op o ns xs)
-  end.
-
-Module Cost.
-
-Record Impl (op : Type) : Type :=
-  { impl :> Pure.Impl op
-    (* The cost may depend on the input *)
-  ; raw_cost : op -> list impl.(value) -> nat
-  }.
-
-Definition cost {op : Type} {j : Impl op} (o : op) (ns : list nat) (vs : list j.(value)) : nat :=
-  match lookups vs ns with
-  | None => 0
-  | Some xs => j.(raw_cost) o xs
-  end.
-
-Fixpoint eval {op : Type} {j : Impl op} (os : list (op * list nat)) (xs : list j.(value))
-  : nat :=
-  match os with
-  | [] => 0
-  | (o, ns) :: os => cost o ns xs + eval os (eval_op o ns xs)
-  end.
-
-End Cost.
-
-End Pure.
-
-Coercion Pure.Cost.impl : Pure.Cost.Impl >-> Pure.Impl.
-
-Notation raw_cost_op := Pure.Cost.raw_cost.
-Notation cost_op := Pure.Cost.cost.
-Notation cost_ops := Pure.Cost.eval.
-
-Module Cv.
-
-Record Impl (op : Type) : Type :=
-  { value : Type
-  ; raw_eval_op : op -> list value -> M (list value)
-  }.
-
-Definition eval_op {op : Type} {j : Impl op} (o : op) (ns : list nat) (xs : list j.(value))
-  : M (list j.(value)) :=
-  match lookups xs ns with
-  | None => ret xs  (* noop *)
-  | Some vs => let! vs := j.(raw_eval_op) o vs in ret (xs ++ vs)
-  end.
-
-Fixpoint eval_ops {op : Type} {j : Impl op} (os : list (op * list nat)) (xs : list j.(value))
-  : M (list j.(value)) :=
-  match os with
-  | [] => ret xs
-  | (o, ns) :: os => let! xs := eval_op o ns xs in eval_ops os xs
-  end.
-
-End Cv.
-
-Class ImplApprox (op : Type) (j : Pure.Impl op) (j' : Cv.Impl op) : Type :=
-  { ImplExact :> Exact j.(Pure.value) j'.(Cv.value)
-  ; ImplLessDefined :> LessDefined j'.(Cv.value)
-  ; ImplPreOrder :> PreOrder (less_defined (a := j'.(Cv.value)))
-  ; ImplLub :> Lub j'.(Cv.value)
-  ; ImplLubLaw :> LubLaw j'.(Cv.value)
-  ; raw_eval_mon : forall o,
-      Proper (less_defined ==> less_defined) (j'.(Cv.raw_eval_op) o)
-  }.
-
-Definition sumof {A} (f : A -> nat) : list A -> nat :=
+Definition sumof {a} (f : a -> nat) : list a -> nat :=
   fold_right (fun x s => f x + s) 0.
 
-Class ImplCost (op : Type) (j : Pure.Cost.Impl op) (j' : Cv.Impl op) {IA : ImplApprox j j'} : Type :=
-  { debt (* = potential *) : j'.(Cv.value) -> nat
-  ; debts := sumof debt
-  ; debt_lub : forall x y, debt (lub x y) <= debt x + debt y
-  ; raw_eval_cost : forall (o : op) (vs : list j.(Pure.value)),
-      forall output, output `is_approx` j.(Pure.raw_eval_op) o vs ->
-      exists input, input `is_approx` vs /\
-      j'.(Cv.raw_eval_op) o input [[ fun r c =>
-        output `less_defined` r /\
-        debts input + c <= j.(raw_cost_op) o vs + debts output ]]
-  }.
-
-Arguments ImplCost : clear implicits.
-Arguments ImplCost {op} j j' {IA}.
-
-Lemma less_defined_app {a} {LD : LessDefined a} (xs1 xs2 ys1 ys2 : list a)
-  : xs1 `less_defined` ys1 -> xs2 `less_defined` ys2 ->
-    (xs1 ++ xs2) `less_defined` (ys1 ++ ys2).
+Lemma sumof_app {a} (f : a -> nat)  (x y : list a) : sumof f (x ++ y) = sumof f x + sumof f y.
 Proof.
-  intros H J; induction H; cbn; [ auto | constructor; auto ].
+  induction x as [ | x0 ? IH ]; cbn; [ auto | rewrite IH ]. lia.
 Qed.
 
-Lemma less_defined_app_inv {a} {LD : LessDefined a} (xs0 xs1 xs2 : list a)
-  : xs0 `less_defined` (xs1 ++ xs2) ->
-    exists xs01 xs02, xs0 = xs01 ++ xs02 /\
-      xs01 `less_defined` xs1 /\ xs02 `less_defined` xs2.
-Proof.
-  revert xs0. induction xs1 as [ | x xs1 IH]; intros xs0 Hxs0; cbn.
-  - exists [], xs0. split; [reflexivity | split; [ constructor | assumption ] ].
-  - cbn in Hxs0. inversion Hxs0; clear Hxs0; subst.
-    specialize (IH _ H3). destruct IH as (xs01 & xs02 & Hxs0 & Hxs1 & Hxs2).
-    exists (x0 :: xs01), xs02.
-    split; [ cbn; f_equal; auto | ].
-    split; [ constructor; auto | auto ].
-Qed.
+Definition SubadditiveMeasure {a : Type} (f : a -> nat) `{LessDefined a, Lub a} : Prop :=
+  forall x y : a, cobounded x y -> f (lub x y) <= f x + f y.
 
-Lemma exact_list_app {a aA} {EE : Exact a aA} (xs1 xs2 : list a)
-  : exact (xs1 ++ xs2) = exact xs1 ++ exact xs2.
-Proof. apply map_app. Qed.
+Definition ZeroMeasure {a : Type} (f : a -> nat) `{BottomOf a} : Prop :=
+  forall x, f (bottom_of x) = 0.
 
 Lemma less_defined_lookups {a aA} {EE : Exact a aA} {LD : LessDefined aA}
     {f : aA -> nat} {ns : list nat} {xs ys : list a}
@@ -202,62 +98,6 @@ Proof.
     rewrite Hlub; cbn. reflexivity.
 Qed.
 
-Section Soundness.
-
-Context {op : Type} (j : Pure.Cost.Impl op) (j' : Cv.Impl op)
-  {IA : ImplApprox j j'} {IC : ImplCost j j'}.
-
-Lemma debts_lub x y : cobounded x y -> debts (lub x y) <= debts x + debts y.
-Proof.
-  induction 1 as [ | ? ? ? ? ? ? IH ] using cobounded_list_ind;
-    cbn; [ reflexivity | ].
-  rewrite IH, debt_lub. clear. generalize (debt x) (debt y). lia.
-Qed.
-
-Lemma debts_app x y : debts (x ++ y) = debts x + debts y.
-Proof.
-  induction x as [ | ? ? IH ]; cbn; [ auto | rewrite IH ].
-  generalize (debt a); lia.
-Qed.
-
-Lemma eval_cost (o : op) (ns : list nat) (vs : list j.(Pure.value)) output
-  : output `is_approx` Pure.eval_op o ns vs ->
-    exists input, input `is_approx` vs /\
-    Cv.eval_op o ns input [[ fun r c =>
-      output `less_defined` r /\
-      debts input + c <= cost_op o ns vs + debts output ]].
-Proof.
-  unfold Cv.eval_op, Pure.eval_op.
-  destruct (lookups vs ns) eqn:E; intros Hout.
-  - rewrite exact_list_app in Hout. apply less_defined_app_inv in Hout.
-    destruct Hout as (out1 & out2 & Hout & Hout1 & Hout2).
-    apply raw_eval_cost in Hout2. destruct Hout2 as (input & Hin & HH).
-    destruct (less_defined_lookups (f := debt) E Hin) as (input' & Hin' & Hdebt & HH').
-    exists (lub input' out1).
-    split; [ apply lub_least_upper_bound; auto | ].
-    destruct (lookups_lub (ys := out1) HH') as (y1 & Hx & Hcob1 & Hy);
-      [ eauto | ].
-    rewrite Hy.
-    mgo. relax; [ | intros ? ? Hr; mgo; rewrite Nat.add_0_r; exact Hr ].
-    eapply optimistic_corelax;
-      [ apply raw_eval_mon, lub_upper_bound_l; eauto | | ].
-    { unfold uc; intros * ? ? []; split.
-      - rewrite H1. apply less_defined_app; [ reflexivity | assumption ].
-      - rewrite <- H2. lia. }
-    relax; [ apply HH | cbn; intros r c [Hr Hc] ].
-    split; [ rewrite Hout; apply less_defined_app; [apply lub_upper_bound_r |]; eauto | ].
-    rewrite debts_lub by eauto. rewrite Hout, debts_app.
-    unfold debts, cost_op. rewrite E, Hdebt.
-    revert Hc. generalize (raw_cost_op j o l). lia.
-  - exists output. rewrite (less_defined_lookups_None E Hout).
-    split; [ auto | ]. mgo. split; [ reflexivity | lia ].
-Qed.
-
-Lemma eval_ops_mon os
-  : Proper (less_defined ==> less_defined) (Cv.eval_ops os).
-Proof.
-Admitted.
-
 Notation pr := (pointwise_relation _).
 
 Lemma uc_ext {a} `{LessDefined a} : Proper (pr (pr eq) ==> iff) (uc (a := a)).
@@ -267,155 +107,266 @@ Proof.
   rewrite <- Hf. apply Hg.
 Qed.
 
-Lemma ImplCostSoundness_aux
-  : forall (os : list (op * list nat)) (vs : list j.(Pure.value)),
-    forall output, output `is_approx` Pure.eval_ops os vs ->
+(** * General interface for lazy data structures *)
+
+Section Interface.
+
+Context {op value valueA : Type}.
+Context {approx_algebra : ApproxAlgebra value valueA}.
+
+Definition Eval : Type := op -> list value -> list value.
+Existing Class Eval.
+
+Context {eval : Eval}.
+
+Definition event : Type := (op * list nat).
+Definition trace : Type := list event.
+Notation stack := (list value) (only parsing).
+Notation stackA := (list valueA) (only parsing).
+
+Definition eval_event '((o, ns) : event) (vs : stack) : stack :=
+  match lookups vs ns with
+  | None => vs  (* noop *)
+  | Some xs => vs ++ eval o xs
+  end.
+
+Fixpoint eval_trace_from (es : trace) (xs : stack) : stack :=
+  match es with
+  | [] => xs
+  | e :: es => eval_trace_from es (eval_event e xs)
+  end.
+
+Definition eval_trace (es : trace) : stack := eval_trace_from es [].
+
+(* The cost may depend on the input *)
+Definition Budget : Type := op -> list value -> nat.
+Existing Class Budget.
+
+Context {budget : Budget}.
+
+Definition budget_event '((o, ns) : event) (vs : stack) : nat :=
+  match lookups vs ns with
+  | None => 0
+  | Some xs => budget o xs
+  end.
+
+Fixpoint budget_trace_from (es : trace) (vs : stack) : nat :=
+  match es with
+  | [] => 0
+  | e :: es => budget_event e vs + budget_trace_from es (eval_event e vs)
+  end.
+
+Definition budget_trace (es : trace) : nat := budget_trace_from es [].
+
+Definition Exec : Type := op -> list valueA -> M (list valueA).
+Existing Class Exec.
+
+Context {exec : Exec}.
+
+Definition exec_event '((o, ns) : event) (vs : stackA) : M (stackA) :=
+  match lookups vs ns with
+  | None => ret vs  (* noop *)
+  | Some xs => let! ys := exec o xs in ret (vs ++ ys)
+  end.
+
+Fixpoint exec_trace_from (es : trace) (vs : stackA) : M (stackA) :=
+  match es with
+  | [] => ret vs
+  | e :: es => let! vs := exec_event e vs in exec_trace_from es vs
+  end.
+
+Definition exec_trace (es : trace) : M (stackA) :=
+  exec_trace_from es [].
+ 
+Class WellDefinedExec : Prop :=
+  { monotonic_exec : forall o, Monotonic (exec o)
+  }.
+
+Context {wd_exec : WellDefinedExec}.
+
+Lemma exec_trace_from_mon os : Proper (less_defined ==> less_defined) (exec_trace_from os).
+Proof.
+Admitted.
+
+(** Amortized cost specification. *)
+Section AmortizedCostSpec.
+
+(** The cost of executing the whole trace is less than
+    its aggregated bound. *)
+Definition AmortizedCostSpec : Prop :=
+  forall os : trace, (cost_of (exec_trace os) <= budget_trace os)%NAT.
+
+(** Equivalent formulation as a weakest precondition. *)
+Definition AmortizedCostSpec' : Prop :=
+  forall os : trace, exec_trace os [[ fun _ c => c <= budget_trace os ]].
+
+Theorem has_amortized_cost' :
+  AmortizedCostSpec <-> AmortizedCostSpec'.
+Admitted.
+
+End AmortizedCostSpec.
+
+(** Clairvoyant Physicist's method *)
+
+(* TODO: These classes are a bit of a mess. Find a good way to package all of the required operations and facts together. *)
+
+Definition Potential : Type := valueA -> nat.
+Existing Class Potential.
+
+Context {potential : Potential}.
+
+Class WellDefinedPotential : Prop :=
+  { potential_lub    : SubadditiveMeasure potential
+  ; potential_bottom : ZeroMeasure potential
+  }.
+
+Context {wd_potential : WellDefinedPotential}.
+
+Lemma potential_lub_list (potential_lub : SubadditiveMeasure potential) : SubadditiveMeasure (sumof potential).
+Proof.
+  intros x y.
+  induction 1 as [ | ? ? ? ? ? ? IH ] using cobounded_list_ind;
+    cbn; [ reflexivity | ].
+  rewrite IH, potential_lub by assumption.
+  clear. generalize (potential x) (potential y). lia.
+Qed.
+
+Lemma potential_lub_list_ : SubadditiveMeasure (sumof potential).
+Proof. exact (potential_lub_list potential_lub). Qed.
+
+Lemma potential_bottom_list (potential_bottom : ZeroMeasure potential) : ZeroMeasure (sumof potential).
+Proof.
+  intros x; induction x as [ | ? ? IH ]; cbn; [ reflexivity | ].
+  rewrite potential_bottom, IH. reflexivity.
+Qed.
+
+Lemma potential_bottom_list_ : ZeroMeasure (sumof potential).
+Proof. exact (potential_bottom_list potential_bottom). Qed.
+
+(** Theorem statement: "the implementation [exec] simulates [_eval]
+    with amortized cost bounded above by [budget] plus a potential
+    difference." *)
+(* Note: lazy evaluation works backwards.
+   We are first given an [output] demand,
+   obtained as an approximation of the reference output via [eval_op],
+   and we have to find a matching [input] demand. *)
+Definition Physicist'sArgument : Prop :=
+  forall (o : op) (vs : list value),
+    forall output : stackA, output `is_approx` eval o vs ->
+    exists input : stackA, input `is_approx` vs /\
+    exec o input [[ fun r c =>
+      output `less_defined` r /\
+      sumof potential input + c <= budget o vs + sumof potential output ]].
+Existing Class Physicist'sArgument.
+
+Context {exec_cost : Physicist'sArgument}.
+
+Section Soundness.
+
+Lemma exec_event_cost (e : event) (vs : stack) output
+  : output `is_approx` eval_event e vs ->
     exists input, input `is_approx` vs /\
-      Cv.eval_ops os input [[ fun r c =>
-        output `less_defined` r /\ debts input + c <= cost_ops (j := j) os vs + debts output ]].
+    exec_event e input [[ fun r c =>
+      output `less_defined` r /\
+      sumof potential input + c <= budget_event e vs + sumof potential output ]].
+Proof.
+  destruct e as [o ns].
+  unfold eval_event, exec_event.
+  destruct (lookups vs ns) eqn:E; intros Hout.
+  - rewrite exact_list_app in Hout. apply less_defined_app_inv in Hout.
+    destruct Hout as (out1 & out2 & Hout & Hout1 & Hout2).
+    apply exec_cost in Hout2. destruct Hout2 as (input & Hin & HH).
+    destruct (less_defined_lookups (f := potential) E _ Hin) as (input' & Hin' & Hpotential & HH').
+    exists (lub input' out1).
+    split; [ apply lub_least_upper_bound; auto | ].
+    destruct (lookups_lub (ys := out1) HH') as (y1 & Hx & Hcob1 & Hy);
+      [ eauto | ].
+    rewrite Hy.
+    mgo_. relax; [ | intros ? ? Hr; mgo_; rewrite Nat.add_0_r; exact Hr ].
+    eapply optimistic_corelax;
+      [ eapply monotonic_exec, lub_upper_bound_l; eauto | | ].
+    { unfold uc; intros * ? ? []; split.
+      - rewrite H1. apply less_defined_app; reflexivity + assumption.
+      - rewrite <- H2. lia. }
+    relax; [ apply HH | cbn; intros r c [Hr Hc] ].
+    split; [ rewrite Hout; apply less_defined_app; [ apply lub_upper_bound_r; eauto | assumption ] | ].
+    rewrite potential_lub_list_ by eauto. rewrite Hout, sumof_app.
+    rewrite E, Hpotential.
+    revert Hc. generalize (budget o l). lia.
+  - exists output. rewrite (less_defined_lookups_None E Hout).
+    split; [ auto | ]. mgo_. split; [ reflexivity | lia ].
+Qed.
+
+Lemma physicist's_method_aux
+  : forall (os : trace) (vs : list value),
+    forall output, output `is_approx` eval_trace_from os vs ->
+    exists input, input `is_approx` vs /\
+      exec_trace_from os input [[ fun r c =>
+        output `less_defined` r /\ sumof potential input + c <= budget_trace_from os vs + sumof potential output ]].
 Proof.
   induction os as [ | [o ns] os IH ]; intros vs output Hout; cbn.
   - exists output. split; [apply Hout | ].
     apply optimistic_ret. split; [ reflexivity | lia ].
-  - cbn in Hout. specialize (IH (Pure.eval_op o ns vs) output Hout).
+  - cbn in Hout. specialize (IH (eval_event (o, ns) vs) output Hout).
     destruct IH as (input & Hin & IH).
-    destruct (eval_cost _ _ _ Hin) as (inp & Hinp & HH).
+    destruct (exec_event_cost _ _ _ Hin) as (inp & Hinp & HH).
     exists inp. split; [ auto | ].
-    mgo. relax; [ apply HH | cbn; intros ? ? [HI HJ] ].
-    eapply optimistic_corelax; [ apply eval_ops_mon; eassumption | | ].
+    mgo_. relax; [ apply HH | cbn; intros ? ? [HI HJ] ].
+    eapply optimistic_corelax; [ apply exec_trace_from_mon; eassumption | | ].
     { eapply uc_ext; [ intros ? ?; rewrite Nat.add_assoc; reflexivity | apply uc_acost ]. }
     relax; [ apply IH | cbn; intros ? ? [HK HL] ].
     split; [ auto | ].
     lia.
 Qed.
 
-Theorem ImplCostSoundness
-  : forall os : list (op * list nat),
-    forall d, d `is_approx` Pure.eval_ops os [] ->
-      Cv.eval_ops os [] [[ fun r c =>
-        d `less_defined` r /\ c <= cost_ops (j := j) os [] + debts d ]].
+Theorem physicist's_method : AmortizedCostSpec.
 Proof.
-  intros os d Hd. destruct (ImplCostSoundness_aux os [] Hd) as (d0 & Hd0 & HH).
+  apply has_amortized_cost'.
+  intros os. destruct (physicist's_method_aux os [] (bottom_of (exact (eval_trace_from os [])))) as (d0 & Hd0 & HH).
+  { apply bottom_is_least. }
   inversion Hd0; clear Hd0; subst.
-  exact HH.
+  apply (optimistic_mon HH); cbn.
+  intros ? ? [_ INEQ]. fold (budget_trace os) in INEQ.
+  rewrite potential_bottom_list_, Nat.add_0_r in INEQ.
+  exact INEQ.
 Qed.
 
 End Soundness.
 
-(* Stateful semantics of laziness *)
-Module St.
+End Interface.
 
-Import L.Notations.
+Arguments Eval : clear implicits.
+Arguments Budget : clear implicits.
+Arguments Exec : clear implicits.
+Arguments ApproxAlgebra : clear implicits.
+Arguments Potential : clear implicits.
 
-Record Impl (op : Type) : Type :=
-  { value : Type
-  ; raw_eval_op : op -> list value -> L R (list value)
-  }.
+(* TODO: Can we prove a completeness theorem? For a more sophisticated method perhaps? *)
+(* TODO: Can we prove lower bounds? This would be useful to check that [exec]
+   isn't accidentally doing nothing. Also to know whether our upper bound is tight. *)
 
-Definition eval_op {op : Type} {j : Impl op} (o : op) (ns : list nat) (xs : list j.(value))
-  : L R (list j.(value)) :=
-  match lookups xs ns with
-  | None => L.ret xs  (* noop *)
-  | Some vs => let^ vs := j.(raw_eval_op) o vs in L.ret (xs ++ vs)
-  end.
-
-Fixpoint eval_ops {op : Type} {j : Impl op} (os : list (op * list nat)) (xs : list j.(value))
-  : L R (list j.(value)) :=
-  match os with
-  | [] => L.ret xs
-  | (o, ns) :: os => let^ xs := eval_op o ns xs in eval_ops os xs
-  end.
-
-(* The cost of "evaluating to WHNF": start with an empty heap, run the computation,
-   it doesn't matter what the final heap [h] and result [x] are. *)
-Definition cost_from {a} (u : L R a) (h : heap) : NAT.t :=
-  fun c => exists x, eval u empty_heap h c x.
-
-End St.
-
+(*
 Section RealTimeCost.
 
-Context {op : Type} (j : Pure.Cost.Impl op) (j' : St.Impl op).
+Context {op : Type} (j : Budget op) (j' : St.Impl op).
 
 Notation op' := (op * list nat)%type.
 
 Definition RealTimeCost : Prop :=
   forall (os : list op') (o : op) (ns : list nat),
   forall h c0 xs,
-    eval (St.eval_ops (j := j') os []) empty_heap h c0 xs ->
+    eval (St.eval_trace (j := j') os []) empty_heap h c0 xs ->
     ( St.cost_from (St.eval_op o ns xs) h
-    <= NAT.of_nat (cost_op (j := j) o ns (Pure.eval_ops os []))
+    <= NAT.of_nat (cost_op (j := j) o ns (eval_trace os []))
     )%NAT.
 
 End RealTimeCost.
 
 Definition ImplRealTimeCost
-    (op : Type) (j : Pure.Cost.Impl op) (j' : Cv.Impl op) {IA : ImplApprox j j'}
+    (op : Type) (j : Budget op) (j' : Cv.Impl op) {AO : ApproxAlgebra j j'}
   : Prop :=
   forall (os : list (op * list nat)) (o : op) (ns : list nat),
-    ( cost_of (Cv.eval_ops (j := j') (os ++ [(o, ns)]) [])
-    <= cost_of (Cv.eval_ops (j := j') os []) + cost_op o ns (Pure.eval_ops (j := j) os [])
+    ( cost_of (exec_trace (j := j') (os ++ [(o, ns)]) [])
+    <= cost_of (exec_trace (j := j') os []) + cost_op o ns (eval_trace (j := j) os [])
     )%NAT.
-
-(* Example *)
-Module Queue.
-
-Definition a := nat.
-
-Inductive Op : Type :=
-| Init (x : a)
-| Empty
-| Push
-| Pop
-.
-
-Inductive Value : Type :=
-| Q (q : Queue a)
-| E (x : a)
-.
-
-Definition raw_eval (o : Queue.Op) (vs : list Value) : list Value :=
-  match o, vs with
-  | Empty, _ => [Q empty]
-  | Push, Q q :: E x :: _ => [Q (push q x)]
-  | Pop, Q q :: _ =>
-    match pop q with
-    | None => []
-    | Some (x, q) => [E x; Q q]
-    end
-  | Init x, _ => [E x]
-  | _, _ => []
-  end.
-
-Canonical j : Pure.Impl Queue.Op :=
-  {| Pure.value := Value ; Pure.raw_eval_op := raw_eval |}.
-
-Definition cost (_ : Queue.Op) (_ : list Value) : nat := 7.
-
-Module Cv.
-
-Inductive Value : Type :=
-| Q (q : T (QueueA a))
-| E (x : T a)
-.
-
-Definition raw_eval (o : Queue.Op) (vs : list Value) : M (list Value) :=
-  match o, vs with
-  | Empty, _ => let~ q := emptyA in ret [Q q]
-  | Push, Q q :: E x :: _ => let~ q' := pushA q x in ret [Q q']
-  | Pop, Q q :: _ =>
-    let! pop_q := popA q in
-    match pop_q with
-    | None => ret []
-    | Some (x, q) => ret [E x; Q q]
-    end
-  | Init x, _ => ret [E (Core.Thunk x)]
-  | _, _ => ret []
-  end.
-
-Canonical j : Cv.Impl Queue.Op :=
-  {| Cv.value := Value ; Cv.raw_eval_op := raw_eval |}.
-
-End Cv.
-
-End Queue.
+*)

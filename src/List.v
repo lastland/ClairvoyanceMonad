@@ -187,7 +187,7 @@ Proof.
   unfold exact; simp exact_listA; reflexivity.
 Qed.
 
-(* #[global] *)
+Global
 Hint Rewrite @exact_list_unfold_nil @exact_list_unfold_cons
   @exact_list_unfold_nil_T @exact_list_unfold_cons_T : exact.
 

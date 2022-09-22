@@ -588,9 +588,6 @@ Qed.
 
 (** These are subsumed by the [_cost] lemmas. *)
 
-Ltac mgo := repeat (intros; cbn in *; (mforward idtac + solve_approx + lia)).
-Ltac inv H := inversion H; subst; clear H.
-
 (** [revA] has a simple cost specification: it will have to traverse the list in any case,
   so we might as well keep the whole result. *)
 
@@ -634,12 +631,12 @@ Lemma appendD_spec {a} (xs ys : list a) (outD : listA a)
     appendA xsD ysD [[ fun out cost => outD `less_defined` out /\ cost <= dcost ]].
 Proof.
   revert outD; induction xs; cbn; intros * Hout *.
-  - inversion 1; subst; cbn; mgo; split; reflexivity.
+  - inversion 1; subst; cbn; mgo_; split; reflexivity.
   - autorewrite with exact in Hout. inv Hout. destruct thunkD as [ ? [] ] eqn:Eth; cbn.
-    inversion 1; subst; cbn. mgo. inv H3; cbn in Eth; inv Eth.
-    + apply optimistic_skip. mgo. split; reflexivity.
+    inversion 1; subst; cbn. mgo_. inv H3; cbn in Eth; inv Eth.
+    + apply optimistic_skip. mgo_. split; reflexivity.
     + apply optimistic_thunk_go. relax_apply IHxs; [ try rewrite H1; eauto .. | cbn; intros * [] ].
-      mgo. split; [solve_approx | ]. lia.
+      mgo_. split; [solve_approx | ]. lia.
 Qed.
 
 Lemma appendD_spec' {a} (xs ys : list a) (outD : listA a)
@@ -662,28 +659,28 @@ Proof.
   unfold mkQueue, mkQueueD, mkQueueA.
   intros Hout fa bA dcost HQ.
   destruct (Nat.ltb_spec nf nb).
-  - mgo. destruct thunkD as [ cc [f0 b0] ] eqn:ED; cbn in *; inv HQ.
+  - mgo_. destruct thunkD as [ cc [f0 b0] ] eqn:ED; cbn in *; inv HQ.
     destruct b0; cbn.
     + apply optimistic_thunk_go. destruct (frontA _) eqn:Ef in ED; cbn in ED; [ | inv ED ].
       inv Hout; cbn in *. rewrite Ef in ld_front0. inv ld_front0.
       assert (Happ := appendD_approx H2). rewrite ED in Happ. destruct Happ; cbn in *. inv snd_rel.
-      relax; [ eapply revA_cost | cbn; intros * []; subst; mgo ].
+      relax; [ eapply revA_cost | cbn; intros * []; subst; mgo_ ].
       apply optimistic_thunk_go. relax.
       { eapply appendD_spec'; try eassumption.
         - rewrite ED. reflexivity.  - reflexivity.  - constructor; assumption. }
-      cbn; intros * []. mgo.
+      cbn; intros * []. mgo_.
       split.
       * constructor; cbn; try assumption. rewrite Ef; auto.
       * lia.
-    + apply optimistic_skip. mgo. inv Hout; cbn in *. destruct (frontA _) eqn:Ef; inv ld_front0; cbn in ED.
+    + apply optimistic_skip. mgo_. inv Hout; cbn in *. destruct (frontA _) eqn:Ef; inv ld_front0; cbn in ED.
       * apply optimistic_thunk_go.
         relax; [ eapply appendD_spec'; eassumption + (try rewrite ED; reflexivity) | ].
-        cbn; intros * []; mgo.
+        cbn; intros * []; mgo_.
         split; [ constructor; cbn; try assumption | lia].
         rewrite Ef; auto.
-      * apply optimistic_skip. mgo. split; [constructor; cbn; try assumption | lia ].
+      * apply optimistic_skip. mgo_. split; [constructor; cbn; try assumption | lia ].
         rewrite Ef; reflexivity.
-  - mgo. inv HQ. split; [ constructor; cbn; apply Hout + reflexivity | reflexivity ].
+  - mgo_. inv HQ. split; [ constructor; cbn; apply Hout + reflexivity | reflexivity ].
 Qed.
 
 Lemma mkQueueD_spec' {a} nf f nb b (outD : QueueA a)
@@ -714,7 +711,7 @@ Lemma pushD_spec {a} (q : Queue a) (x : a) (outD : QueueA a)
     pushA qD xD [[ fun out cost => outD `less_defined` out /\ cost <= dcost ]].
 Proof.
   unfold push, pushD, pushA; cbn beta iota.
-  intros Hout * Hval. destruct mkQueueD as [? [] ] eqn:EQ in Hval; cbn in Hval. inv Hval. mgo.
+  intros Hout * Hval. destruct mkQueueD as [? [] ] eqn:EQ in Hval; cbn in Hval. inv Hval. mgo_.
   relax.
   { eapply mkQueueD_spec'.
     - eassumption.
@@ -735,18 +732,18 @@ Lemma popD_spec {a} (q : Queue a) (outD : option (T a * T (QueueA a)))
 Proof.
   unfold pop, popD, popA.
   intros Hout * ->. destruct (front q) eqn:Ef.
-  - cbn. mgo. rewrite Ef. autorewrite with exact. mgo.
-  - mgo. inversion Hout; subst. destruct H1 as [Hfst Hsnd]; destruct x as [x' q']; cbn in *.
-    destruct thunkD as [? [] ] eqn:ED. cbn. mgo.
+  - cbn. mgo_. rewrite Ef. autorewrite with exact. mgo_.
+  - mgo_. inversion Hout; subst. destruct H1 as [Hfst Hsnd]; destruct x as [x' q']; cbn in *.
+    destruct thunkD as [? [] ] eqn:ED. cbn. mgo_.
     inversion Hsnd; subst; cbn in *.
-    + apply optimistic_skip. mgo; cbn [thunkD bottom Bottom_T].
+    + apply optimistic_skip. mgo_; cbn [thunkD bottom Bottom_T].
       split; [ reflexivity | ]. inversion ED; subst. reflexivity.
     + apply optimistic_thunk_go; cbn.
       relax.
       { eapply mkQueueD_spec.
         - eassumption.
         - rewrite ED; reflexivity. }
-      cbn; intros * []. mgo.
+      cbn; intros * []. mgo_.
       split; [ solve_approx | lia ].
 Qed.
 
