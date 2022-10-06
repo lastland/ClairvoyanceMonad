@@ -279,7 +279,7 @@ Fixpoint glue {a:Type} (q1 : SeqA a) (la: listA a) (q2: SeqA a) : M (SeqA a) :=
 Definition appendA {a:Type} (q1 : T (SeqA a)) (q2 : T (SeqA a)) : M (SeqA a) :=
   let! q1 := force q1 in
   let! q2 := force q2 in
-  glue q1 NilA 
+  glue q1 NilA q2.
 
 (* -------------------------------- *)
 
@@ -311,8 +311,8 @@ Fixpoint pot {a : Type} (s : SeqA a) : M nat :=
       ret (dang c1 + r + dang u1))
   end.
 
-Definition operation_bound (o : operation a (SeqA a)) : nat :=
-  
+Definition operation_bound {a} (o : operation a (SeqA a)) : nat :=
+  7.
 
 (** *)
 
