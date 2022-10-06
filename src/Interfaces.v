@@ -200,9 +200,17 @@ Definition AmortizedCostSpec : Prop :=
 Definition AmortizedCostSpec' : Prop :=
   forall os : trace, exec_trace os [[ fun _ c => c <= budget_trace os ]].
 
+Lemma forall_iff {A} (P Q : A -> Prop)
+  : (forall x, P x <-> Q x) -> (forall x, P x) <-> (forall x, Q x).
+Proof.
+  intros H; split; intros; apply H; auto.
+Qed.
+
 Theorem has_amortized_cost' :
   AmortizedCostSpec <-> AmortizedCostSpec'.
-Admitted.
+Proof.
+  apply forall_iff; intros; apply cost_of_bound_iff.
+Qed.
 
 End AmortizedCostSpec.
 
