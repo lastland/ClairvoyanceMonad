@@ -45,26 +45,210 @@ Proof.
   induction x as [ | x0 ? IH ]; cbn; [ auto | rewrite IH ]. lia.
 Qed.
 
-Definition SubadditiveMeasure {a : Type} (f : a -> nat) `{LessDefined a, Lub a} : Prop :=
-  forall x y : a, cobounded x y -> f (lub x y) <= f x + f y.
+Class SubadditiveMeasure {a : Type} (f : a -> nat) `{LessDefined a, Lub a} : Prop :=
+  subadditive_measure : forall x y : a, cobounded x y -> f (lub x y) <= f x + f y.
 
-Definition ZeroMeasure {a : Type} (f : a -> nat) `{BottomOf a} : Prop :=
-  forall x, f (bottom_of x) = 0.
+Class ZeroMeasure {a : Type} (f : a -> nat) `{BottomOf a} : Prop :=
+  zero_measure : forall x, f (bottom_of x) = 0.
 
-Lemma less_defined_lookups {a aA} {EE : Exact a aA} {LD : LessDefined aA}
+Lemma sumof_bottom {a aA} {AA : ApproxAlgebra a aA} {f : aA -> nat}
+    {Hf_bottom : ZeroMeasure f}
+  : forall xs : list aA, sumof f (bottom_of xs) = 0.
+Proof.
+  induction xs; cbn; [ reflexivity | ].
+  rewrite Hf_bottom. auto.
+Qed.
+
+Lemma option_map_inv {a b} (f : a -> b) (x : option a) y
+  : option_map f x = Some y ->
+    exists x', x = Some x' /\ f x' = y.
+Proof.
+  destruct x; [ injection 1; eauto | discriminate ].
+Qed.
+
+Fixpoint lub_nth {a} `{Lub a} (n : nat) (x : a) (ys : list a) : list a :=
+  match n, ys with
+  | O, y :: ys => lub x y :: ys
+  | S n, y :: ys => y :: lub_nth n x ys
+  | _, [] => [] (* should not happen *)
+  end.
+
+Lemma sumof_lub_nth {a aA} {AA : ApproxAlgebra a aA} {f : aA -> nat}
+    {Hf_lub : SubadditiveMeasure f}
+  : forall n x (ys : list aA),
+      (exists y, nth_error ys n = Some y /\ cobounded x y) ->
+      sumof f (lub_nth n x ys) <= f x + sumof f ys.
+Proof.
+  induction n as [ | n IH ]; intros x ys [y [Hnth Hxy] ].
+  - destruct ys; cbn in *; [ discriminate | ].
+    injection Hnth; intros ->.
+    rewrite Hf_lub; auto. lia.
+  - destruct ys; cbn in *; [ discriminate | ].
+    rewrite IH; [ lia | eauto ].
+Qed.
+
+Lemma less_defined_lub_nth {a aA} {AA : ApproxAlgebra a aA}
+  : forall n (x : aA) ys w ws,
+      ys `less_defined` ws ->
+      nth_error ws n = Some w ->
+      x `less_defined` w ->
+      lub_nth n x ys `less_defined` ws.
+Proof.
+  induction n as [ | n IH]; intros x ys w [ | w' ws ]; cbn; try discriminate.
+  - intros Hys; inv Hys.
+    intros Hw; inv Hw.
+    constructor; [ | auto].
+    apply lub_least_upper_bound; auto.
+  - intros Hys; inv Hys.
+    intros Hw.
+    constructor; [ auto | ].
+    eapply IH; eauto.
+Qed.
+
+Lemma nth_error_exact {a aA} `{Exact a aA}
+  : forall n xs, nth_error (exact xs) n = exact (nth_error xs n).
+Proof.
+  induction n as [ | n IH]; intros []; cbn; f_equal.
+  apply IH.
+Qed.
+
+Lemma nth_error_exact' {a aA} `{Exact a aA}
+  : forall n xs (y : a),
+      nth_error xs n = Some y ->
+      nth_error (exact xs) n = Some (exact y).
+Proof.
+  intros *; rewrite nth_error_exact. intros ->; reflexivity.
+Qed.
+
+Lemma less_defined_nth_error {a} `{LessDefined a}
+  : Proper (less_defined ==> eq ==> less_defined) (@nth_error a).
+Proof.
+  intros xs ys Hxs n _ <-. revert xs ys Hxs; induction n as [| n IH]; cbn; intros ? ? []; try constructor; auto.
+Qed.
+
+Lemma less_defined_nth_error' {a} `{LessDefined a}
+  : forall n xs ys (y : a),
+      xs `less_defined` ys ->
+      nth_error ys n = Some y ->
+      exists x,
+        nth_error xs n = Some x /\ x `less_defined` y.
+Proof.
+  intros * H0; apply less_defined_nth_error in H0.
+  specialize (H0 n n eq_refl). destruct H0; try discriminate.
+  intros Hy; inv Hy; eauto.
+Qed.
+
+Lemma nth_lub_nth {a} `{Lub a}
+  : forall n (x y : a) ys,
+    nth_error ys n = Some y ->
+    nth_error (lub_nth n x ys) n = Some (lub x y).
+Proof.
+  induction n as [ | n IH ]; intros x y []; cbn; try discriminate.
+  - intros Hy; inv Hy; reflexivity.
+  - apply IH.
+Qed.
+
+Lemma nth_lub_nth' {a aA} `{ApproxAlgebra a aA}
+  : forall n m (x y : aA) ys,
+    nth_error ys m = Some y ->
+    cobounded x y ->
+    nth_error ys n `less_defined` nth_error (lub_nth m x ys) n.
+Proof.
+  induction n as [ | n IH]; intros [] ? ? []; cbn; try discriminate + constructor.
+  - inv H0. apply lub_upper_bound_r. auto.
+  - inv H0; reflexivity.
+  - intros HH; inv HH; reflexivity.
+  - apply IH.
+Qed.
+
+Lemma lookups_lub_nth {a aA} `{ApproxAlgebra a aA}
+  : forall n x xs ns,
+      (exists x', nth_error xs n = Some x' /\ cobounded x x') ->
+      lookups xs ns `less_defined` lookups (lub_nth n x xs) ns.
+Proof.
+  intros * [x' [Hn Hx'] ]. induction ns as [ | n' ns IH]; cbn.
+  - do 2 constructor.
+  - assert (HH := nth_lub_nth' n' n _ _ _ Hn Hx').
+    destruct HH; cbn; [ constructor | ].
+    destruct IH; constructor; constructor; auto.
+Qed.
+
+#[global] Instance less_defined_option_map {a b} `{LessDefined a, LessDefined b}
+  : Proper ((less_defined ==> less_defined) ==> less_defined ==> less_defined) (@option_map a b).
+Proof.
+  intros f f' Hf ? ? []; constructor.
+  apply Hf. auto.
+Qed.
+
+#[global] Instance less_defined_cons {a} `{LessDefined a}
+  : Proper (less_defined ==> less_defined ==> less_defined) (@cons a).
+Proof. constructor; auto. Qed.
+
+Lemma less_defined_option_bind {a b} `{LessDefined a, LessDefined b}
+  : Proper (less_defined ==> (less_defined ==> less_defined) ==> less_defined) (@option_bind a b).
+Proof.
+  intros ? ? [] f g Hf; cbn.
+  - constructor.
+  - apply Hf; auto.
+Qed.
+
+Lemma less_defined_lookups {a} `{LessDefined a}
+  : Proper (less_defined ==> eq ==> less_defined) (@lookups a).
+Proof.
+  intros xs ys Hxs ns _ <-; revert xs ys Hxs; induction ns as [| n ns IH ]; cbn.
+  - constructor. constructor.
+  - intros; apply less_defined_option_bind.
+    + apply less_defined_nth_error; auto.
+    + intros ? ? Hx. apply less_defined_option_map.
+      { apply less_defined_cons. auto. }
+      { apply IH. auto. }
+Qed.
+
+Lemma lookupsD_Some {a aA} {AA : ApproxAlgebra a aA}
     {f : aA -> nat} {ns : list nat} {xs ys : list a}
+    {Hf_bottom : ZeroMeasure f}
+    {Hf_lub : SubadditiveMeasure f}
   : lookups xs ns = Some ys ->
     forall ysD : list aA, ysD `is_approx` ys ->
     exists xsD : list aA, xsD `is_approx` xs /\
       sumof f xsD <= sumof f ysD /\
-      lookups xsD ns = Some ysD.
-Proof. Admitted.
+      Some ysD `less_defined` lookups xsD ns.
+Proof.
+  revert xs ys; induction ns as [ | n ns IH ]; cbn; intros xs ys.
+  - injection 1; intros <- ysD HysD.
+    inversion HysD; clear HysD; subst.
+    exists (bottom_of (exact xs)).
+    split; [ apply bottom_is_least | ]. split; [ | reflexivity ].
+    apply Nat.eq_le_incl, sumof_bottom.
+  - destruct nth_error eqn:Hn; cbn; [ | discriminate ]. intros Hys ysD HysD.
+    apply option_map_inv in Hys. destruct Hys as [ ys' [Hys' <-] ].
+    inversion HysD; clear HysD; subst.
+    apply IH with (ysD := xs0) in Hys'; [ | eauto ].
+    destruct Hys' as [xsD [HxsD [Hsumof Hns] ] ].
+    assert (Hex := nth_error_exact' _ _ _ Hn).
+    destruct (less_defined_nth_error' n _ _ (exact a0) HxsD) as [x' [HxsD' Hx'] ]; [ auto |].
+    exists (lub_nth n x xsD); split; [ | split ].
+    + eapply less_defined_lub_nth; eauto.
+    + cbn. etransitivity; [ apply sumof_lub_nth | ]; eauto 8. lia.
+    + erewrite nth_lub_nth; [ cbn | eauto ].
+      rewrite <- lookups_lub_nth by eauto 8.
+      change (Some (x :: xs0)) with (option_map (cons x) (Some xs0)).
+      apply less_defined_option_map; [ | auto ].
+      apply less_defined_cons. apply lub_upper_bound_l; eauto.
+Qed.
 
 Lemma less_defined_lookups_None {a aA} {EE : Exact a aA} {LD : LessDefined aA}
     {ns : list nat} {xs : list a} {xsD : list aA}
   : lookups xs ns = None ->
     xsD `is_approx` xs -> lookups xsD ns = None.
-Proof. Admitted.
+Proof.
+  revert xs xsD; induction ns as [ | n ns IH]; cbn; intros ? ? ? ?; [discriminate | ].
+  assert (H' := less_defined_nth_error xsD (exact xs) H0 n n eq_refl).
+  rewrite nth_error_exact in H'.
+  destruct (nth_error xs n); inv H'; cbn in H |- *; [ | reflexivity ].
+  erewrite IH; eauto.
+  destruct lookups; [ discriminate | reflexivity ].
+Qed.
 
 Lemma nth_lub {a} `{LessDefined a, Lub a} {xs ys : list a} {x : a} {n : nat}
   : nth_error xs n = Some x ->
@@ -73,7 +257,10 @@ Lemma nth_lub {a} `{LessDefined a, Lub a} {xs ys : list a} {x : a} {n : nat}
       cobounded x y /\
       nth_error (lub xs ys) n = Some (lub x y).
 Proof.
-Admitted.
+  revert xs ys; induction n as [ | n IH]; intros [ | ? xs] ys Hxs [zs [Hxz Hyz] ]; try discriminate.
+  - inv Hxs; inv Hxz; inv Hyz. cbn. eexists; split; [ reflexivity | eauto ].
+  - cbn in Hxs; inv Hxz; inv Hyz. cbn. apply IH; eauto.
+Qed.
 
 Lemma lookups_lub {a} `{LessDefined a, Lub a} {xs ys xs' : list a} {ns : list nat}
   : lookups xs ns = Some xs' ->
@@ -184,9 +371,21 @@ Class WellDefinedExec : Prop :=
 
 Context {wd_exec : WellDefinedExec}.
 
+Lemma exec_event_mon e : Proper (less_defined ==> less_defined) (exec_event e).
+Proof.
+  destruct e; cbn; intros ? ? Hs.
+  destruct (less_defined_lookups _ _ Hs l l eq_refl).
+  - apply ret_mon; auto.
+  - apply bind_mon; [ apply monotonic_exec; auto | ].
+    intros; apply ret_mon, less_defined_app; auto.
+Qed.
+
 Lemma exec_trace_from_mon os : Proper (less_defined ==> less_defined) (exec_trace_from os).
 Proof.
-Admitted.
+  induction os; intros ? ? Hs; cbn.
+  - apply ret_mon. auto.
+  - apply bind_mon; [ apply exec_event_mon; auto | auto ].
+Qed.
 
 (** Amortized cost specification. *)
 Section AmortizedCostSpec.
@@ -206,10 +405,15 @@ Proof.
   intros H; split; intros; apply H; auto.
 Qed.
 
+(* The right-to-left implication (which is the one we actually need)
+   assumes excluded middle.
+   TODO: Perhaps redefine [(_ <= _)%NAT] (in AmortizedCostSpec) with a double negation.
+   Then it's the other direction that would use excluded middle,
+   but we don't care as much about it. *)
 Theorem has_amortized_cost' :
-  AmortizedCostSpec <-> AmortizedCostSpec'.
+  AmortizedCostSpec' <-> AmortizedCostSpec.
 Proof.
-  apply forall_iff; intros; apply cost_of_bound_iff.
+  apply forall_iff; intros; symmetry; apply cost_of_bound_iff.
 Qed.
 
 End AmortizedCostSpec.
@@ -227,6 +431,8 @@ Class WellDefinedPotential : Prop :=
   { potential_lub    : SubadditiveMeasure potential
   ; potential_bottom : ZeroMeasure potential
   }.
+#[local] Existing Instance potential_lub.
+#[local] Existing Instance potential_bottom.
 
 Context {wd_potential : WellDefinedPotential}.
 
@@ -284,21 +490,22 @@ Proof.
   - rewrite exact_list_app in Hout. apply less_defined_app_inv in Hout.
     destruct Hout as (out1 & out2 & Hout & Hout1 & Hout2).
     apply exec_cost in Hout2. destruct Hout2 as (input & Hin & HH).
-    destruct (less_defined_lookups (f := potential) E _ Hin) as (input' & Hin' & Hpotential & HH').
+    destruct (lookupsD_Some (f := potential) E _ Hin) as (input' & Hin' & Hpotential & HH').
     exists (lub input' out1).
     split; [ apply lub_least_upper_bound; auto | ].
-    destruct (lookups_lub (ys := out1) HH') as (y1 & Hx & Hcob1 & Hy);
+    inv HH'. symmetry in H0.
+    destruct (lookups_lub (ys := out1) H0) as (y1 & Hx & Hcob1 & Hy);
       [ eauto | ].
     rewrite Hy.
     mgo_. relax; [ | intros ? ? Hr; mgo_; rewrite Nat.add_0_r; exact Hr ].
-    eapply optimistic_corelax;
-      [ eapply monotonic_exec, lub_upper_bound_l; eauto | | ].
+    eapply optimistic_corelax.
+    { eapply monotonic_exec. etransitivity; [ eassumption | apply lub_upper_bound_l; eauto ]. }
     { unfold uc; intros * ? ? []; split.
-      - rewrite H1. apply less_defined_app; reflexivity + assumption.
-      - rewrite <- H2. lia. }
+      - rewrite H3. apply less_defined_app; reflexivity + assumption.
+      - rewrite <- H4. lia. }
     relax; [ apply HH | cbn; intros r c [Hr Hc] ].
-    split; [ rewrite Hout; apply less_defined_app; [ apply lub_upper_bound_r; eauto | assumption ] | ].
-    rewrite potential_lub_list_ by eauto. rewrite Hout, sumof_app.
+    split; [ apply less_defined_app; [ apply lub_upper_bound_r; eauto | assumption ] | ].
+    rewrite potential_lub_list_ by eauto. rewrite sumof_app.
     rewrite E, Hpotential.
     revert Hc. generalize (budget o l). lia.
   - exists output. rewrite (less_defined_lookups_None E Hout).
