@@ -1093,6 +1093,8 @@ Qed.
 
 (** * Validation for persistence *)
 
+(** TODO: This is subsumed by QueueInterface.v *)
+
 (* We want to be able to prove that in any usage of this queue, operations have
    amortized constant cost. We represent "usage" as a tree of operations, where
    branching is sharing. *)

@@ -117,6 +117,12 @@ Definition approx_algebra : ApproxAlgebra.
 Proof. econstructor; try typeclasses eauto. Defined.
 #[export] Existing Instance approx_algebra.
 
+#[export] Instance wf : WellFormed value := fun _ => True.
+#[export] Instance wf_eval : WfEval.
+Proof.
+  intros o xs _. induction (eval o xs); repeat constructor; auto.
+Qed.
+
 Lemma well_defined_exec : WellDefinedExec.
 Proof. constructor; exact monotonic_exec. Qed.
 #[export] Existing Instance well_defined_exec.

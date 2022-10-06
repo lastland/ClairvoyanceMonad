@@ -51,7 +51,7 @@ Class SubadditiveMeasure {a : Type} (f : a -> nat) `{LessDefined a, Lub a} : Pro
 Class ZeroMeasure {a : Type} (f : a -> nat) `{BottomOf a} : Prop :=
   zero_measure : forall x, f (bottom_of x) = 0.
 
-Lemma sumof_bottom {a aA} {AA : ApproxAlgebra a aA} {f : aA -> nat}
+Lemma sumof_bottom {aA} `{BottomOf aA} {f : aA -> nat}
     {Hf_bottom : ZeroMeasure f}
   : forall xs : list aA, sumof f (bottom_of xs) = 0.
 Proof.
@@ -294,11 +294,41 @@ Proof.
   rewrite <- Hf. apply Hg.
 Qed.
 
+Class WellFormed (a : Type) : Type :=
+  well_formed : a -> Prop.
+
+#[local] Instance WellFormed_list {a} `{WellFormed a} : WellFormed (list a) :=
+  List.Forall well_formed.
+
+#[local] Instance WellFormed_option {a} `{WellFormed a} : WellFormed (option a) :=
+  fun xs => match xs with
+            | None => True
+            | Some y => well_formed y
+            end.
+
+Lemma well_formed_nth_error {a} `{WellFormed a} (xs : list a) n
+  : well_formed xs -> well_formed (nth_error xs n).
+Proof.
+  revert xs; induction n as [|n IH]; intros []; cbn; auto.
+  - apply Forall_inv.
+  - intros HH; eapply IH, Forall_inv_tail, HH.
+Qed.
+
+Lemma well_formed_lookups {a} `{WellFormed a} (xs : list a) (ns : list nat)
+  : well_formed xs -> well_formed (lookups xs ns).
+Proof.
+  intros Hxs; induction ns as [|n ns IH]; cbn.
+  - constructor.
+  - assert (HH := well_formed_nth_error xs n Hxs). destruct nth_error; [ | constructor ].
+    cbn. destruct lookups; constructor; auto.
+Qed.
+
 (** * General interface for lazy data structures *)
 
 Section Interface.
 
 Context {op value valueA : Type}.
+Context {wf : WellFormed value}.
 Context {approx_algebra : ApproxAlgebra value valueA}.
 
 Definition Eval : Type := op -> list value -> list value.
@@ -364,6 +394,19 @@ Fixpoint exec_trace_from (es : trace) (vs : stackA) : M (stackA) :=
 
 Definition exec_trace (es : trace) : M (stackA) :=
   exec_trace_from es [].
+
+Definition WfEval : Prop := forall o vs, well_formed vs -> well_formed (eval o vs).
+Existing Class WfEval.
+
+Context {wf_eval : WfEval}.
+
+Lemma wf_eval_event : forall e s, well_formed s -> well_formed (eval_event e s).
+Proof.
+  intros [] s Hs; cbn.
+  assert (HH := well_formed_lookups s l Hs).
+  destruct lookups; auto. apply Forall_app. split; auto.
+  apply wf_eval. auto.
+Qed.
  
 Class WellDefinedExec : Prop :=
   { monotonic_exec : forall o, Monotonic (exec o)
@@ -466,6 +509,7 @@ Proof. exact (potential_bottom_list potential_bottom). Qed.
    and we have to find a matching [input] demand. *)
 Definition Physicist'sArgument : Prop :=
   forall (o : op) (vs : list value),
+    well_formed vs ->
     forall output : stackA, output `is_approx` eval o vs ->
     exists input : stackA, input `is_approx` vs /\
     exec o input [[ fun r c =>
@@ -478,7 +522,8 @@ Context {exec_cost : Physicist'sArgument}.
 Section Soundness.
 
 Lemma exec_event_cost (e : event) (vs : stack) output
-  : output `is_approx` eval_event e vs ->
+  : well_formed vs ->
+    output `is_approx` eval_event e vs ->
     exists input, input `is_approx` vs /\
     exec_event e input [[ fun r c =>
       output `less_defined` r /\
@@ -486,10 +531,12 @@ Lemma exec_event_cost (e : event) (vs : stack) output
 Proof.
   destruct e as [o ns].
   unfold eval_event, exec_event.
-  destruct (lookups vs ns) eqn:E; intros Hout.
+  destruct (lookups vs ns) eqn:E; intros Hwf Hout.
   - rewrite exact_list_app in Hout. apply less_defined_app_inv in Hout.
     destruct Hout as (out1 & out2 & Hout & Hout1 & Hout2).
-    apply exec_cost in Hout2. destruct Hout2 as (input & Hin & HH).
+    apply exec_cost in Hout2.
+    2:{ change (well_formed (Some l)). rewrite <- E. apply well_formed_lookups. auto. }
+    destruct Hout2 as (input & Hin & HH).
     destruct (lookupsD_Some (f := potential) E _ Hin) as (input' & Hin' & Hpotential & HH').
     exists (lub input' out1).
     split; [ apply lub_least_upper_bound; auto | ].
@@ -514,17 +561,18 @@ Qed.
 
 Lemma physicist's_method_aux
   : forall (os : trace) (vs : list value),
+    well_formed vs ->
     forall output, output `is_approx` eval_trace_from os vs ->
     exists input, input `is_approx` vs /\
       exec_trace_from os input [[ fun r c =>
         output `less_defined` r /\ sumof potential input + c <= budget_trace_from os vs + sumof potential output ]].
 Proof.
-  induction os as [ | [o ns] os IH ]; intros vs output Hout; cbn.
+  induction os as [ | [o ns] os IH ]; intros vs Hwf output Hout; cbn.
   - exists output. split; [apply Hout | ].
     apply optimistic_ret. split; [ reflexivity | lia ].
-  - cbn in Hout. specialize (IH (eval_event (o, ns) vs) output Hout).
+  - cbn in Hout. specialize (IH (eval_event (o, ns) vs) (wf_eval_event (o, ns) vs Hwf) output Hout).
     destruct IH as (input & Hin & IH).
-    destruct (exec_event_cost _ _ _ Hin) as (inp & Hinp & HH).
+    destruct (exec_event_cost _ _ _ Hwf Hin) as (inp & Hinp & HH).
     exists inp. split; [ auto | ].
     mgo_. relax; [ apply HH | cbn; intros ? ? [HI HJ] ].
     eapply optimistic_corelax; [ apply exec_trace_from_mon; eassumption | | ].
@@ -537,7 +585,8 @@ Qed.
 Theorem physicist's_method : AmortizedCostSpec.
 Proof.
   apply has_amortized_cost'.
-  intros os. destruct (physicist's_method_aux os [] (bottom_of (exact (eval_trace_from os [])))) as (d0 & Hd0 & HH).
+  intros os.
+  destruct (physicist's_method_aux os [] (Forall_nil _) (bottom_of (exact (eval_trace_from os [])))) as (d0 & Hd0 & HH).
   { apply bottom_is_least. }
   inversion Hd0; clear Hd0; subst.
   apply (optimistic_mon HH); cbn.

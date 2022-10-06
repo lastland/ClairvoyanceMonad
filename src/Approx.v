@@ -322,6 +322,9 @@ Class BottomIsLeast a `{BottomOf a, LessDefined a} : Prop :=
 
 #[global] Hint Mode BottomIsLeast ! - - : typeclass_instances.
 
+#[global] Instance BottomIsLeast_T {a} `{LessDefined a} : BottomIsLeast (T a).
+Proof. constructor. Qed.
+
 (** * Instances for standard types *)
 
 Inductive option_rel {a b} (r : a -> b -> Prop) : option a -> option b -> Prop :=
@@ -420,12 +423,20 @@ Qed.
 #[global] Instance PreOrder_list {a} `{LessDefined a} `{!PreOrder (less_defined (a := a))}
   : PreOrder (less_defined (a := list a)).
 Proof.
-Admitted.
+  constructor.
+  - intros xs; induction xs; constructor; reflexivity + auto.
+  - intros xs ys zs Hxs; revert zs; induction Hxs as [ | ? ? ? ? ? ? IH ]; intros zs Hys; inversion Hys; clear Hys; subst.
+    + constructor.
+    + constructor; [ etransitivity; eauto | apply IH; auto ].
+Qed.
 
 #[global] Instance ExactMaximal_list {a aA} `{ExactMaximal aA a}
   : ExactMaximal (list aA) (list a).
 Proof.
-Admitted.
+  intros xs ys; revert xs; induction ys; intros xs Hxs; inversion Hxs; clear Hxs.
+  - constructor.
+  - cbn; f_equal. { apply exact_maximal; auto. } { auto. }
+Qed.
 
 Fixpoint zip_with {a b c} (f : a -> b -> c) (xs : list a) (ys : list b) : list c :=
   match xs, ys with
@@ -458,7 +469,8 @@ Qed.
 
 #[global] Instance BottomIsLeast_list {a} `{BottomIsLeast a} : BottomIsLeast (list a).
 Proof.
-Admitted.
+  intros xs; induction xs; [ constructor | constructor; [ apply bottom_is_least | auto ] ].
+Qed.
 
 Lemma less_defined_app {a} {LD : LessDefined a} (xs1 xs2 ys1 ys2 : list a)
   : xs1 `less_defined` ys1 -> xs2 `less_defined` ys2 ->
