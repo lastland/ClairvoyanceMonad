@@ -695,6 +695,7 @@ Definition Physicist'sArgumentD : Prop :=
   forall output : stackA, output `is_approx` eval o vs ->
   forall input n, Tick.MkTick n input = demand o vs output ->
   sumof potential input + n <= budget o vs + sumof potential output.
+Existing Class Physicist'sArgumentD.
 
 Section SoundnessD.
 
@@ -710,6 +711,7 @@ Proof.
   - eapply optimistic_mon; [ eapply cd; [ eassumption | reflexivity ] | ].
     cbn beta. intros ? ? []; split; [ auto | lia ].
 Qed.
+#[export] Existing Instance demand_physicist's_argument.
 
 End SoundnessD.
 
@@ -718,6 +720,7 @@ End Interface.
 Arguments Eval : clear implicits.
 Arguments Budget : clear implicits.
 Arguments Exec : clear implicits.
+Arguments Demand : clear implicits.
 Arguments ApproxAlgebra : clear implicits.
 Arguments Potential : clear implicits.
 
