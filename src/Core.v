@@ -58,6 +58,14 @@ Notation "'let!' x' ':=' t 'in' s" := (bind t (fun x' => s)) (x' as pattern, at 
 Notation "'let~' x  ':=' t 'in' s" := (bind (thunk t) (fun x => s)) (x as pattern, at level 90).
 Notation "f $! x" := (forcing x f) (at level 61, left associativity).
 
+Inductive TR1 {a : Type} (P : a -> Prop) : T a -> Prop :=
+| TR1_Thunk {x} : P x -> TR1 P (Thunk x)
+| TR1_Undefined : TR1 P Undefined.
+
+Inductive TR2 {a b : Type} (P : a -> b -> Prop) : T a -> T b -> Prop :=
+| TR2_Thunk {x y} : P x y -> TR2 P (Thunk x) (Thunk y)
+| TR2_Undefined : TR2 P Undefined Undefined.
+
 (* ---------------------- Section 5: Formal Reasoning ----------------- *)
 
 

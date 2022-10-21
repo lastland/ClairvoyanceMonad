@@ -52,10 +52,28 @@ Variant TupleA (a: Type) : Type :=
   | Pair : T a -> T a -> TupleA a 
   | Triple : T a -> T a -> T a -> TupleA a.
 
+Unset Elimination Schemes.
+
 Inductive SeqA (a : Type) : Type := 
   | Nil : SeqA a
   | Unit : T a -> SeqA a 
   | More : T (CrowdA a) -> T (SeqA (TupleA a)) -> T (CrowdA a) -> SeqA a.
+
+Definition SeqA_ind
+     (P : forall a, SeqA a -> Prop)
+     (HNil : forall a, P a Nil)
+     (HUnit : forall a (t : T a), P a (Unit t))
+     (HMore : forall a (t : T (CrowdA a)) (t0 : T (SeqA (TupleA a)))
+          (t1 : T (CrowdA a)) (IH : TR1 (P (TupleA a)) t0), P a (More t t0 t1))
+   : forall a (s : SeqA a), P a s := fix _ind a s :=
+  match s with
+  | Nil => HNil _
+  | Unit t => HUnit _ t
+  | More t t0 t1 =>
+    HMore _ t t0 t1 match t0 with Undefined => TR1_Undefined | Thunk x => TR1_Thunk (_ind _ x) end
+  end.
+
+Set Elimination Schemes.
 
 Definition emptyA {a: Type} : M (SeqA a) :=
   tick >> ret Nil.
