@@ -6,10 +6,11 @@
    But how can we formalize the stronger non-amortized bounds? *)
 
 From Coq Require Import List Arith Lia RelationClasses.
-From Clairvoyance Require Import Core Approx ApproxM List Misc BankersQueue.
+From Clairvoyance Require Import Core Approx ApproxM List Misc BankersQueue Tick.
 
 Import ListNotations.
 Import RevCompare.
+Import Tick.Notations.
 
 Set Primitive Projections.
 Set Implicit Arguments.

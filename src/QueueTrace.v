@@ -1,6 +1,6 @@
 (* Amortized analysis of Realtime Bankers Queue *)
 
-From Clairvoyance Require Import Core Cost Approx BankersQueue RealtimeBankersQueue.
+From Clairvoyance Require Import Core Cost Approx Tick BankersQueue RealtimeBankersQueue.
 
 
 From Coq Require Import List.

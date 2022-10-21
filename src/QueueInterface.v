@@ -1,6 +1,6 @@
 (* Instantiate Interfaces with BankersQueue *)
 From Coq Require Import List Lia.
-From Clairvoyance Require Import Core Approx ApproxM List Misc BankersQueue Cost Interfaces.
+From Clairvoyance Require Import Core Approx ApproxM List Misc BankersQueue Cost Interfaces Tick.
 
 Import ListNotations.
 

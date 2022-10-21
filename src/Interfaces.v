@@ -5,7 +5,9 @@ From Equations Require Import Equations.
 
 From Coq Require Import Arith List Lia Setoid Morphisms.
 Import ListNotations.
-From Clairvoyance Require Import Core Approx ApproxM List Misc Cost.
+From Clairvoyance Require Import Core Approx ApproxM List Misc Cost Tick.
+
+Import Tick.Notations.
 
 Set Primitive Projections.
 
@@ -395,6 +397,65 @@ Fixpoint exec_trace_from (es : trace) (vs : stackA) : M (stackA) :=
 Definition exec_trace (es : trace) : M (stackA) :=
   exec_trace_from es [].
 
+Definition Demand : Type := op -> list value -> list valueA -> Tick (list valueA).
+Existing Class Demand.
+
+Context {demand : Demand}.
+
+Definition appD {a b} (vs : list a) (vys : list b) : list b * list b :=
+  (firstn (length vs) vys, skipn (length vs) vys).
+
+(*
+Definition bind_optionD {a b aA bA} (xs : option a) (ys : a -> option bA -> Tick aA) (
+*)
+
+Fixpoint nth_errorD (xs : list value) (n : nat) (xD : option valueA) : list valueA :=
+  match n, xs with
+  | O, x :: xs =>
+    match xD with
+    | Some xD => xD :: bottom_of (exact xs)
+    | None => []  (* should not happen *)
+    end
+  | S n, x :: xs => bottom_of (exact x) :: nth_errorD xs n xD
+  | _, [] => bottom_of (exact xs)
+  end.
+
+Fixpoint lookupsD (vs : stack) (ns : list nat) (xsD : option (list valueA)) : stackA :=
+  match ns with
+  | [] => bottom_of (exact vs)
+  | n :: ns =>
+    match nth_error vs n with
+    | None => bottom_of (exact vs)
+    | Some x =>
+      match xsD with
+      | None | Some [] => bottom_of (exact vs) (* Some [] should not happen *)
+      | Some (xD :: xsD) => lub (nth_errorD vs n (Some xD)) (lookupsD vs ns (Some xsD))
+      end
+    end
+  end.
+
+Definition demand_event '((o, ns) : event) (vs : stack) (vysD : stackA) : Tick stackA :=
+  match lookups vs ns with
+  | None => Tick.ret vysD
+  | Some xs =>
+    let ys := eval o xs in
+    let (vsD, ysD) := appD vs vysD in
+    let+ xsD := demand o xs ysD in
+    Tick.ret (lookupsD vs ns (Some xsD))
+  end%tick.
+
+Fixpoint demand_trace_from (es : trace) (xs : stack) (ysD : stackA) : Tick stackA :=
+  match es with
+  | [] => Tick.ret ysD
+  | e :: es =>
+    let+ xsD := demand_trace_from es (eval_event e xs) ysD in
+    demand_event e xs xsD
+  end.
+
+Definition demand_trace (es : trace) : Tick unit :=
+  let+ _ := demand_trace_from es [] (bottom_of (exact (eval_trace es))) in
+  Tick.ret tt.
+
 Definition WfEval : Prop := forall o vs, well_formed vs -> well_formed (eval o vs).
 Existing Class WfEval.
 
@@ -429,6 +490,38 @@ Proof.
   - apply ret_mon. auto.
   - apply bind_mon; [ apply exec_event_mon; auto | auto ].
 Qed.
+
+Definition pure_demand {a aA b bA} `{Exact a aA, Exact b bA, LessDefined aA, LessDefined bA}
+    (f : a -> b) (fD : a -> bA -> Tick aA) : Prop :=
+  forall x yD,
+    yD `less_defined` exact (f x) ->
+    Tick.val (fD x yD) `less_defined` exact x.
+
+Definition cv_demand {a aA b bA} `{Exact a aA, Exact b bA, LessDefined aA, LessDefined bA}
+    (f : a -> b) (fA : aA -> M bA) (fD : a -> bA -> Tick aA) : Prop :=
+  forall x yD,
+    yD `less_defined` exact (f x) ->
+    forall n xD, Tick.MkTick n xD = fD x yD ->
+    fA xD [[ fun yA m => yD `less_defined` yA /\ m <= n ]].
+
+Definition PureDemand : Prop := forall o, pure_demand (eval o) (demand o).
+Definition CvDemand : Prop := forall o, cv_demand (eval o) (exec o) (demand o).
+Existing Class PureDemand.
+Existing Class CvDemand.
+
+Context {pd : PureDemand}.
+Context {cd : CvDemand}.
+
+Lemma cv_demand_trace_from : forall t xs ysD,
+  ysD `less_defined` exact (eval_trace_from t xs) ->
+  forall n xsD, Tick.MkTick n xsD = demand_trace_from t xs ysD ->
+    exec_trace_from t xsD [[ fun ys m => ysD `less_defined` ys /\ m <= n ]].
+Proof.
+Admitted.
+
+Lemma cv_demand_trace : forall t, exec_trace t [[ fun _ n => n <= Tick.cost (demand_trace t) ]].
+Proof.
+Admitted.
 
 (** Amortized cost specification. *)
 Section AmortizedCostSpec.
@@ -517,9 +610,9 @@ Definition Physicist'sArgument : Prop :=
       sumof potential input + c <= budget o vs + sumof potential output ]].
 Existing Class Physicist'sArgument.
 
-Context {exec_cost : Physicist'sArgument}.
-
 Section Soundness.
+
+Context {exec_cost : Physicist'sArgument}.
 
 Lemma exec_event_cost (e : event) (vs : stack) output
   : well_formed vs ->
@@ -596,6 +689,29 @@ Proof.
 Qed.
 
 End Soundness.
+
+Definition Physicist'sArgumentD : Prop :=
+  forall (o : op) (vs : list value), well_formed vs ->
+  forall output : stackA, output `is_approx` eval o vs ->
+  forall input n, Tick.MkTick n input = demand o vs output ->
+  sumof potential input + n <= budget o vs + sumof potential output.
+
+Section SoundnessD.
+
+Context {demand_cost : Physicist'sArgumentD}.
+
+Theorem demand_physicist's_argument : Physicist'sArgument.
+Proof.
+  red. red in demand_cost.
+  intros o vs Hvs output Houtput. specialize (demand_cost o vs Hvs output Houtput _ _ eq_refl).
+  exists (Tick.val (demand o vs output)).
+  split.
+  - apply pd. auto.
+  - eapply optimistic_mon; [ eapply cd; [ eassumption | reflexivity ] | ].
+    cbn beta. intros ? ? []; split; [ auto | lia ].
+Qed.
+
+End SoundnessD.
 
 End Interface.
 
