@@ -11,11 +11,6 @@ Set Implicit Arguments.
 Set Contextual Implicit.
 Set Maximal Implicit Insertion.
 
-#[local] Existing Instance Exact_id | 1.
-#[local] Existing Instance LessDefined_id | 100.
-#[local] Existing Instance PreOrder_LessDefined_id | 100.
-#[local] Existing Instance ExactMaximal_id | 100.
-
 (* Copied from list case study *)
 Fixpoint foldrA_ {a b} (f : T a -> T b -> M b) (v : T b) (xs : listA a) : M b :=
   tick >>
