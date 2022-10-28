@@ -123,7 +123,7 @@ Record HeapA : Type := MkHeapA
 
 (*TODO: does this need a tick?*)
 Definition mkHeapA (trs : T (listA TreeA)) : M HeapA :=
-  tick >> ret (MkHeapA trs).
+  ret (MkHeapA trs).
 
 Definition emptyA : M HeapA :=
   mkHeapA (Thunk NilA).
@@ -170,7 +170,7 @@ Definition insTreeA (t : T TreeA) (hp : HeapA) : M HeapA :=
 Definition insertA (x : A) (hp : HeapA) : M HeapA :=
   insTreeA (Thunk (NodeA 0 x (Thunk (NilA)))) hp.
 
-(*TODO: let! on ins1*)
+(*TODO*)
 Fixpoint merge_ (trs1Val : listA TreeA) (trs2 : T (listA TreeA)) : M (listA TreeA) :=
   tick >>
   let! trs2Val := force trs2 in
@@ -187,8 +187,8 @@ Fixpoint merge_ (trs1Val : listA TreeA) (trs2 : T (listA TreeA)) : M (listA Tree
       else 
         if r2 <? r1 then
           let~ ts := (fun trsR => merge_ trsR trs2') $! trs1' in
-          let! ins1 := insTreeA t1 (MkHeapA ts) in
-          bind (insTreeA t2 ins1) (fun hp => (force (treesA hp)))
+          bind (insTreeA t1 (MkHeapA ts))
+          (fun ins1 => bind (insTreeA t2 ins1) (fun hp => (force (treesA hp))))
         else let~ ts := (fun trsR => merge_ trsR trs2') $! trs1' in
           let~ linked := linkA t1 t2 in
           bind (insTreeA linked (MkHeapA ts)) (fun hp => (force (treesA hp)))
@@ -215,11 +215,11 @@ Definition removeMinTreeAuxA :
       else ret (Some (t', MkHeapA (Thunk (ConsA t (treesA hp)))))
   end).
 
-(*TODO: this is not partial.*)
+(*TODO/Note: This is not really lazy.*)
 Definition removeMinTreeA (hp : HeapA) : M (option ((T TreeA) * (HeapA))) :=
   foldrA (ret None) removeMinTreeAuxA (treesA hp).
 
-(*TODO: let!*)
+(*TODO/Note: This is not really lazy.*)
 Definition findMinA (hp : HeapA)
   : M (option A) :=
   tick >>
@@ -229,7 +229,7 @@ Definition findMinA (hp : HeapA)
   | Some (t, _) => bind (rootA t) (fun x => ret (Some x))
   end.
 
-(*TODO: let!*)
+(*TODO/Note: This is only sort of lazy.*)
 Definition deleteMinA (hp : HeapA)
   : M (HeapA) :=
   tick >>
@@ -238,6 +238,6 @@ Definition deleteMinA (hp : HeapA)
   | None => ret (MkHeapA (Thunk NilA))
   | Some (t, ts) =>
     let! (NodeA r v c) := force t in
-    let! children := List.TakeCompare.revA c in
-    mergeA (MkHeapA (Thunk children)) ts
+    bind (List.TakeCompare.revA c)
+      (fun children => mergeA (MkHeapA (Thunk children)) ts)
   end.
