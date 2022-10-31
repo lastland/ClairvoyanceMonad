@@ -20,7 +20,7 @@ From Equations Require Import Equations.
 
 From Coq Require Import Arith List Lia Setoid Morphisms Orders.
 Import ListNotations.
-From Clairvoyance Require Import Core Approx ApproxM List Misc.
+From Clairvoyance Require Import Core Approx ApproxM List Misc BankersQueue.
 
 (* Pure implementation *)
 Definition A := nat.
@@ -121,7 +121,6 @@ Inductive TreeA : Type :=
 Record HeapA : Type := MkHeapA
   { treesA : T (listA TreeA) }.
 
-(*TODO: does this need a tick?*)
 Definition mkHeapA (trs : T (listA TreeA)) : M HeapA :=
   ret (MkHeapA trs).
 
@@ -139,21 +138,18 @@ Definition linkA (t1 t2 : T TreeA) : M TreeA :=
   end.
 
 Definition rankA (t : T TreeA) : M nat :=
-  tick >>
   let! tval := force t in
   match tval with
   | (NodeA r v c) => ret r
   end.
 
 Definition rootA (t : T TreeA) : M A :=
-  tick >>
   let! tval := force t in
   match tval with
   | (NodeA r v c) => ret v
   end.
 
 Definition insTreeA (t : T TreeA) (hp : HeapA) : M HeapA :=
-  tick >>
   let! trs := force (treesA hp) in
   match trs with
   | NilA => mkHeapA (Thunk (ConsA t (Thunk NilA)))
@@ -166,13 +162,11 @@ Definition insTreeA (t : T TreeA) (hp : HeapA) : M HeapA :=
         mkHeapA (Thunk (ConsA linkedT hp'))
   end.
 
-(*TODO: should this have a tick?*)
 Definition insertA (x : A) (hp : HeapA) : M HeapA :=
   insTreeA (Thunk (NodeA 0 x (Thunk (NilA)))) hp.
 
 (*TODO*)
 Fixpoint merge_ (trs1Val : listA TreeA) (trs2 : T (listA TreeA)) : M (listA TreeA) :=
-  tick >>
   let! trs2Val := force trs2 in
   match trs1Val, trs2Val with
   | NilA, _ => ret trs2Val
@@ -195,7 +189,6 @@ Fixpoint merge_ (trs1Val : listA TreeA) (trs2 : T (listA TreeA)) : M (listA Tree
   end.
 
 Definition mergeA (hp1 hp2 : HeapA) : M HeapA :=
-  tick >>
   let~ trsM := (fun trsR => merge_ trsR (treesA hp2)) $! (treesA hp1) in
   mkHeapA trsM.
 
@@ -215,24 +208,17 @@ Definition removeMinTreeAuxA :
       else ret (Some (t', MkHeapA (Thunk (ConsA t (treesA hp)))))
   end).
 
-(*TODO/Note: This is not really lazy.*)
 Definition removeMinTreeA (hp : HeapA) : M (option ((T TreeA) * (HeapA))) :=
   foldrA (ret None) removeMinTreeAuxA (treesA hp).
 
-(*TODO/Note: This is not really lazy.*)
-Definition findMinA (hp : HeapA)
-  : M (option A) :=
-  tick >>
+Definition findMinA (hp : HeapA) : M (option A) :=
   let! minPair := removeMinTreeA hp in
   match minPair with
   | None => ret None
   | Some (t, _) => bind (rootA t) (fun x => ret (Some x))
   end.
 
-(*TODO/Note: This is only sort of lazy.*)
-Definition deleteMinA (hp : HeapA)
-  : M (HeapA) :=
-  tick >>
+Definition deleteMinA (hp : HeapA) : M (HeapA) :=
   let! minPair := removeMinTreeA hp in
   match minPair with
   | None => ret (MkHeapA (Thunk NilA))
@@ -241,3 +227,90 @@ Definition deleteMinA (hp : HeapA)
     bind (List.TakeCompare.revA c)
       (fun children => mergeA (MkHeapA (Thunk children)) ts)
   end.
+
+(** * Approximation structure for [HeapA] *)
+
+(** [less_defined], [exact], [lub] *)
+
+#[global] Existing Instance LessDefined_list.
+#[local] Existing Instance Exact_id | 1.
+#[local] Existing Instance LessDefined_id | 100.
+#[local] Existing Instance PreOrder_LessDefined_id | 100.
+#[local] Existing Instance ExactMaximal_id | 100.
+#[local] Existing Instance Exact_T | 100.
+#[local] Existing Instance ExactMaximal_T | 100.
+
+(*Definition less_defined_TreeA (t1 t2 : TreeA) : Prop :=
+  match t1, t2 with
+  | (NodeA r1 v1 c1), (NodeA r2 v2 c2) =>
+    less_defined c1 c2
+  end.
+
+#[local] Instance LessDefined_TreeA : LessDefined TreeA :=
+  less_defined_TreeA.*)
+
+Record less_defined_HeapA (hp1 hp2 : HeapA) : Prop :=
+  { ld_trs : less_defined (treesA hp1) (treesA hp2) }.
+
+#[global] Instance LessDefined_HeapA : LessDefined HeapA :=
+  less_defined_HeapA.
+
+#[global]
+Instance Rep_HeapA : Rep HeapA (T (listA TreeA)) :=
+  {| to_rep := fun hp => treesA hp
+  ;  from_rep := fun trs => MkHeapA trs
+  |}.
+
+#[global] Instance RepLaw_HeapA : RepLaw HeapA _.
+Proof.
+  constructor.
+  - intros trs; reflexivity.
+  - intros []; reflexivity.
+Qed.
+  
+#[global] Instance LessDefinedRep_HeapA : LessDefinedRep HeapA _.
+Proof.
+  intros [] []; cbn; firstorder.
+Qed.
+
+#[global] Instance PreOrder_HeapA : PreOrder (less_defined (a := HeapA)).
+Proof. exact PreOrder_Rep. Qed.
+
+Fixpoint treeConvert (t : Tree) : TreeA :=
+  match t with
+  | (Node r v c) => NodeA r v (exact (map treeConvert c))
+  end.
+
+#[global] Instance Exact_Tree : Exact Tree TreeA :=
+  treeConvert.
+
+Definition treeListConvert (trs : list Tree) : listA TreeA :=
+  match trs with
+  | [] => NilA
+  | t :: trs' => ConsA (Thunk (exact t)) (exact (map exact trs'))
+  end.
+
+#[global] Instance Exact_ListTree : Exact (list Tree) (listA TreeA) :=
+  treeListConvert.
+
+#[global] Instance Exact_Heap : Exact Heap HeapA :=
+  fun hp => MkHeapA (exact (trees hp)).
+
+#[global] Instance ExactMaximal_HeapA : ExactMaximal HeapA Heap.
+Proof. Admitted.
+
+(*TODO: should this be shallow or check the trees also?*)
+(*TODO: Lub_listA should probably not be in BankersQueue.*)
+#[global] Instance Lub_HeapA : Lub HeapA :=
+  fun hp1 hp2 =>
+    MkHeapA (lub_T (BankersQueue.Lub_listA) (treesA hp1) (treesA hp2)).
+
+#[global] Instance LubRep_HeapA : LubRep HeapA (T (listA TreeA)).
+Proof.
+  intros [] []; reflexivity.
+Qed.
+    
+#[global] Instance LubLaw_HeapA : LubLaw HeapA.
+Proof.
+  exact LubLaw_LubRep.
+Qed.
