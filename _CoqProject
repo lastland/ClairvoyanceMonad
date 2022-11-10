@@ -22,3 +22,5 @@ src/Cost.v
 src/QueueTrace.v
 src/FingerTreeInterface.v
 src/Tick.v
+
+src/DemandLogic.v
