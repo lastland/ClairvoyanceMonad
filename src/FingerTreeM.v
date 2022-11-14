@@ -4,7 +4,6 @@ From Clairvoyance Require Import Core Approx ApproxM List Misc BankersQueue.
 From Clairvoyance Require Import FingerTree.
 
 Import ListNotations.
-Import RevCompare.
 
 Set Primitive Projections.
 Set Implicit Arguments.

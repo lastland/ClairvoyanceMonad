@@ -4,7 +4,7 @@
 
 From Coq Require Import List.
 Import ListNotations.
-From Clairvoyance Require Core.
+From Clairvoyance Require Core List.
 
 Set Primitive Projections.
 Set Implicit Arguments.
@@ -251,7 +251,7 @@ Definition cost_from {a} (u : L R a) (h : heap) : NAT.t :=
 End St.
 *)
 
-From Clairvoyance Require Import RealtimeBankersQueue List.
+From Clairvoyance Require Import RealtimeBankersQueue List ListA.
 
 Import L.Notations.
 
