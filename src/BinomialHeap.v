@@ -1,6 +1,5 @@
 (* Overview
 
-KNOWN
 - Pure implementation of binomial heaps: [Tree], [Heap], [link], [rank], 
     [root], [insTree], [insert], [merge], [removeMinTree], [findMin], [deleteMin]
 - Clairvoyant-monadic implementation: [TreeA], [HeapA], [linkA], [rankA], 
