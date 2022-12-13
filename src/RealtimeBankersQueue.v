@@ -6,10 +6,9 @@
    But how can we formalize the stronger non-amortized bounds? *)
 
 From Coq Require Import List Arith Lia RelationClasses.
-From Clairvoyance Require Import Core Approx ApproxM List Misc BankersQueue Tick.
+From Clairvoyance Require Import Core Approx ApproxM List Demand Misc BankersQueue Tick.
 
 Import ListNotations.
-Import RevCompare.
 Import Tick.Notations.
 
 Set Primitive Projections.
@@ -105,12 +104,6 @@ Definition popA {a} (q : T (QueueA a)) : M (option (T a * T (QueueA a))) :=
 
 Import Tick.Notations.
 
-Definition headX {a} (xs : T (listA a)) : T a :=
-  match xs with
-  | Thunk (ConsA x _) => x
-  | _ => Undefined
-  end.
-
 Fixpoint rotateD {a} (f b d : list a) (out : listA a)
   : Tick (T (listA a) * T (listA a) * T (listA a)) :=
   Tick.tick >>
@@ -171,38 +164,6 @@ Proof.
 Qed.
 
 Ltac injclear H := injection H; clear H.
-
-Lemma thunkD_spec {a0 a b} `{Exact a0 a} `{LessDefined a} `{Bottom a}
-    (fD : a0 -> b -> Tick a) (f : a -> M b) x outD
-  : (forall outD' xD dcost, Tick.MkTick dcost xD = fD x outD' ->
-     f xD [[ fun out cost => outD' `less_defined` out /\ cost <= dcost ]]) ->
-    forall xD dcost, Tick.MkTick dcost xD = thunkD (fD x) outD ->
-    thunk (f xD) [[ fun out cost => outD `less_defined` out /\ cost <= dcost ]].
-Proof.
-  intros Hf xD dcost Hdcost.
-  destruct outD as [ outD | ].
-  - apply optimistic_thunk_go. eapply optimistic_mon; [ apply Hf; eassumption | cbn ].
-    intros * []; split; [ apply LessDefined_Thunk; auto | auto ].
-  - apply optimistic_skip. split; [ reflexivity | lia ].
-Qed.
-
-Lemma thunkD_3_spec {a1' a2' a3' a1 a2 a3 b}
-    `{Exact a1' a1, Exact a2' a2, Exact a3' a3}
-    `{LessDefined a1, LessDefined a2, LessDefined a3}
-    `{Bottom a1, Bottom a2, Bottom a3}
-    (fD : a1' -> a2' -> a3' -> b -> Tick (a1 * a2 * a3)) (f : a1 -> a2 -> a3 -> M b)
-    x1 x2 x3 outD
-  : (forall outD' x1D x2D x3D dcost, Tick.MkTick dcost (x1D, x2D, x3D) = fD x1 x2 x3 outD' ->
-     f x1D x2D x3D [[ fun out cost => outD' `less_defined` out /\ cost <= dcost ]]) ->
-    forall x1D x2D x3D dcost, Tick.MkTick dcost (x1D, x2D, x3D) = thunkD (fD x1 x2 x3) outD ->
-    thunk (f x1D x2D x3D) [[ fun out cost => outD `less_defined` out /\ cost <= dcost ]].
-Proof.
-  intros Hf x1D x2D x3D dcost Hdcost.
-  destruct outD as [ outD | ].
-  - apply optimistic_thunk_go. eapply optimistic_mon; [ apply Hf; eassumption | cbn ].
-    intros * []; split; [ apply LessDefined_Thunk; auto | auto ].
-  - apply optimistic_skip. split; [ reflexivity | lia ].
-Qed.
 
 Lemma rotateD_spec {a} {f b : list a} (outD : _)
   : outD `is_approx` rotate f b [] ->
@@ -428,11 +389,6 @@ Proof.
   - apply Hf. apply less_defined_Thunk_inv; auto.
   - apply bottom_least.
 Qed.
-
-Lemma sizeX1_length {a} (x : T (listA a)) (y : list a)
-  : x `is_approx` y -> sizeX 1 x <= 1 + length y.
-Proof.
-Admitted.
 
 (* need rotateD_spec (result is approximation of input) *)
 Lemma mkQueueD_rcost {a} (f b s : list a) (outD outD' : QueueA a)

@@ -7,7 +7,13 @@
     a more elaborate representation, as [input -> outputA -> M inputA].  *)
 
 From Coq Require Import Setoid SetoidClass Morphisms Lia Arith.
-From Clairvoyance Require Import Core Approx ApproxM.
+From Clairvoyance Require Import Core Approx ApproxM Tick.
+
+#[local] Existing Instance Exact_id | 1.
+#[local] Existing Instance LessDefined_id | 100.
+#[local] Existing Instance PreOrder_LessDefined_id | 100.
+#[local] Existing Instance ExactMaximal_id | 100.
+
 
 Class IsApprox (a e : Type) : Type :=
   is_approx : a -> e -> Prop.
@@ -309,3 +315,48 @@ Admitted.
 Definition curry_AA {a1 a2 a3 : AA} (f : AAMorphism a1 (AAExp a2 a3))
   : AAMorphism (AAProd a1 a2) a3 :=
   {| apply := curry_Setoid (apply f) |}.
+
+
+(* --------------------------------------------- *)
+
+(* A combinator for demand functions. If [f : a -> b] is a demand function
+   with input [a], then [thunkD f : T a -> b] is a demand function with input [T
+   a]. *)
+Definition thunkD {a b} `{Bottom b} (f : a -> b) (x : T a) : b :=
+  match x with
+  | Undefined => bottom
+  | Thunk x => f x
+  end.
+
+
+Lemma thunkD_spec {a0 a b} `{Exact a0 a} `{LessDefined a} `{Bottom a}
+    (fD : a0 -> b -> Tick a) (f : a -> M b) x outD
+  : (forall outD' xD dcost, Tick.MkTick dcost xD = fD x outD' ->
+     f xD [[ fun out cost => outD' `less_defined` out /\ cost <= dcost ]]) ->
+    forall xD dcost, Tick.MkTick dcost xD = thunkD (fD x) outD ->
+    thunk (f xD) [[ fun out cost => outD `less_defined` out /\ cost <= dcost ]].
+Proof.
+  intros Hf xD dcost Hdcost.
+  destruct outD as [ outD | ].
+  - apply optimistic_thunk_go. eapply optimistic_mon; [ apply Hf; eassumption | cbn ].
+    intros * []; split; [ apply LessDefined_Thunk; auto | auto ].
+  - apply optimistic_skip. split; [ reflexivity | lia ].
+Qed.
+
+Lemma thunkD_3_spec {a1' a2' a3' a1 a2 a3 b}
+    `{Exact a1' a1, Exact a2' a2, Exact a3' a3}
+    `{LessDefined a1, LessDefined a2, LessDefined a3}
+    `{Bottom a1, Bottom a2, Bottom a3}
+    (fD : a1' -> a2' -> a3' -> b -> Tick (a1 * a2 * a3)) (f : a1 -> a2 -> a3 -> M b)
+    x1 x2 x3 outD
+  : (forall outD' x1D x2D x3D dcost, Tick.MkTick dcost (x1D, x2D, x3D) = fD x1 x2 x3 outD' ->
+     f x1D x2D x3D [[ fun out cost => outD' `less_defined` out /\ cost <= dcost ]]) ->
+    forall x1D x2D x3D dcost, Tick.MkTick dcost (x1D, x2D, x3D) = thunkD (fD x1 x2 x3) outD ->
+    thunk (f x1D x2D x3D) [[ fun out cost => outD `less_defined` out /\ cost <= dcost ]].
+Proof.
+  intros Hf x1D x2D x3D dcost Hdcost.
+  destruct outD as [ outD | ].
+  - apply optimistic_thunk_go. eapply optimistic_mon; [ apply Hf; eassumption | cbn ].
+    intros * []; split; [ apply LessDefined_Thunk; auto | auto ].
+  - apply optimistic_skip. split; [ reflexivity | lia ].
+Qed.
