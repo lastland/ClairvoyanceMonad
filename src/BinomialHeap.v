@@ -356,6 +356,14 @@ Proof.
   apply mkQueueA_mon; auto.
 Qed.*)
 
+Lemma prod_mon {a b} `{LessDefined a} `{LessDefined b} (x x': a) (y y' : b) :
+  x `less_defined` x' ->
+  y `less_defined` y' ->
+  (x, y) `less_defined` (x', y').
+Proof.
+  intros. solve_mon.
+Qed.
+
 Lemma insTreeAuxA_mon (t1 t1' : T TreeA) (ts ts' : listA TreeA) :
   t1 `less_defined` t1' ->
   ts `less_defined` ts' ->
@@ -391,16 +399,16 @@ Import Tick.Notations.
 
 (*Demand functions*)
 
-Definition linkD (outD : TreeA) : Tick ((T TreeA) * (T TreeA)) :=
+Definition linkD (t1 t2 : Tree) (outD : TreeA) : Tick ((T TreeA) * (T TreeA)) :=
   Tick.tick >>
-  match outD with
-  | NodeA r1 v1 (Thunk (ConsA (Thunk (NodeA r2 v2 c2)) cs1)) => 
+  match t1, t2, outD with
+  | Node r1_ v1_ c1_, Node r2_ v2_ c2_, NodeA r1 v1 (Thunk (ConsA (Thunk (NodeA r2 v2 c2)) cs1)) => 
     let tD1 := NodeA r1 v1 cs1 in
     let tD2 := NodeA r2 v2 c2 in
-    if (Nat.ltb v2 v1)
+    if (v1_ =? v1)
       then Tick.ret (Thunk tD1, Thunk tD2)
       else Tick.ret (Thunk tD2, Thunk tD1)
-  | _ => bottom
+  | _, _, _ => bottom
   end.
 
 Definition rankD (t : Tree) : Tick (T TreeA) :=
@@ -496,33 +504,15 @@ Definition deleteMinD (hp : Heap) (outD : HeapA) : Tick HeapA :=
   Tick.ret (MkHeapA (Thunk (treeListConvert (trees hp)))). (* deleteMin must traverse the whole heap. *)
 
 Lemma linkD_approx (t1 t2 : Tree) (outD : TreeA)
-  : outD `is_approx` link t1 t2 -> Tick.val (linkD outD) `is_approx` (t1, t2).
+  : outD `is_approx` link t1 t2 -> Tick.val (linkD t1 t2 outD) `is_approx` (t1, t2).
 Proof.
   unfold link, linkD.
-  intros Hout. destruct Hout eqn: HoutEq.
-  simpl in *. 
-  
-   (*unfold exact. unfold Exact_prod. unfold exact. unfold Exact_T. 
-    unfold exact. unfold Exact_Tree. unfold treeConvert. destruct t1 eqn: Ht1, t2 eqn: Ht2, outD eqn: HoutD. 
-  destruct (exact
-  (if a <=? a0
-   then Node (n + 1) a (Node n0 a0 l0 :: l)
-   else Node (n0 + 1) a0 (Node n a l :: l0))) eqn: Hex.
-  destruct t eqn: Ht; simpl; try apply bottom_is_least.
-  constructor. simpl.
-  - destruct t eqn: Ht.
-    + destruct x eqn: Hx. unfold fst. x1 eqn: Hx1, (v2 <? a1) eqn: Hcomp.
-  inversion Hout.
-  solve_approx.*) Admitted.
-
-Lemma pushD_approx {a} (q : Queue a) (x : a) (outD : QueueA a)
-  : outD `is_approx` push q x -> Tick.val (pushD q x outD) `is_approx` (q, x).
-Proof.
-  unfold push, pushD.
-  intros Hout. unfold pushD.
-  destruct mkQueueD as [ Qcost [] ] eqn:HQ.
-  apply mkQueueD_approx in Hout. rewrite HQ in Hout.
-  destruct Hout as [Hout1 Hout2]; cbn in Hout1, Hout2.
-  apply tailX_mon in Hout2.
-  solve_approx.
-Qed. 
+  intros Hout. 
+  destruct outD eqn: HoutD; subst.
+  destruct t1 eqn: Ht1; subst.
+  destruct t2 eqn: Ht2; subst.
+  destruct (a0 <=? a1) eqn: Ha; subst.
+  destruct Hout eqn: EqHout; subst.
+  simpl in *.
+  destruct ld_children0 eqn: Hld.
+Admitted.
