@@ -399,16 +399,38 @@ Import Tick.Notations.
 
 (*Demand functions*)
 
+Fixpoint tree_Eq (t1 t2 : TreeA) : bool :=
+  match t1, t2 with
+  | NodeA r1 v1 c1, NodeA r2 v2 c2 =>
+    if (andb (r1 =? r2) (v1 =? v2))
+      then let fix matchListA l1 l2 :=
+        match l1, l2 with
+        | NilA, NilA => true
+        | ConsA Undefined Undefined, ConsA Undefined Undefined => true
+        | ConsA Undefined (Thunk ts1), ConsA t2 (Thunk ts2) => matchListA ts1 ts2
+        | ConsA (Thunk t1) Undefined, ConsA (Thunk t2) Undefined => tree_Eq t1 t2
+        | ConsA (Thunk t1) (Thunk ts1), ConsA (Thunk t2) (Thunk ts2) =>
+          andb (tree_Eq t1 t2) (matchListA ts1 ts2)
+        | _, _ => false
+        end
+      in match c1, c2 with
+      | Undefined, Undefined => true
+      | Thunk c1', Thunk c2' => matchListA c1' c2'
+      | _, _ => false
+      end
+    else false
+  end.
+
 Definition linkD (t1 t2 : Tree) (outD : TreeA) : Tick ((T TreeA) * (T TreeA)) :=
   Tick.tick >>
-  match t1, t2, outD with
-  | Node r1_ v1_ c1_, Node r2_ v2_ c2_, NodeA r1 v1 (Thunk (ConsA (Thunk (NodeA r2 v2 c2)) cs1)) => 
+  match outD with
+  | NodeA r1 v1 (Thunk (ConsA (Thunk (NodeA r2 v2 c2)) cs1)) => 
     let tD1 := NodeA r1 v1 cs1 in
     let tD2 := NodeA r2 v2 c2 in
-    if (v1_ =? v1)
+    if (tree_Eq (treeConvert t1) tD1)
       then Tick.ret (Thunk tD1, Thunk tD2)
       else Tick.ret (Thunk tD2, Thunk tD1)
-  | _, _, _ => bottom
+  | _ => bottom
   end.
 
 Definition rankD (t : Tree) : Tick (T TreeA) :=
