@@ -815,15 +815,15 @@ Lemma selectsortA_cost {l n}
   : n = length l ->
     forall (d : listA nat), d `is_approx` exact (selectsort l) ->
     let m := sizeX' 1 d in
-    selectsortA n (exact l) [[ fun sorted cost => d `less_defined` sorted /\ cost <= m * m ]].
+    selectsortA n (exact l) [[ fun sorted cost => d `less_defined` sorted /\ cost <= m * (length l + 1) ]].
 Proof.
 Admitted.
 
-Lemma selectsortA_cost {l n}
+Lemma selectsortA_cost' {l n}
   : n = length l ->
     forall (d : listA nat), d `is_approx` exact (selectsort l) ->
     exists (lA : T (listA nat)), lA `is_approx` l /\
     let m := sizeX' 1 d in
-    selectsortA n lA [[ fun sorted cost => d `less_defined` sorted /\ cost <= m * m ]].
+    selectsortA n lA [[ fun sorted cost => d `less_defined` sorted /\ cost <= m * (length l + 1) ]].
 Proof.
 Admitted.
