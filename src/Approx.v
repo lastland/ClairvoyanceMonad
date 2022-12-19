@@ -31,10 +31,13 @@
   other types. One way of doing that is using type classes, as we show here. *)
 
 From Coq Require Import Arith List Lia Morphisms Relations.
-From Clairvoyance Require Import Core.
+From Clairvoyance Require Import Core Relations.
 
 Import ListNotations.
 
+(* Type classes declared under this flag will have less confusing resolution.
+  We will exclude [Exact] because in [Exact a b],
+  [b] is supposed to be determined by [a], so it's fine to leave it as a flexible metavariable. *)
 Set Typeclasses Strict Resolution.
 
 Definition is_defined {a} (t : T a) : Prop :=
@@ -42,11 +45,6 @@ Definition is_defined {a} (t : T a) : Prop :=
   | Thunk _ => True
   | Undefined => False
   end.
-
-(* Type classes declared under this flag will have less confusing resolution.
-  We will exclude [Exact] because in [Exact a b],
-  [b] is supposed to be determined by [a], so it's fine to leave it as a flexible metavariable. *)
-Set Typeclasses Strict Resolution.
 
 (** * [less_defined]: approximation ordering *)
 
@@ -254,57 +252,6 @@ Class BottomLeast a `{LessDefined a,Bottom a} : Prop :=
 #[global] Instance BottomLeast_t {a} `{LessDefined a} : BottomLeast (T a).
 Proof. constructor. Qed.
 
-(** * Deriving instances via isomorphisms *)
-
-Unset Typeclasses Strict Resolution.
-
-(** Bijection between [a] and [b]. *)
-Class Rep (a b : Type) : Type :=
-  { to_rep : a -> b
-  ; from_rep : b -> a
-  }.
-
-(** Laws of a bijection *)
-Class RepLaw (a b : Type) `{Rep a b} : Prop :=
-  { to_from : forall x, to_rep (from_rep x) = x
-  ; from_to : forall x, from_rep (to_rep x) = x
-  }.
-
-Class LessDefinedRep a b `{REP : Rep a b, LessDefined a, LessDefined b} : Prop :=
-  to_rep_less_defined : forall x y : a, less_defined x y <-> less_defined (a := b) (to_rep x) (to_rep y).
-
-Lemma Reflexive_Rep {a b} `{LessDefinedRep a b} `{!Reflexive (less_defined (a := b))}
-  : Reflexive (less_defined (a := a)).
-Proof.
-  unfold Reflexive. intros ?. apply to_rep_less_defined. reflexivity.
-Qed.
-
-Lemma Transitive_Rep {a b} `{LessDefinedRep a b} `{!Transitive (less_defined (a := b))}
-  : Transitive (less_defined (a := a)).
-Proof.
-  unfold Transitive; intros *. rewrite 3 to_rep_less_defined. apply transitivity.
-Qed.
-
-Lemma PreOrder_Rep {a b} `{LessDefinedRep a b} `{!PreOrder (less_defined (a := b))}
-  : PreOrder (less_defined (a := a)).
-Proof.
-  constructor; auto using Reflexive_Rep, Transitive_Rep.
-Qed.
-
-Class LubRep a b `{Rep a b,Lub a,Lub b} : Prop :=
-  to_rep_lub : forall x y : a, to_rep (lub x y) = lub (to_rep x) (to_rep y).
-
-Lemma to_rep_cobounded {a b} `{LessDefinedRep a b}
-  : forall x y : a, Basics.impl (cobounded x y) (cobounded (a := b) (to_rep x) (to_rep y)).
-Proof.
-  intros x y [z [Hx Hy] ]; exists (to_rep z); rewrite <- 2 to_rep_less_defined; auto.
-Qed.
-
-Lemma LubLaw_LubRep {a b} `{LubRep a b,LessDefinedRep a b (REP := _),LL: !LubLaw b} : LubLaw a.
-Proof.
-  constructor; intros *; rewrite ?to_rep_cobounded, 3? to_rep_less_defined, to_rep_lub; apply LL.
-Qed.
-
 Class BottomOf (a : Type) : Type :=
   bottom_of : a -> a.
 
@@ -325,29 +272,31 @@ Class BottomIsLeast a `{BottomOf a, LessDefined a} : Prop :=
 #[global] Instance BottomIsLeast_T {a} `{LessDefined a} : BottomIsLeast (T a).
 Proof. constructor. Qed.
 
-(** * Instances for standard types *)
+Unset Typeclasses Strict Resolution.
 
-Inductive option_rel {a b} (r : a -> b -> Prop) : option a -> option b -> Prop :=
-| option_rel_None : option_rel r None None
-| option_rel_Some x y : r x y -> option_rel r (Some x) (Some y)
-.
+(** Order structure on approximation values [valueA].
+    Core operations ([exact], [less_defined], [lub], [bottom_of])
+    and their properties. *)
+Class IsApproxAlgebra (t tA : Type) : Type :=
+  { AO_Exact         :> Exact t     tA
+  ; AO_LessDefined   :> LessDefined tA
+  ; AO_Lub           :> Lub         tA
+  ; AO_BottomOf      :> BottomOf    tA
 
-Record pair_rel {a1 b1 a2 b2} (r1 : a1 -> b1 -> Prop) (r2 : a2 -> b2 -> Prop) (xs : a1 * a2) (ys : b1 * b2) : Prop :=
-  { fst_rel : r1 (fst xs) (fst ys)
-  ; snd_rel : r2 (snd xs) (snd ys)
+  ; AO_PreOrder      :> PreOrder (less_defined (a := tA))
+  ; AO_LubLaw        :> LubLaw        tA
+  ; AO_BottomIsLeast :> BottomIsLeast tA
   }.
+
+Set Typeclasses Strict Resolution.
+
+(** * Instances for standard types *)
 
 #[global] Instance Exact_prod {a aA b bA} `{Exact a aA, Exact b bA} : Exact (a * b) (aA * bA) :=
   fun xs => (exact (fst xs), exact (snd xs)).
 
 #[global] Instance LessDefined_prod {a b} `{LessDefined a, LessDefined b} : LessDefined (a * b) :=
   pair_rel less_defined less_defined.
-
-#[global]
-Instance PreOrder_pair_rel {a b ra rb} `{!@PreOrder a ra,!@PreOrder b rb} : PreOrder (pair_rel ra rb).
-Proof.
-  constructor; constructor; reflexivity + etransitivity; eapply fst_rel + eapply snd_rel; eassumption.
-Qed.
 
 #[global] Instance ExactMaximal_prod {a aA b bA} `{ExactMaximal a aA, ExactMaximal b bA}
   : ExactMaximal (a * b) (aA * bA).
@@ -366,6 +315,20 @@ Proof.
   - intros * [? [ [] [] ] ]; constructor; cbn; apply lub_upper_bound_l; eauto.
   - intros * [? [ [] [] ] ]; constructor; cbn; apply lub_upper_bound_r; eauto.
 Qed.
+
+#[global] Instance BottomOf_prod {a b} `{BottomOf a, BottomOf b} : BottomOf (a * b) :=
+  fun xy => (bottom_of (fst xy), bottom_of (snd xy)).
+
+#[global] Instance BottomIsLeast_prod {a b} `{BottomIsLeast a, BottomIsLeast b}
+  : BottomIsLeast (a * b).
+Proof.
+  constructor; apply bottom_is_least.
+Qed.
+
+Notation IsAA := IsApproxAlgebra (only parsing).
+
+#[global] Instance IsAA_prod {a' a b' b} {_ : IsAA a' a} {_ : IsAA b' b} : IsAA (a' * b') (a * b)
+  := {}.
 
 #[global] Instance Exact_option {a aA} `{Exact a aA} : Exact (option a) (option aA) := fun ox =>
   match ox with
@@ -552,6 +515,57 @@ Qed.
 #[global] Instance Lub_unit : Lub unit := fun n _ => n.
 #[global] Instance LubLaw_unit : LubLaw unit := LubLaw_id.
 
+(** * Deriving instances via isomorphisms *)
+
+Unset Typeclasses Strict Resolution.
+
+(** Bijection between [a] and [b]. *)
+Class Rep (a b : Type) : Type :=
+  { to_rep : a -> b
+  ; from_rep : b -> a
+  }.
+
+(** Laws of a bijection *)
+Class RepLaw (a b : Type) `{Rep a b} : Prop :=
+  { to_from : forall x, to_rep (from_rep x) = x
+  ; from_to : forall x, from_rep (to_rep x) = x
+  }.
+
+Class LessDefinedRep a b `{REP : Rep a b, LessDefined a, LessDefined b} : Prop :=
+  to_rep_less_defined : forall x y : a, less_defined x y <-> less_defined (a := b) (to_rep x) (to_rep y).
+
+Lemma Reflexive_Rep {a b} `{LessDefinedRep a b} `{!Reflexive (less_defined (a := b))}
+  : Reflexive (less_defined (a := a)).
+Proof.
+  unfold Reflexive. intros ?. apply to_rep_less_defined. reflexivity.
+Qed.
+
+Lemma Transitive_Rep {a b} `{LessDefinedRep a b} `{!Transitive (less_defined (a := b))}
+  : Transitive (less_defined (a := a)).
+Proof.
+  unfold Transitive; intros *. rewrite 3 to_rep_less_defined. apply transitivity.
+Qed.
+
+Lemma PreOrder_Rep {a b} `{LessDefinedRep a b} `{!PreOrder (less_defined (a := b))}
+  : PreOrder (less_defined (a := a)).
+Proof.
+  constructor; auto using Reflexive_Rep, Transitive_Rep.
+Qed.
+
+Class LubRep a b `{Rep a b,Lub a,Lub b} : Prop :=
+  to_rep_lub : forall x y : a, to_rep (lub x y) = lub (to_rep x) (to_rep y).
+
+Lemma to_rep_cobounded {a b} `{LessDefinedRep a b}
+  : forall x y : a, Basics.impl (cobounded x y) (cobounded (a := b) (to_rep x) (to_rep y)).
+Proof.
+  intros x y [z [Hx Hy] ]; exists (to_rep z); rewrite <- 2 to_rep_less_defined; auto.
+Qed.
+
+Lemma LubLaw_LubRep {a b} `{LubRep a b,LessDefinedRep a b (REP := _),LL: !LubLaw b} : LubLaw a.
+Proof.
+  constructor; intros *; rewrite ?to_rep_cobounded, 3? to_rep_less_defined, to_rep_lub; apply LL.
+Qed.
+
 (** * Tactics for working with optimistic and pessimistic specs. *)
 
 (** Use the monotonicity laws. *)
@@ -616,3 +630,37 @@ Ltac mgo tac := repeat (intros;
                         cbn in *; (mforward tac + solve_approx + lia)).
 Ltac mgo' := mgo idtac.
 Ltac mgo_ := repeat (intros; cbn in *; (mforward idtac + solve_approx + lia)).
+
+(** Right now is_approx x y is defined as x `less_defined` exact y.
+  Having is_approx as a separate primitive may be necessary to generalize
+  ApproxAlgebra to infinite values (streams and functions). *)
+Module IsApprox.
+Unset Typeclasses Strict Resolution.
+
+Class IsApprox (a e : Type) : Type :=
+  is_approx : a -> e -> Prop.
+
+Declare Scope approx_scope.
+Delimit Scope approx_scope with approx.
+#[local] Open Scope approx_scope.
+
+Infix "`is_approx`" := is_approx : approx_scope.
+
+#[global] Instance IsApprox_prod {a ea b eb} `{IsApprox a ea, IsApprox b eb}
+  : IsApprox (a * b) (ea * eb) :=
+  pair_rel is_approx is_approx.
+
+#[global] Instance IsApprox_fun {a ea b eb} `{IsApprox a ea, IsApprox b eb}
+  : IsApprox (a -> b) (ea -> eb) :=
+  fun f ef => resp is_approx is_approx f ef.
+
+#[global] Instance IsApprox_M {a e : Type} `{IsApprox a e} : IsApprox (M a) e :=
+  fun u ex => u {{ fun x _ => x `is_approx` ex }}.
+
+#[global] Instance Lub_M {a} `{Lub a} : Lub (M a) :=
+  fun u u' => fun x n => u x n \/ u' x n.
+
+#[global] Instance Bottom_M {a} : Bottom (M a) := fun _ _ => False.
+
+End IsApprox.
+

@@ -34,7 +34,7 @@ Notation Eval := (Eval op value).
 Notation Budget := (Budget op value).
 Notation Exec := (Exec op valueA).
 Notation Demand := (Demand op value valueA).
-Notation ApproxAlgebra := (ApproxAlgebra value valueA).
+Notation IsApproxAlgebra := (IsApproxAlgebra value valueA).
 Notation Potential := (Potential valueA).
 
 Definition eval : Eval :=
@@ -96,7 +96,7 @@ Proof.
     apply ret_mon. repeat constructor; apply H.
 Qed.
 
-Definition approx_algebra : ApproxAlgebra.
+Definition approx_algebra : IsApproxAlgebra.
 Proof. econstructor; try typeclasses eauto. Defined.
 #[export] Existing Instance approx_algebra.
 

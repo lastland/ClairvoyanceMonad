@@ -163,7 +163,7 @@ Inductive op : Type :=
 Notation Eval := (Eval op value).
 Notation Budget := (Budget op value).
 Notation Exec := (Exec op valueA).
-Notation ApproxAlgebra := (ApproxAlgebra value valueA).
+Notation IsApproxAlgebra := (IsApproxAlgebra value valueA).
 Notation Potential := (Potential valueA).
 
 Import FingerTree.
@@ -205,7 +205,7 @@ Lemma monotonic_exec (o : op) : Monotonic (exec o).
 Proof.
 Admitted.
 
-Definition approx_algebra : ApproxAlgebra.
+Definition approx_algebra : IsApproxAlgebra.
 Proof. econstructor; try typeclasses eauto. Defined.
 #[export] Existing Instance approx_algebra.
 

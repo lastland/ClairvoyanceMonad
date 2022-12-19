@@ -13,20 +13,6 @@ Set Primitive Projections.
 
 (* * Preamble: miscellaneous definitions *)
 
-(** Order structure on approximation values [valueA].
-    Core operations ([exact], [less_defined], [lub], [bottom_of])
-    and their properties. *)
-Class ApproxAlgebra (t tA : Type) : Type :=
-  { AO_Exact         :> Exact t     tA
-  ; AO_LessDefined   :> LessDefined tA
-  ; AO_Lub           :> Lub         tA
-  ; AO_BottomOf      :> BottomOf    tA
-
-  ; AO_PreOrder      :> PreOrder (less_defined (a := tA))
-  ; AO_LubLaw        :> LubLaw        tA
-  ; AO_BottomIsLeast :> BottomIsLeast tA
-  }.
-
 (* lookups xs [n; m; p] = [xs!!n; xs!!m; xs!!p], or None if out of bounds *)
 Fixpoint lookups {A} (xs : list A) (ns : list nat) : option (list A) :=
   match ns with
@@ -75,7 +61,7 @@ Fixpoint lub_nth {a} `{Lub a} (n : nat) (x : a) (ys : list a) : list a :=
   | _, [] => [] (* should not happen *)
   end.
 
-Lemma sumof_lub_nth {a aA} {AA : ApproxAlgebra a aA} {f : aA -> nat}
+Lemma sumof_lub_nth {a aA} {AA : IsApproxAlgebra a aA} {f : aA -> nat}
     {Hf_lub : SubadditiveMeasure f}
   : forall n x (ys : list aA),
       (exists y, nth_error ys n = Some y /\ cobounded x y) ->
@@ -89,7 +75,7 @@ Proof.
     rewrite IH; [ lia | eauto ].
 Qed.
 
-Lemma less_defined_lub_nth {a aA} {AA : ApproxAlgebra a aA}
+Lemma less_defined_lub_nth {a aA} {AA : IsApproxAlgebra a aA}
   : forall n (x : aA) ys w ws,
       ys `less_defined` ws ->
       nth_error ws n = Some w ->
@@ -150,7 +136,7 @@ Proof.
   - apply IH.
 Qed.
 
-Lemma nth_lub_nth' {a aA} `{ApproxAlgebra a aA}
+Lemma nth_lub_nth' {a aA} `{IsApproxAlgebra a aA}
   : forall n m (x y : aA) ys,
     nth_error ys m = Some y ->
     cobounded x y ->
@@ -163,7 +149,7 @@ Proof.
   - apply IH.
 Qed.
 
-Lemma lookups_lub_nth {a aA} `{ApproxAlgebra a aA}
+Lemma lookups_lub_nth {a aA} `{IsApproxAlgebra a aA}
   : forall n x xs ns,
       (exists x', nth_error xs n = Some x' /\ cobounded x x') ->
       lookups xs ns `less_defined` lookups (lub_nth n x xs) ns.
@@ -206,7 +192,7 @@ Proof.
       { apply IH. auto. }
 Qed.
 
-Lemma lookupsD_Some {a aA} {AA : ApproxAlgebra a aA}
+Lemma lookupsD_Some {a aA} {AA : IsApproxAlgebra a aA}
     {f : aA -> nat} {ns : list nat} {xs ys : list a}
     {Hf_bottom : ZeroMeasure f}
     {Hf_lub : SubadditiveMeasure f}
@@ -331,7 +317,7 @@ Section Interface.
 
 Context {op value valueA : Type}.
 Context {wf : WellFormed value}.
-Context {approx_algebra : ApproxAlgebra value valueA}.
+Context {approx_algebra : IsApproxAlgebra value valueA}.
 
 Definition Eval : Type := op -> list value -> list value.
 Existing Class Eval.
@@ -721,7 +707,7 @@ Arguments Eval : clear implicits.
 Arguments Budget : clear implicits.
 Arguments Exec : clear implicits.
 Arguments Demand : clear implicits.
-Arguments ApproxAlgebra : clear implicits.
+Arguments IsApproxAlgebra : clear implicits.
 Arguments Potential : clear implicits.
 
 (* TODO: Can we prove a completeness theorem? For a more sophisticated method perhaps? *)
@@ -746,7 +732,7 @@ Definition RealTimeCost : Prop :=
 End RealTimeCost.
 
 Definition ImplRealTimeCost
-    (op : Type) (j : Budget op) (j' : Cv.Impl op) {AO : ApproxAlgebra j j'}
+    (op : Type) (j : Budget op) (j' : Cv.Impl op) {AO : IsApproxAlgebra j j'}
   : Prop :=
   forall (os : list (op * list nat)) (o : op) (ns : list nat),
     ( cost_of (exec_trace (j := j') (os ++ [(o, ns)]) [])
