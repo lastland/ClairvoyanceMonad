@@ -206,7 +206,7 @@ Proof.
   - injection 1; intros <- ysD HysD.
     inversion HysD; clear HysD; subst.
     exists (bottom_of (exact xs)).
-    split; [ apply bottom_is_least | ]. split; [ | reflexivity ].
+    split; [ apply bottom_is_less | ]. split; [ | reflexivity ].
     apply Nat.eq_le_incl, sumof_bottom.
   - destruct nth_error eqn:Hn; cbn; [ | discriminate ]. intros Hys ysD HysD.
     apply option_map_inv in Hys. destruct Hys as [ ys' [Hys' <-] ].
@@ -666,7 +666,7 @@ Proof.
   apply has_amortized_cost'.
   intros os.
   destruct (physicist's_method_aux os [] (Forall_nil _) (bottom_of (exact (eval_trace_from os [])))) as (d0 & Hd0 & HH).
-  { apply bottom_is_least. }
+  { apply bottom_is_less. }
   inversion Hd0; clear Hd0; subst.
   apply (optimistic_mon HH); cbn.
   intros ? ? [_ INEQ]. fold (budget_trace os) in INEQ.

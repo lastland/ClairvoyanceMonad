@@ -49,7 +49,14 @@ Qed.
 End Tick.
 Notation Tick := Tick.Tick.
 
-Definition less_defined_bind {a b} `{LessDefined a, LessDefined b}
+Lemma less_defined_ret {a} `{LessDefined a}
+  : forall (x x' : a), x `less_defined` x' ->
+    Tick.ret x `less_defined` Tick.ret x'.
+Proof.
+  constructor; auto.
+Qed.
+
+Lemma less_defined_bind {a b} `{LessDefined a, LessDefined b}
   : forall (u u' : Tick a), u `less_defined` u' ->
     forall (k k' : a -> Tick b), (forall x x', x `less_defined` x' -> k x `less_defined` k' x') ->
     Tick.bind u k `less_defined` Tick.bind u' k'.

@@ -265,9 +265,21 @@ Class BottomOf (a : Type) : Type :=
 #[global] Instance BottomOf_T {a} : BottomOf (T a) := fun _ => Undefined.
 
 Class BottomIsLeast a `{BottomOf a, LessDefined a} : Prop :=
-  bottom_is_least : forall (x : a), bottom_of x `less_defined` x.
+  bottom_is_least : forall (x y : a), x `less_defined` y -> bottom_of y `less_defined` x.
 
 #[global] Hint Mode BottomIsLeast ! - - : typeclass_instances.
+
+Lemma bottom_is_less {a} `{BottomOf a, LessDefined a, PreOrder a less_defined, !BottomIsLeast a}
+  : forall (x : a), bottom_of x `less_defined` x.
+Proof.
+  intros; apply bottom_is_least. reflexivity.
+Qed.
+
+Lemma Proper_bottom {a} `{BottomOf a, LessDefined a, PreOrder a less_defined, !BottomIsLeast a}
+  : Proper (less_defined ==> less_defined) (bottom_of (a := a)).
+Proof.
+  unfold Proper, respectful. intros x y xy; do 2 apply bottom_is_least; assumption.
+Qed.
 
 #[global] Instance BottomIsLeast_T {a} `{LessDefined a} : BottomIsLeast (T a).
 Proof. constructor. Qed.
@@ -322,7 +334,7 @@ Qed.
 #[global] Instance BottomIsLeast_prod {a b} `{BottomIsLeast a, BottomIsLeast b}
   : BottomIsLeast (a * b).
 Proof.
-  constructor; apply bottom_is_least.
+  intros x y xy. constructor; apply bottom_is_least, xy.
 Qed.
 
 Notation IsAA := IsApproxAlgebra (only parsing).
@@ -432,7 +444,7 @@ Qed.
 
 #[global] Instance BottomIsLeast_list {a} `{BottomIsLeast a} : BottomIsLeast (list a).
 Proof.
-  intros xs; induction xs; [ constructor | constructor; [ apply bottom_is_least | auto ] ].
+  intros xs ys Hxsys. induction Hxsys; [ constructor | constructor; [ apply bottom_is_least; auto | auto ] ].
 Qed.
 
 Lemma less_defined_app {a} {LD : LessDefined a} (xs1 xs2 ys1 ys2 : list a)

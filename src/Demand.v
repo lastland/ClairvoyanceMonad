@@ -16,11 +16,22 @@ Import Tick.Notations.
 
 Module Export AA.
 
+Class IsApproxSetoid (a' a : Type) `{Setoid a', IsApproxAlgebra a' a} : Prop :=
+  { Proper_exact : Proper (equiv ==> less_defined) (exact (a := a') (b := a))
+    (* TODO: Remove this hack/simplification.
+       This is a fishy law; lub is meant only to be defined on cobounded elements.
+       But this lets us break down the definition of AAMorphism cleanly
+       into a setoid morphism and a DFun, with a simple monotonicity property for the latter.
+       Otherwise, we only have a restricted form of monotonicity. *)
+  ; Proper_lub : Proper (less_defined ==> less_defined ==> less_defined) (lub (a := a))
+  }.
+
 Record ApproxAlgebra : Type :=
   { carrier :> Type
   ; AA_Setoid : Setoid carrier
   ; approx : Type
   ; AA_IsAA :> IsApproxAlgebra carrier approx
+  ; AA_IsAS :> IsApproxSetoid carrier approx
   }.
 
 End AA.
@@ -29,29 +40,38 @@ Notation AA := ApproxAlgebra (only parsing).
 
 #[global] Existing Instance AA_Setoid.
 #[global] Existing Instance AA_IsAA.
+#[global] Existing Instance AA_IsAS.
 
-Definition AAProd (a1 a2 : AA) : AA :=
+#[local]
+Instance IsAS_prod {a' a b' b : Type} `{IsApproxSetoid a' a} `{IsApproxSetoid b' b}
+  : IsApproxSetoid (a' * b') (a * b).
+Proof.
+  constructor.
+  { unfold Proper, respectful. intros x y xy.
+    constructor; apply Proper_exact; apply xy. }
+  { unfold Proper, respectful. intros x y xy u v uv. constructor; cbn; apply Proper_lub;
+      apply xy + apply uv. }
+Qed.
+
+Canonical AAProd (a1 a2 : AA) : AA :=
   {| carrier := a1 * a2
   ;  approx := approx a1 * approx a2
   |}.
 
+Infix "**" := AAProd (at level 40).
 
 (** * Demand functions *)
 
 Module Export DFun.
 
-Class Laws {a' a b : Type} `{Setoid a', LessDefined a, LessDefined b}
-    (df : a' -> b -> Tick a) : Prop :=
-  { dfun_monotone : Proper (equiv ==> less_defined ==> less_defined) df }.
-
-#[global] Existing Instance dfun_monotone.
+Notation Monotone := (Proper (equiv ==> less_defined ==> less_defined)).
 
 (* Demand functions must be nondeterministic in general to be able to define [lub] *)
 Record DFun (a1 a2 : AA) : Type :=
   { dfun :> a1 -> approx a2 -> Tick (approx a1)
-  ; laws : Laws dfun }.
+  ; dfun_monotone : Monotone dfun }.
 
-#[global] Existing Instance laws.
+#[global] Existing Instance dfun_monotone.
 
 Arguments dfun {a1 a2}.
 
@@ -71,9 +91,9 @@ Definition id_dfun (a : AA) : a -> approx a -> Tick (approx a) :=
   fun x' x => Tick.ret x.
 
 #[local]
-Instance Laws_id (a : AA) : Laws (id_dfun a).
+Instance monotone_id (a : AA) : Monotone (id_dfun a).
 Proof.
-  constructor. unfold Proper, respectful, id_dfun.
+  unfold Proper, respectful, id_dfun.
   intros; repeat constructor; assumption. 
 Qed.
 
@@ -87,10 +107,10 @@ Definition compose_dfun {a b c : AA} (f : a -> b) (df : DFun a b) (dg : DFun b c
     df x' y.
 
 #[local]
-Instance Laws_compose_dfun {a b c : AA} (f : a ~-> b) (df : DFun a b) (dg : DFun b c)
-  : DFun.Laws (compose_dfun f df dg).
+Instance monotone_compose_dfun {a b c : AA} (f : a ~-> b) (df : DFun a b) (dg : DFun b c)
+  : Monotone (compose_dfun f df dg).
 Proof.
-  constructor. unfold Proper, respectful, compose_dfun.
+  unfold Proper, respectful, compose_dfun.
   intros xa' ya' xya' xc yc xyc.
   apply Tick.less_defined_bind.
   - apply dg; [ apply f, xya' | apply xyc ].
@@ -123,6 +143,8 @@ End AAM.
 Arguments Build_AAMorphism a b &.
 Arguments apply {a b}.
 Arguments coapply {a b}.
+
+Infix "~>>" := AAMorphism (at level 90) : type_scope.
 
 #[global] Existing Instance AAM.laws.
 
@@ -183,6 +205,110 @@ Qed.
 
 #[global] Instance PreOrder_LessDefined_AAMorphism (a1 a2 : AA)
   : PreOrder (less_defined (a := AAMorphism a1 a2)) := {}.
+
+Section Cartesian.
+
+Context {a b : AA}.
+
+Definition dfun_proj1 : a ** b -> approx a -> Tick (approx (a ** b)) :=
+  fun xy' x => Tick.ret (x , bottom_of (exact (snd xy'))).
+
+#[local] Instance monotone_dfun_proj1
+  : Proper (equiv ==> less_defined ==> less_defined) dfun_proj1.
+Proof.
+  unfold Proper, respectful, dfun_proj1. intros x' y' xy' fx fy fxfy.
+  apply Tick.less_defined_ret.
+  constructor; cbn; [ apply fxfy | apply Proper_bottom, Proper_exact ].
+  apply xy'.
+Qed.
+
+Definition DFun_proj1 : DFun (a ** b) a :=
+  {| dfun := dfun_proj1 |}.
+
+Lemma FunApprox_proj1 : FunApprox Setoid_proj1 DFun_proj1.
+Proof.
+  unfold FunApprox. intros x' y yx'. constructor; cbn.
+  - apply yx'.
+  - apply bottom_is_less.
+Qed.
+
+Definition AA_proj1 : (a ** b) ~>> a :=
+  {| apply := Setoid_proj1
+  ;  coapply := DFun_proj1
+  ;  laws := FunApprox_proj1
+  |}.
+
+Definition dfun_proj2 : a ** b -> approx b -> Tick (approx (a ** b)) :=
+  fun xy' y => Tick.ret (bottom_of (exact (fst xy')), y).
+
+#[local] Instance monotone_dfun_proj2
+  : Proper (equiv ==> less_defined ==> less_defined) dfun_proj2.
+Proof.
+  unfold Proper, respectful, dfun_proj2. intros x' y' xy' fx fy fxfy.
+  apply Tick.less_defined_ret.
+  constructor; cbn; [ apply Proper_bottom, Proper_exact | apply fxfy ].
+  apply xy'.
+Qed.
+
+Definition DFun_proj2 : DFun (a ** b) b :=
+  {| dfun := dfun_proj2 |}.
+
+Lemma FunApprox_proj2 : FunApprox Setoid_proj2 DFun_proj2.
+Proof.
+  unfold FunApprox. intros x' y yx'. constructor; cbn.
+  - apply bottom_is_less.
+  - apply yx'.
+Qed.
+
+Definition AA_proj2 : (a ** b) ~>> b :=
+  {| apply := Setoid_proj2
+  ;  coapply := DFun_proj2
+  ;  laws := FunApprox_proj2
+  |}.
+
+Context {c : AA}.
+
+Definition dfun_pair (f : a -> approx b -> Tick (approx a)) (g : a -> approx c -> Tick (approx a))
+  : a -> approx b * approx c -> Tick (approx a) :=
+  fun x' yz =>
+    let+ x1 := f x' (fst yz) in
+    let+ x2 := g x' (snd yz) in
+    Tick.ret (lub x1 x2).
+
+#[local] Instance monotone_dfun_pair
+    (f : a -> approx b -> Tick (approx a)) (g : a -> approx c -> Tick (approx a))
+    (Proper_f : Proper (equiv ==> less_defined ==> less_defined) f)
+    (Proper_g : Proper (equiv ==> less_defined ==> less_defined) g)
+  : Proper (equiv ==> less_defined ==> less_defined) (dfun_pair f g).
+Proof.
+  unfold Proper, respectful, dfun_pair. intros x' y' xy' p q pq.
+  apply Tick.less_defined_bind.
+  - apply Proper_f; [ apply xy' | apply pq ].
+  - intros x y xy. apply Tick.less_defined_bind.
+    + apply Proper_g; [ apply xy' | apply pq ].
+    + intros x2 y2 xy2. apply Tick.less_defined_ret.
+      apply Proper_lub; assumption.
+Qed.
+
+Definition DFun_pair (f : DFun a b) (g : DFun a c) : DFun a (b ** c) :=
+  {| dfun := dfun_pair f g |}.
+
+#[local] Instance FunApprox_pair (f : a ~>> b) (g : a ~>> c)
+  : FunApprox (Setoid_pair f g) (DFun_pair (coapply f) (coapply g)).
+Proof.
+  unfold FunApprox.
+  intros x' y yx'. cbn.
+  apply lub_least_upper_bound.
+  - apply f, yx'.
+  - apply g, yx'.
+Qed.
+
+Definition AA_pair (f : a ~>> b) (g : a ~>> c) : a ~>> b ** c :=
+  {| apply := Setoid_pair f g
+  ;  coapply := DFun_pair (coapply f) (coapply g)
+  |}.
+
+End Cartesian.
 
 (* Attempt to define an ApproxAlgebra of functions (exponential object) *)
 
