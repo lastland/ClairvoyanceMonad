@@ -320,8 +320,8 @@ Proof. Admitted.
 #[global] Instance ExactMaximal_HeapA : ExactMaximal HeapA Heap.
 Proof. Admitted.
 
-(*TODO: should this be shallow or check the trees also?*)
-(*TODO: Lub_listA should probably not be in BankersQueue.*)
+(*TODO: This is currently a shallow check but it should
+  also check the trees.*)
 #[global] Instance Lub_HeapA : Lub HeapA :=
   fun hp1 hp2 =>
     MkHeapA (lub_T (Lub_listA) (treesA hp1) (treesA hp2)).
@@ -347,14 +347,7 @@ Qed.
 (*[TreeA], [HeapA], [linkA], [rankA], 
     [rootA], [insTreeA], [insertA], [mergeA], [removeMinTreeA], [findMinA], [deleteMinA]*)
 
-(*Lemma pushA_mon {a} (qA qA' : T (QueueA a)) xA xA'
-  : qA `less_defined` qA' ->
-    xA `less_defined` xA' ->
-    pushA qA xA `less_defined` pushA qA' xA'.
-Proof.
-  intros; unfold pushA. solve_mon.
-  apply mkQueueA_mon; auto.
-Qed.*)
+(*Monotoicity*)
 
 Lemma prod_mon {a b} `{LessDefined a} `{LessDefined b} (x x': a) (y y' : b) :
   x `less_defined` x' ->
@@ -461,7 +454,6 @@ Fixpoint insTreeAuxD (t : TreeA) (outD : listA TreeA) : Tick ((T TreeA) * (T (li
   | _, _ => bottom
   end.
 
-(*TODO: does searching by rank really make sense here*)
 Definition insTreeD (t : T TreeA) (outD : HeapA) : Tick ((T TreeA) * (T HeapA)) :=
   Tick.tick >>
   match t, (treesA outD) with
@@ -536,5 +528,9 @@ Proof.
   destruct (a0 <=? a1) eqn: Ha; subst.
   destruct Hout eqn: EqHout; subst.
   simpl in *.
-  destruct ld_children0 eqn: Hld.
+  inv ld_children0.
+  - unfold exact. unfold Exact_prod.
+    apply prod_mon; unfold Bottom_T; apply LessDefined_Undefined.
+  - admit.
 Admitted.
+
