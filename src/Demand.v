@@ -7,7 +7,7 @@
     a more elaborate representation, as [input -> outputA -> M inputA].  *)
 
 From Coq Require Import Setoid SetoidClass Morphisms Lia Arith.
-From Clairvoyance Require Import Core Approx ApproxM Relations Setoid Tick.
+From Clairvoyance Require Import Core Approx List ApproxM Relations Setoid Tick.
 
 Import Tick.Notations.
 #[local] Open Scope tick_scope.
@@ -25,6 +25,8 @@ Class IsApproxSetoid (a' a : Type) `{Setoid a', IsApproxAlgebra a' a} : Prop :=
        Otherwise, we only have a restricted form of monotonicity. *)
   ; Proper_lub : Proper (less_defined ==> less_defined ==> less_defined) (lub (a := a))
   }.
+
+Notation IsAS := IsApproxSetoid.
 
 Record ApproxAlgebra : Type :=
   { carrier :> Type
@@ -206,7 +208,7 @@ Qed.
 #[global] Instance PreOrder_LessDefined_AAMorphism (a1 a2 : AA)
   : PreOrder (less_defined (a := AAMorphism a1 a2)) := {}.
 
-Section Cartesian.
+Section Monoidal.
 
 Context {a b : AA}.
 
@@ -308,7 +310,178 @@ Definition AA_pair (f : a ~>> b) (g : a ~>> c) : a ~>> b ** c :=
   ;  coapply := DFun_pair (coapply f) (coapply g)
   |}.
 
-End Cartesian.
+End Monoidal.
+
+#[global] Instance Setoid_list {a} {_ : Setoid a} : Setoid (list a).
+Admitted.
+
+#[global] Instance IsAA_listA {a' a} {_ : IsAA a' a} : IsAA (list a') (T (listA a)).
+Admitted.
+
+#[global] Instance IsAS_listA {a' a} {_ : Setoid a'} {_ : IsAA a' a} {_ : IsAS a' a} : IsAS (list a') (T (listA a)).
+Admitted.
+
+Canonical AA_listA (a : AA) : AA :=
+  {| carrier := list a
+  ;  approx := T (listA (approx a))
+  |}.
+
+Definition DF {a b : AA} (x' : a) (y' : b) : Type :=
+  { y | y `is_approx` y' } -> Tick { x | x `is_approx` x' }.
+
+Module DF.
+
+Definition id {a : AA} {x' : a} : DF x' x' := fun x => Tick.ret x.
+
+Definition compose {a b c : AA} {x' : a} {y' : b} {z' : c} (f : DF x' y') (g : DF y' z')
+  : DF x' z' := fun z => let+ y := g z in f y.
+
+End DF.
+
+Definition proj1DF {a b : AA} {xy' : a ** b} : DF xy' (fst xy').
+Admitted.
+
+Definition proj2DF {a b : AA} {xy' : a ** b} : DF xy' (snd xy').
+Admitted.
+
+Definition pairDF {a b c : AA} {x' : a} {y' : b} {z' : c} (f : DF x' y') (g : DF x' z')
+  : DF x' (y', z').
+Admitted.
+
+Definition tickDF {a b : AA} {x' : a} {y' : b} : DF x' y' -> DF x' y' :=
+  fun f y => Tick.tick >> f y.
+
+Definition lam {a b : AA} (x' : a) (y' : b)
+  : (forall (r : AA) (s' : r), DF s' x' -> DF s' y') -> DF x' y' :=
+  fun f => f _ _ DF.id.
+
+Definition lam2 {a1 a2 b : AA} (x1' : a1) (x2' : a2) (y' : b)
+  : (forall (r : AA) (s' : r), DF s' x1' -> DF s' x2' -> DF s' y') -> DF (x1' , x2') y' :=
+  fun f => f _ (x1' , x2') proj1DF proj2DF.
+
+From Coq Require Import List.
+
+Definition unconsOf {r a : AA} {s : r} (xs : list a) : Type :=
+  match xs return Type with
+  | nil => unit
+  | x :: xs => (DF s x * DF s xs)%type
+  end.
+
+Definition unconsD {r a : AA} {s : r} {xs : list a} (xsD : DF s xs) : unconsOf (s := s) xs.
+Admitted.
+
+Definition match_list {r a b : AA} {s : r} {f : list a -> b} {xs : list a} (xsD : DF s xs)
+    (NIL : DF s (f nil))
+    (CONS : forall x ys, DF s x -> DF s ys -> DF s (f (x :: ys)))
+  : DF s (f xs) :=
+  match xs return unconsOf xs -> DF s (f xs) with
+  | nil => fun _ => NIL
+  | x :: xs => fun '(xD, xsD) => CONS x xs xD xsD
+  end (unconsD xsD).
+
+Definition consD {r a : AA} {s : r} {x : a} {xs : list a} (xD : DF s x) (xsD : DF s xs)
+  : DF s (x :: xs).
+Admitted.
+
+Definition bindD {r a b : AA} {s : r} {x : a} {y : b} (xD : DF s x)
+    (k : forall (r2 : AA) (s2 : r2), DF s2 s -> DF s2 x -> DF s2 y)
+  : DF s y :=
+  DF.compose (pairDF xD DF.id) (k (a ** r) (x, s) proj2DF proj1DF).
+
+Fixpoint appendDF {r a : AA} {s : r} {xs ys : list a} : DF s xs -> DF s ys -> DF s (xs ++ ys) :=
+  fun xsD ysD =>
+    tickDF (
+    match_list (f := fun xs => xs ++ ys) xsD
+      (* nil => *) ysD
+      (fun _ _ xD xsD =>
+        bindD (appendDF xsD ysD) (fun _ _ fwd xs_app_ys =>
+        consD (DF.compose fwd xD) xs_app_ys))).
+
+Definition Credits (a : AA) : Type := approx a -> nat.
+
+Definition cost_with {t} {P : t -> Prop} (p : t -> nat) (u : Tick (sig P)) : nat :=
+  p (proj1_sig (Tick.val u)) + Tick.cost u.
+
+Definition solvent {a b : AA} {x' : a} {y' : b} (f : DF x' y') (budget : nat) (p : Credits a) (q : Credits b)
+  : Prop :=
+  forall y, cost_with p (f y) <= budget + q (proj1_sig y).
+
+Definition tensor {a b : AA} (p : Credits a) (q : Credits b) : Credits (a ** b) :=
+  fun xy => p (fst xy) + q (snd xy).
+
+Definition add_pw {a : AA} (p q : Credits a) : Credits a :=
+  fun x => p x + q x.
+
+Infix "+++" := tensor (left associativity, at level 50).
+Infix "+" := add_pw (left associativity, at level 50).
+
+(* p +++ 0  |-  p *)
+Lemma solvent_proj1DF {a b : AA} {xy' : a ** b} (p : Credits a)
+  : solvent (proj1DF (xy' := xy')) 0 (fun xy : approx (a ** b) => p (fst xy)) p.
+Proof.
+Admitted.
+
+(* 0 +++ p  |-  p *)
+Lemma solvent_proj2DF {a b : AA} {xy' : a ** b} (q : Credits b)
+  : solvent (proj2DF (xy' := xy')) 0 (fun xy : approx (a ** b) => q (snd xy)) q.
+Proof.
+Admitted.
+
+(* p1 |- q      p2 |- r
+   --------------------
+   p1 + p2  |-  q +++ r *)
+Lemma solvent_pairDF {a b c : AA} {x' : a} {y' : b} {z' : c} (f : DF x' y') (g : DF x' z')
+    (n m : nat) (p1 p2 : Credits a) (q : Credits b) (r : Credits c)
+  : solvent f n p1 q -> solvent g m p2 r -> solvent (pairDF f g) (n + m) (p1 + p2) (q +++ r).
+Proof.
+Admitted.
+
+Lemma solvent_lam2 {a1 a2 b : AA} (x1' : a1) (x2' : a2) (y' : b)
+  (f : forall (r : AA) (s' : r), DF s' x1' -> DF s' x2' -> DF s' y')
+  (n : nat)
+  (p1 : Credits a1) (p2 : Credits a2) (q : Credits b)
+  : (forall (r : AA) (s' : r) (x1D : DF s' x1') (x2D : DF s' x2') (pr1 pr2 : Credits r),
+      solvent x1D 0 pr1 p1 -> solvent x2D 0 pr2 p2 -> solvent (f r s' x1D x2D) n (pr1 + pr2) q) ->
+   solvent (lam2 x1' x2' y' f) n (p1 +++ p2) q.
+Proof.
+  intros Hf; unfold lam2. apply Hf.
+  - apply (solvent_proj1DF (xy' := (x1', x2'))).
+  - apply (solvent_proj2DF (xy' := (x1', x2'))).
+Qed.
+
+Definition null {a} (xs : list a) : bool :=
+  match xs with
+  | nil => true
+  | _ => false
+  end.
+
+Definition zero {a} : Credits a := fun _ => 0.
+
+Definition listCred {a} (x : Credits a) (xs : Credits (AA_listA a)) : Credits (AA_listA a).
+Admitted.
+
+Lemma solvent_match_list {r a b : AA} {s : r} {f : list a -> b} {xs : list a} (xsD : DF s xs)
+    (NIL : DF s (f nil))
+    (CONS : forall x ys, DF s x -> DF s ys -> DF s (f (x :: ys)))
+    (n : nat)
+    (prNIL prHEAD prTAIL prCONS : Credits r)
+    (pHEAD : Credits a) (pTAIL : Credits (AA_listA a))
+    (q : Credits b)
+    (solvent_NIL : solvent NIL n prNIL q)
+    (solvent_xsD : solvent xsD 0 (if null xs then zero else prHEAD + prTAIL) (listCred pHEAD pTAIL))
+    (solvent_CONS : forall x ys (xD : DF s x) (ysD : DF s ys),
+      solvent xD 0 prHEAD pHEAD ->
+      solvent ysD 0 prTAIL pTAIL ->
+      solvent (CONS _ _ xD ysD) n prCONS q)
+  : solvent (match_list (f := f) xsD NIL CONS) n ((if null xs then prNIL else prCONS)) q.
+Proof.
+  destruct xs; cbn.
+  - apply solvent_NIL.
+  - destruct (unconsD _) as [? ?] eqn:W.
+    apply solvent_CONS.
+    + (* TODO: I need another predicate for variables to assert that they actually cost 0
+         to be able to split them *)
+Admitted.
 
 (* Attempt to define an ApproxAlgebra of functions (exponential object) *)
 

@@ -302,6 +302,8 @@ Class IsApproxAlgebra (t tA : Type) : Type :=
 
 Set Typeclasses Strict Resolution.
 
+Notation IsAA := IsApproxAlgebra (only parsing).
+
 (** * Instances for standard types *)
 
 #[global] Instance Exact_prod {a aA b bA} `{Exact a aA, Exact b bA} : Exact (a * b) (aA * bA) :=
@@ -336,8 +338,6 @@ Qed.
 Proof.
   intros x y xy. constructor; apply bottom_is_least, xy.
 Qed.
-
-Notation IsAA := IsApproxAlgebra (only parsing).
 
 #[global] Instance IsAA_prod {a' a b' b} {_ : IsAA a' a} {_ : IsAA b' b} : IsAA (a' * b') (a * b)
   := {}.
