@@ -19,7 +19,7 @@ From Equations Require Import Equations.
 
 From Coq Require Import Arith List Lia Setoid Morphisms Orders Program.
 Import ListNotations.
-From Clairvoyance Require Import Core Approx ApproxM List Misc BankersQueue Tick.
+From Clairvoyance Require Import Core Approx ApproxM List Misc BankersQueue Tick Demand.
 
 (* Pure implementation *)
 Definition A := nat.
@@ -253,11 +253,11 @@ Definition deleteMinA (hp : HeapA) : M (HeapA) :=
 #[local] Existing Instance Exact_T | 100.
 #[local] Existing Instance ExactMaximal_T | 100.
 
-Record less_defined_TreeA (t1 t2 : TreeA) : Prop :=
-  { ld_children : match t1, t2 with
-  | (NodeA r1 v1 c1), (NodeA r2 v2 c2) =>
-    less_defined c1 c2
-  end }.
+Inductive less_defined_TreeA : LessDefined TreeA :=
+  | LessDefined_NodeA (r : nat)
+    (v : A) (c1 c2 : T (listA TreeA)) : 
+    c1 `less_defined` c2 ->
+    less_defined_TreeA (NodeA r v c1) (NodeA r v c2).
 
 #[local] Instance LessDefined_TreeA : LessDefined TreeA :=
   less_defined_TreeA.
@@ -375,55 +375,21 @@ Lemma linkA_mon (t1A t1A' t2A t2A' : T TreeA)
   apply bind_mon. 
   (*Problem: bind_mon only gives us one assumption, need several*)
   - apply force_mon. assumption. 
-  - intros. apply bind_mon.
-    + apply force_mon. assumption.
-    + intros; destruct x0 eqn: Hx0, x'0 eqn: Hx'0, x1 eqn: Hx1, x'1 eqn: Hx'1;
-      destruct (a <=? a1) eqn: Haa1, (a0 <=? a2) eqn: Ha0a2; apply ret_mon;
-      constructor; constructor; constructor.
-      * admit.
-      * inversion H4. apply ld_children0.
-      * admit. 
-      * inversion H2; admit.
-      * admit.
-      * inversion H. 
+  - intros. admit.
 Admitted.
 
 Import Tick.Notations.
 
 (*Demand functions*)
 
-Fixpoint tree_Eq (t1 t2 : TreeA) : bool :=
-  match t1, t2 with
-  | NodeA r1 v1 c1, NodeA r2 v2 c2 =>
-    if (andb (r1 =? r2) (v1 =? v2))
-      then let fix matchListA l1 l2 :=
-        match l1, l2 with
-        | NilA, NilA => true
-        | ConsA Undefined Undefined, ConsA Undefined Undefined => true
-        | ConsA Undefined (Thunk ts1), ConsA t2 (Thunk ts2) => matchListA ts1 ts2
-        | ConsA (Thunk t1) Undefined, ConsA (Thunk t2) Undefined => tree_Eq t1 t2
-        | ConsA (Thunk t1) (Thunk ts1), ConsA (Thunk t2) (Thunk ts2) =>
-          andb (tree_Eq t1 t2) (matchListA ts1 ts2)
-        | _, _ => false
-        end
-      in match c1, c2 with
-      | Undefined, Undefined => true
-      | Thunk c1', Thunk c2' => matchListA c1' c2'
-      | _, _ => false
-      end
-    else false
-  end.
-
 Definition linkD (t1 t2 : Tree) (outD : TreeA) : Tick ((T TreeA) * (T TreeA)) :=
   Tick.tick >>
-  match outD with
-  | NodeA r1 v1 (Thunk (ConsA (Thunk (NodeA r2 v2 c2)) cs1)) => 
-    let tD1 := NodeA r1 v1 cs1 in
-    let tD2 := NodeA r2 v2 c2 in
-    if (tree_Eq (treeConvert t1) tD1)
-      then Tick.ret (Thunk tD1, Thunk tD2)
-      else Tick.ret (Thunk tD2, Thunk tD1)
-  | _ => bottom
+  match t1, t2, outD with
+  | Node r1 v1 c1, Node r2 v2 c2, NodeA r1A v1A (Thunk (ConsA (Thunk (NodeA r2A v2A c2A)) cs1)) => 
+    if (v1 <=? v2)
+      then Tick.ret (Thunk (NodeA r1 v1 cs1), Thunk (NodeA r2 v2 c2A))
+      else Tick.ret (Thunk (NodeA r1 v1 c2A), Thunk (NodeA r2 v2 cs1))
+  | _,_,_ => bottom
   end.
 
 Definition rankD (t : Tree) : Tick (T TreeA) :=
@@ -438,23 +404,35 @@ Definition rootD (t : Tree) : Tick (T TreeA) :=
   | Node r v c => Tick.ret (Thunk (NodeA r v Undefined))
   end.
 
-Fixpoint insTreeAuxD (t : TreeA) (outD : listA TreeA) : Tick ((T TreeA) * (T (listA TreeA))) :=
-  match t, outD with 
-  | NodeA r' v' c', ConsA (Thunk (NodeA r0 v0 c0)) trs' => 
-    if (r0 =? r')
-    then Tick.ret (Thunk t, trs')
-    else match trs' with
-      | Undefined => bottom
-      | Thunk trs'' =>
-        match (insTreeAuxD t trs'') with
-        | Tick.MkTick _ (_, recTrs) =>
-          Tick.ret (Thunk t, Thunk (ConsA (Thunk (NodeA r0 v0 c0)) recTrs))
+(*(*Assumes t has rank <= the rank of the first element of ts (if any).*)
+Fixpoint insTreeAux (t : Tree) (ts : list Tree) : list Tree :=
+  match ts with
+  | [] => [t]
+  | t' :: ts' => if rank t <? rank t'
+    then t :: ts
+    else insTreeAux (link t t') ts' (*t and t' should have the same rank*)
+  end.*)
+
+Fixpoint insTreeAuxD (t : Tree) (trs : list Tree) (outD : listA TreeA) 
+: Tick ((T TreeA) * (T (listA TreeA))) :=
+  match t, trs, outD with 
+  | Node r v c, [], ConsA (Thunk (NodeA rOut vOut cOut)) (Thunk NilA) =>
+    Tick.ret (Thunk (NodeA r v cOut), Thunk NilA)
+  | Node r v c, x :: xs, ConsA (Thunk (NodeA rOut vOut cOut)) (Thunk trsOut) => 
+    if (r <=? (rank x))
+    then Tick.ret (Thunk (NodeA r v cOut), (Thunk trsOut))
+    else 
+      match (insTreeAuxD (link t x) xs outD) with
+      | Tick.MkTick _ (t', recTrs) =>
+        let+ t'' := thunkD (linkD t x) t' in
+        match t'' with
+          | (t1, t2) => Tick.ret (t1, Thunk (ConsA t2 recTrs))
         end
       end
-  | _, _ => bottom
+  | _, _, _ => bottom
   end.
 
-Definition insTreeD (t : T TreeA) (outD : HeapA) : Tick ((T TreeA) * (T HeapA)) :=
+(*Definition insTreeD (t : T TreeA) (outD : HeapA) : Tick ((T TreeA) * (T HeapA)) :=
   Tick.tick >>
   match t, (treesA outD) with
   | (Thunk t), (Thunk trs) => 
@@ -464,7 +442,7 @@ Definition insTreeD (t : T TreeA) (outD : HeapA) : Tick ((T TreeA) * (T HeapA)) 
   end.
 
 Definition insertD (x : A) (outD : HeapA) :=
-  insTreeD (Thunk (NodeA 0 x (Thunk (NilA)))) outD.
+  insTreeD (Thunk (NodeA 0 x (Thunk (NilA)))) outD.*)
 
 Fixpoint mergeAuxD (trs1 trs2 : listA TreeA ) (outD : listA TreeA)
   : Tick ((T (listA TreeA)) * (T (listA TreeA))) :=
@@ -517,20 +495,72 @@ Definition deleteMinD (hp : Heap) (outD : HeapA) : Tick HeapA :=
   Tick.tick >>
   Tick.ret (MkHeapA (Thunk (treeListConvert (trees hp)))). (* deleteMin must traverse the whole heap. *)
 
+Ltac invert_less_defined := match goal with
+| H0: NodeA _ _ _ `less_defined` _ |- _ => inv H0
+| H0: ?t `less_defined` _ |- context [match ?t with _ => _ end]
+  => inv H0
+end.
+
 Lemma linkD_approx (t1 t2 : Tree) (outD : TreeA)
-  : outD `is_approx` link t1 t2 -> Tick.val (linkD t1 t2 outD) `is_approx` (t1, t2).
+  : outD `is_approx` link t1 t2 -> 
+  Tick.val (linkD t1 t2 outD) `is_approx` (t1, t2).
 Proof.
   unfold link, linkD.
   intros Hout. 
   destruct outD eqn: HoutD; subst.
   destruct t1 eqn: Ht1; subst.
   destruct t2 eqn: Ht2; subst.
-  destruct (a0 <=? a1) eqn: Ha; subst.
-  destruct Hout eqn: EqHout; subst.
-  simpl in *.
-  inv ld_children0.
-  - unfold exact. unfold Exact_prod.
-    apply prod_mon; unfold Bottom_T; apply LessDefined_Undefined.
-  - admit.
-Admitted.
+  destruct (a0 <=? a1) eqn: Ha; subst;
+  inv Hout; repeat invert_less_defined; solve_approx.
+Qed.
 
+(*Fixpoint insTreeAuxD (t : TreeA) (outD : listA TreeA) 
+: Tick ((T TreeA) * (T (listA TreeA))) :=
+  match t, outD with 
+  | NodeA r' v' c', ConsA (Thunk (NodeA r0 v0 c0)) trs' => 
+    if (r0 =? r')
+    then Tick.ret (Thunk t, trs')
+    else match trs' with
+      | Undefined => bottom
+      | Thunk trs'' =>
+        match (insTreeAuxD t trs'') with
+        | Tick.MkTick _ (_, recTrs) =>
+          Tick.ret (Thunk t, Thunk (ConsA (Thunk (NodeA r0 v0 c0)) recTrs))
+        end
+      end
+  | _, _ => bottom
+  end.*)
+
+(*Lemma insTreeAuxD_approx (t : Tree) (ts : list Tree) (outD : listA TreeA)
+  : outD `is_approx` insTreeAux t ts -> 
+  Tick.val (insTreeAuxD t ts outD) `is_approx` (t, ts).
+Proof.
+  revert t outD.
+  induction ts; simpl; intros t outD Hout.
+  - inv Hout. destruct t eqn: Ht. simpl.
+    repeat invert_less_defined.
+    + solve_approx.
+    + rewrite Nat.eqb_refl. solve_approx.
+  - destruct (rank t <? rank a) eqn : Hrank.
+    + inv Hout. simpl. destruct t eqn: Ht. 
+      repeat invert_less_defined.
+      * solve_approx.
+      * rewrite Nat.eqb_refl. solve_approx.
+      * rewrite Nat.eqb_refl. solve_approx.
+    + apply IHts in Hout. 
+      inv Hout. simpl in *.
+      inv fst_rel.
+      * admit.
+      * apply linkD_approx in H1. 
+        destruct t eqn: Ht.
+        destruct outD eqn: HoutD.
+      * solve_approx.
+      * destruct x1 eqn: Hx1.
+        -- destruct x eqn: Hx. 
+  intros Hout. 
+  destruct outD eqn: HoutD; subst.
+  destruct t1 eqn: Ht1; subst.
+  destruct t2 eqn: Ht2; subst.
+  destruct (a0 <=? a1) eqn: Ha; subst;
+  inv Hout; repeat invert_less_defined; solve_approx.
+Qed.*)
