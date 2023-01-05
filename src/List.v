@@ -28,6 +28,13 @@ Definition p {a} (n : nat) (xs ys : list a) : list a :=
   let zs := append xs ys in
   take n zs.
 
+Fixpoint drop {a} (n : nat) (xs : list a) : list a :=
+  match n, xs with
+  | O, _ => xs
+  | S _, nil => nil
+  | S n1, x :: xs1 => drop n1 xs1
+  end.
+
 (* ---------------------- Section 4: Translation ---------------------- *)
 
 (* Definitions needed for the by-hand translation of the examples from Section 2 *)
@@ -766,3 +773,32 @@ Proof.
 Qed.
 
 End ExampleP.
+
+(* Partial function: we assume that both arguments approximate the same list *)
+Fixpoint lub_listA {a} (xs ys : listA a) : listA a :=
+  match xs, ys with
+  | NilA, NilA => NilA
+  | ConsA x xs, ConsA y ys => ConsA (lub_T (fun r _ => r) x y) (lub_T lub_listA xs ys)
+  | _, _ => NilA  (* silly case *)
+  end.
+
+#[global] Instance Lub_listA {a} : Lub (listA a) := lub_listA.
+
+#[global] Instance LubLaw_listA {a} : LubLaw (listA a).
+Proof.
+  constructor.
+  - intros x y z Hx; revert y; induction Hx; intros ?; inversion 1; subst; cbn; constructor; auto.
+    1: inversion H; subst; inversion H4; subst; try constructor; auto.
+    1: inversion H; subst; inversion H5; subst; try constructor; auto.
+    inversion H6; constructor; auto.
+  - intros x y [z [ Hx Hy] ]; revert y Hy; induction Hx; intros ?; inversion 1; subst; cbn;
+      constructor; auto.
+    1: inversion H; inversion H3; constructor; reflexivity + auto.
+    1: inversion H; inversion H4; constructor; reflexivity.
+    inversion H5; subst; constructor; [ reflexivity | auto ].
+  - intros x y [z [Hx Hy] ]; revert x Hx; induction Hy; intros ?; inversion 1; subst; cbn;
+      constructor; auto.
+    1: inversion H; inversion H3; subst; invert_approx; constructor; reflexivity + auto; inversion H7; invert_approx; reflexivity.
+    1: inversion H; inversion H4; subst; invert_approx; constructor; reflexivity + auto; inversion H8; invert_approx; reflexivity.
+    inversion H5; subst; constructor; [ reflexivity | auto ].
+Qed.

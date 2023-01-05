@@ -6,7 +6,8 @@
     we need a CCC. The definition of exponential objects necessitates
     a more elaborate representation, as [input -> outputA -> M inputA].  *)
 
-From Coq Require Import Setoid SetoidClass Morphisms Lia Arith.
+From Coq Require Import Setoid SetoidClass Morphisms Lia Arith List.
+From Equations Require Import Equations.
 From Clairvoyance Require Import Core Approx List ApproxM Relations Setoid Tick.
 
 Import Tick.Notations.
@@ -315,16 +316,70 @@ End Monoidal.
 #[global] Instance Setoid_list {a} {_ : Setoid a} : Setoid (list a).
 Admitted.
 
-#[global] Instance IsAA_listA {a' a} {_ : IsAA a' a} : IsAA (list a') (T (listA a)).
+(* Partial function: we assume that both arguments approximate the same list *)
+Fixpoint lub_listA {a} {_ : Lub a} (xs ys : listA a) : listA a :=
+  match xs, ys with
+  | NilA, NilA => NilA
+  | ConsA x xs, ConsA y ys => ConsA (lub_T lub x y) (lub_T lub_listA xs ys)
+  | _, _ => NilA  (* silly case *)
+  end.
+
+#[global] Instance Lub_listA {a} {_ : Lub a} : Lub (listA a) := lub_listA.
+
+#[global] Instance LubLaw_listA {a} `{LubLaw a} : LubLaw (listA a).
 Admitted.
 
+#[global] Instance IsAA_listA {a' a} {_ : IsAA a' a} : IsAA (list a') (T (listA a)).
+Proof.
+  econstructor; try typeclasses eauto.
+  eapply @LubLaw_T.
+  - eapply @LubLaw_listA.
+    typeclasses eauto.
+  - typeclasses eauto.
+Defined.
+
+Parameter TODO : forall P : Prop, P.
+
 #[global] Instance IsAS_listA {a' a} {_ : Setoid a'} {_ : IsAA a' a} {_ : IsAS a' a} : IsAS (list a') (T (listA a)).
-Admitted.
+Proof.
+  constructor.
+  - apply TODO.
+  - apply TODO.
+Qed.
 
 Canonical AA_listA (a : AA) : AA :=
   {| carrier := list a
   ;  approx := T (listA (approx a))
   |}.
+
+(* Values that are always total (no partial approximations). *)
+Definition eq_Setoid (a : Type) : Setoid a :=
+  {| equiv := eq |}.
+
+Definition exact_IsAA (a : Type) : IsAA a a.
+Proof.
+  refine
+  {| AO_Exact := Exact_id
+  ;  AO_LessDefined := eq
+  ;  AO_Lub := Lub_id
+  ;  AO_BottomOf := fun x => x
+  |}.
+  apply TODO.
+  apply TODO.
+Defined.
+
+Definition exact_IsAS (a : Type) : @IsAS a a (eq_Setoid a) (exact_IsAA a).
+Proof. apply TODO. Qed.
+
+Definition exact_AA (a : Type) : AA :=
+  {| carrier := a
+  ;  approx := a
+  ;  AA_Setoid := eq_Setoid a
+  ;  AA_IsAA := exact_IsAA a
+  ;  AA_IsAS := exact_IsAS a
+  |}.
+
+Canonical AA_nat : AA := exact_AA nat.
 
 Definition DF {a b : AA} (x' : a) (y' : b) : Type :=
   { y | y `is_approx` y' } -> Tick { x | x `is_approx` x' }.
@@ -351,6 +406,116 @@ Admitted.
 Definition tickDF {a b : AA} {x' : a} {y' : b} : DF x' y' -> DF x' y' :=
   fun f y => Tick.tick >> f y.
 
+Definition nilD {a b : AA} {x : a} : DF x (nil (A := b)).
+Admitted.
+
+Definition consD {r a : AA} {s : r} {x : a} {xs : list a} (xD : DF s x) (xsD : DF s xs)
+  : DF s (x :: xs).
+Admitted.
+
+Definition bindD {r a b : AA} {s : r} {x : a} {y : b} (xD : DF s x)
+    (k : DF (s, x) y)
+  : DF s y :=
+  DF.compose (pairDF DF.id xD) k.
+
+Definition force_nil {a b c : AA} {g' : b} {y' : c} (f : DF g' y') : DF (g', nil (A := a)) y' :=
+  fun y =>
+    let+ (exist _ g gle) := f y in
+    Tick.ret (exist  _ (g, Thunk NilA)
+      (prod_rel _ _ (_, _) (_, _)
+                gle
+                (LessDefined_Thunk _ _ less_defined_list_NilA))).
+
+Definition force_cons_lemma {a b : AA} {g' : b} {x' : a} {xs' : list a} {g x xs}
+  : g `less_defined` exact g' ->
+    x `less_defined` exact x' ->
+    xs `less_defined` exact xs' ->
+    (g, Thunk (ConsA (Thunk x) xs)) `less_defined` exact (g', x' :: xs').
+Proof.
+  intros; constructor; cbn; auto.
+  constructor. simp exact.
+  repeat constructor; assumption.
+Qed.
+
+Definition force_cons {a b c : AA} {g' : b} {x' : a} {xs' : list a} {y' : c}
+    (f : DF (g', x', xs') y')
+  : DF (g', cons x' xs') y' :=
+  fun y =>
+    let+ (exist _ (g, x, xs) (prod_rel _ _ _ _ (prod_rel _ _ _ _ gle xle) xsle)) := f y in
+    Tick.ret (exist _ (g, Thunk (ConsA (Thunk x) xs))
+      (force_cons_lemma gle xle xsle)).
+
+Definition match_list {a b c : AA} {g : b} {f : list a -> c} {xs : list a}
+    (NIL : DF g (f nil))
+    (CONS : forall x xs', DF (g, x, xs') (f (cons x xs')))
+  : DF (g, xs) (f xs) :=
+  match xs with
+  | nil => force_nil NIL
+  | cons x xs' => force_cons (CONS x xs')
+  end.
+
+Definition swap {a b : AA} {x : a} {y : b} : DF (x, y) (y, x).
+Admitted.
+
+Class Project {a b : AA} (x : a) (y : b) : Type :=
+  project : DF x y.
+
+Arguments project : clear implicits.
+Arguments project {a b x} y {_}.
+
+#[global]
+Instance Project_here {a b : AA} (x : a) (y : b) : Project (x, y) y := proj2DF.
+
+#[global]
+Instance Project_here1 {a : AA} (x : a) : Project x x := DF.id.
+
+#[global]
+Instance Project_there {a b c : AA} (x : a) (y : b) (z : c) `{!Project x z}
+  : Project (x, y) z := DF.compose proj1DF (project z).
+
+Class Tuple {a b : AA} (x : a) (y : b) : Type :=
+  tuple : DF x y.
+Arguments tuple : clear implicits.
+Arguments tuple {a b x} y {_}.
+
+#[global]
+Instance Tuple_pair {a b c : AA} (x : a) (y : b) (z : c) `{!Tuple x y, !Tuple x z}
+  : Tuple x (y, z) := pairDF (tuple y) (tuple z).
+
+#[global]
+Instance Tuple_single {a b : AA} (x : a) (y : b) `{!Project x y}
+  : Tuple x y := project y.
+
+Fixpoint appendDF {a : AA} (xs ys : list a) : DF (xs, ys) (xs ++ ys) :=
+  DF.compose swap (match_list (f := fun xs => xs ++ ys)
+    (* nil => ys *)
+    DF.id
+    (* cons x xs' => x :: xs ++ ys *)
+    (fun x xs' => consD (project x) (DF.compose (tuple _) (appendDF xs' ys)))).
+
+Definition predDF {a : AA} {g : a} {n : nat} : DF (g, S n) (g, n).
+Admitted.
+
+Definition match_nat {b c : AA} {g : b} {f : nat -> c} {n : nat}
+    (ZERO : DF g (f O))
+    (SUCC : forall n', DF (g, n') (f (S n')))
+  : DF (g, n) (f n) :=
+  match n with
+  | O => DF.compose (proj1DF (xy' := (_, _))) ZERO
+  | S n' => DF.compose predDF (SUCC n')
+  end.
+
+Fixpoint dropDF {a : AA} (n : nat) (xs : list a) : DF (n, xs) (drop n xs) :=
+  DF.compose swap (match_nat (f := fun n => drop n xs)
+    (* 0 => xs *)
+    DF.id
+    (* S n => ... *)
+    (fun n => DF.compose swap (match_list (f := fun xs => drop (S n) xs)
+      nilD
+      (fun x xs => DF.compose (tuple _) (dropDF n xs))
+    ))).
+
+(*
 Definition lam {a b : AA} (x' : a) (y' : b)
   : (forall (r : AA) (s' : r), DF s' x' -> DF s' y') -> DF x' y' :=
   fun f => f _ _ DF.id.
@@ -358,8 +523,6 @@ Definition lam {a b : AA} (x' : a) (y' : b)
 Definition lam2 {a1 a2 b : AA} (x1' : a1) (x2' : a2) (y' : b)
   : (forall (r : AA) (s' : r), DF s' x1' -> DF s' x2' -> DF s' y') -> DF (x1' , x2') y' :=
   fun f => f _ (x1' , x2') proj1DF proj2DF.
-
-From Coq Require Import List.
 
 Definition unconsOf {r a : AA} {s : r} (xs : list a) : Type :=
   match xs return Type with
@@ -378,24 +541,6 @@ Definition match_list {r a b : AA} {s : r} {f : list a -> b} {xs : list a} (xsD 
   | nil => fun _ => NIL
   | x :: xs => fun '(xD, xsD) => CONS x xs xD xsD
   end (unconsD xsD).
-
-Definition consD {r a : AA} {s : r} {x : a} {xs : list a} (xD : DF s x) (xsD : DF s xs)
-  : DF s (x :: xs).
-Admitted.
-
-Definition bindD {r a b : AA} {s : r} {x : a} {y : b} (xD : DF s x)
-    (k : forall (r2 : AA) (s2 : r2), DF s2 s -> DF s2 x -> DF s2 y)
-  : DF s y :=
-  DF.compose (pairDF xD DF.id) (k (a ** r) (x, s) proj2DF proj1DF).
-
-Fixpoint appendDF {r a : AA} {s : r} {xs ys : list a} : DF s xs -> DF s ys -> DF s (xs ++ ys) :=
-  fun xsD ysD =>
-    tickDF (
-    match_list (f := fun xs => xs ++ ys) xsD
-      (* nil => *) ysD
-      (fun _ _ xD xsD =>
-        bindD (appendDF xsD ysD) (fun _ _ fwd xs_app_ys =>
-        consD (DF.compose fwd xD) xs_app_ys))).
 
 Definition Credits (a : AA) : Type := approx a -> nat.
 
@@ -522,6 +667,7 @@ Definition null {a} (xs : list a) : bool :=
   end.
 
 Definition zero {a} : Credits a := fun _ => 0.
+*)
 
 (*
 Definition listCred {a} (x : Credits a) (xs : Credits (AA_listA a)) : Credits (AA_listA a).

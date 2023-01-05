@@ -1,6 +1,9 @@
 From Coq Require Import Morphisms Relations.
 
-Record pair_rel {a1 b1 a2 b2} (r1 : a1 -> b1 -> Prop) (r2 : a2 -> b2 -> Prop) (xs : a1 * a2) (ys : b1 * b2) : Prop :=
+Set Implicit Arguments.
+
+Record pair_rel {a1 b1 a2 b2} (r1 : a1 -> b1 -> Prop) (r2 : a2 -> b2 -> Prop) (xs : a1 * a2) (ys : b1 * b2)
+  : Prop := prod_rel
   { fst_rel : r1 (fst xs) (fst ys)
   ; snd_rel : r2 (snd xs) (snd ys)
   }.
