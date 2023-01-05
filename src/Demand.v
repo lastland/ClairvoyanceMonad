@@ -10,6 +10,8 @@ From Coq Require Import Setoid SetoidClass Morphisms Lia Arith List.
 From Equations Require Import Equations.
 From Clairvoyance Require Import Core Approx List ApproxM Relations Setoid Tick.
 
+Import ListNotations.
+
 Import Tick.Notations.
 #[local] Open Scope tick_scope.
 
@@ -338,7 +340,7 @@ Proof.
   - typeclasses eauto.
 Defined.
 
-Parameter TODO : forall P : Prop, P.
+Parameter TODO : forall {P : Prop}, P.
 
 #[global] Instance IsAS_listA {a' a} {_ : Setoid a'} {_ : IsAA a' a} {_ : IsAS a' a} : IsAS (list a') (T (listA a)).
 Proof.
@@ -381,8 +383,18 @@ Definition exact_AA (a : Type) : AA :=
 
 Canonical AA_nat : AA := exact_AA nat.
 
+(* Demand functions *)
 Definition DF {a b : AA} (x' : a) (y' : b) : Type :=
   { y | y `is_approx` y' } -> Tick { x | x `is_approx` x' }.
+
+(* DF is only the backwards direction.
+It's a category but its objects are terms rather than types.
+
+We can pair it with a forward function to construct
+a category whose objects are types:
+
+a ~> b = { f : a -> b | forall x, DF x (f x) }
+*)
 
 Module DF.
 
@@ -391,13 +403,32 @@ Definition id {a : AA} {x' : a} : DF x' x' := fun x => Tick.ret x.
 Definition compose {a b c : AA} {x' : a} {y' : b} {z' : c} (f : DF x' y') (g : DF y' z')
   : DF x' z' := fun z => let+ y := g z in f y.
 
+Module Notations.
+
+Declare Scope df_scope.
+Delimit Scope df_scope with df.
+Bind Scope df_scope with DF.
+
+Infix ">>>" := compose (left associativity, at level 40) : df_scope.
+
+End Notations.
+
 End DF.
+
+Import DF.Notations.
 
 Definition proj1DF {a b : AA} {xy' : a ** b} : DF xy' (fst xy').
 Admitted.
 
 Definition proj2DF {a b : AA} {xy' : a ** b} : DF xy' (snd xy').
 Admitted.
+
+Definition proj1DF' {a b : AA} {x' : a} {y' : b} : DF (x', y') x'.
+Admitted.
+
+Definition proj2DF' {a b : AA} {x' : a} {y' : b} : DF (x', y') y'.
+Admitted.
+
 
 Definition pairDF {a b c : AA} {x' : a} {y' : b} {z' : c} (f : DF x' y') (g : DF x' z')
   : DF x' (y', z').
@@ -486,12 +517,19 @@ Instance Tuple_pair {a b c : AA} (x : a) (y : b) (z : c) `{!Tuple x y, !Tuple x 
 Instance Tuple_single {a b : AA} (x : a) (y : b) `{!Project x y}
   : Tuple x y := project y.
 
+Fixpoint append {a} (xs ys : list a) : list a :=
+  match xs with
+  | nil => ys
+  | cons x xs1 => let zs := append xs1 ys in x :: zs
+  end.
+
 Fixpoint appendDF {a : AA} (xs ys : list a) : DF (xs, ys) (xs ++ ys) :=
+  tickDF (
   DF.compose swap (match_list (f := fun xs => xs ++ ys)
     (* nil => ys *)
     DF.id
     (* cons x xs' => x :: xs ++ ys *)
-    (fun x xs' => consD (project x) (DF.compose (tuple _) (appendDF xs' ys)))).
+    (fun x xs' => consD (project x) (DF.compose (tuple _) (appendDF xs' ys))))).
 
 Definition predDF {a : AA} {g : a} {n : nat} : DF (g, S n) (g, n).
 Admitted.
@@ -501,19 +539,189 @@ Definition match_nat {b c : AA} {g : b} {f : nat -> c} {n : nat}
     (SUCC : forall n', DF (g, n') (f (S n')))
   : DF (g, n) (f n) :=
   match n with
-  | O => DF.compose (proj1DF (xy' := (_, _))) ZERO
-  | S n' => DF.compose predDF (SUCC n')
+  | O => proj1DF' >>> ZERO
+  | S n' => predDF >>> SUCC n'
   end.
 
 Fixpoint dropDF {a : AA} (n : nat) (xs : list a) : DF (n, xs) (drop n xs) :=
-  DF.compose swap (match_nat (f := fun n => drop n xs)
+  tickDF (
+  swap >>> match_nat (f := fun n => drop n xs)
     (* 0 => xs *)
     DF.id
     (* S n => ... *)
-    (fun n => DF.compose swap (match_list (f := fun xs => drop (S n) xs)
+    (fun n => swap >>> match_list (f := fun xs => drop (S n) xs)
       nilD
-      (fun x xs => DF.compose (tuple _) (dropDF n xs))
-    ))).
+      (fun x xs => tuple _ >>> dropDF n xs)
+    ))%df.
+
+(* An account stores credits in a data structure.
+
+   Typically, a value [p : account x] associates
+   credits to each constructor of [x], which may be thought of
+   as the cost of forcing the thunk that produces that
+   constructor.
+
+   [credits p x'], given an account [p] and a demand [x']
+   (an approximation of [x]), sums the credits of constructors
+   in [x'] (a subset of those of [x]).
+
+TODO: should account encode data structure invariants too? Or is it better to track them separately?
+    *)
+Class Account (a : AA) : Type :=
+  { account : a -> Type
+  ; credits : forall {x : a}, account x -> approx a -> nat
+  }.
+(* Morally, the approximation should be less than x,
+   but we don't need a proof as an argument because
+   we can just return 0 in the bad cases. *)
+
+Declare Scope account_scope.
+Bind Scope account_scope with account.
+
+(* We store one [nat] for each constructor, including [nil].
+   For simplicity, we do not store credits in [a];
+   we could.
+ *)
+Fixpoint account_list {a : AA} (xs : list a) : Type :=
+  match xs with
+  | [] => nat
+  | x :: xs => nat * account_list xs
+  end.
+
+(* Sum of the credits used by an approximation of a list [xs]. *)
+Fixpoint credits_list {a : AA} {xs : list a} (cs : account_list xs) (xs' : approx (AA_listA a)) : nat :=
+  match xs, cs, xs' with
+  | _, _, Undefined => 0
+  | [], c, Thunk NilA => c
+  | x :: xs, (c, cs), Thunk (ConsA x' xs') => c + credits_list cs xs'
+  | _, _, _ => 0
+  end.
+
+#[global]
+Instance Account_list {a : AA} : Account (AA_listA a) :=
+  {| account := account_list
+  ;  credits := @credits_list a
+  |}.
+
+#[global]
+Instance Account_nat : Account AA_nat :=
+  {| account := fun _ => unit
+  ;  credits := fun _ _ _  => 0
+  |}.
+
+Definition zero {n : nat} : account n := tt.
+
+#[global]
+Instance Account_pair {a b : AA} `{Account a, Account b} : Account (a ** b) :=
+  {| account := fun xy => (account (fst xy) * account (snd xy))%type
+  ;  credits := fun xy cd uv => credits (fst cd) (fst uv) + credits (snd cd) (snd uv)
+  |}.
+
+Definition cost_with {t} {P : t -> Prop} (p : t -> nat) (u : Tick (sig P)) : nat :=
+  p (proj1_sig (Tick.val u)) + Tick.cost u.
+
+Definition is_pure {a b : AA} {x' : a} {y' : b} (f : DF x' y') : Prop :=
+  forall y, Tick.cost (f y) = 0.
+
+(* f : DF x y = { y' : b' | ... }  -> Tick { x' : a' | ... }
+
+     p : a' -> nat
+     q : b' -> nat
+
+    has_cost f p q = forall y', cost (f y') + p (value (f y')) <= q y'
+ *)
+
+Definition has_cost {a b : AA} `{Account a, Account b} {x' : a} {y' : b} (f : DF x' y') (p : account x') (q : account y')
+  : Prop :=
+  forall y, cost_with (credits p) (f y) <= credits q (proj1_sig y).
+
+Definition map_account_head (f : nat -> nat) {a : AA} {xs : list a} (cs : account xs)
+  : account xs :=
+  match xs, cs with
+  | [], c => f c
+  | x :: xs, (c, cs) => (f c, cs)
+  end.
+
+Fixpoint append_account {a : AA}
+    {xs : list a} (cs : account xs)
+    {ys : list a} (ds : account ys)
+  : account (xs ++ ys) :=
+  match xs, cs, ys, ds with
+  | [], c, _, _ => map_account_head S ds
+  | x :: xs, (c, cs), ys, ds => (c, append_account cs ds)
+  end.
+
+Infix "++" := append_account : account_scope.
+
+Fixpoint map_account (f : nat -> nat) {a : AA} {xs : list a} (cs : account xs)
+  : account xs :=
+  match xs, cs with
+  | [], c => f c
+  | x :: xs, (c, cs) => (f c, map_account f cs)
+  end.
+
+Theorem append_cost {a : AA} {xs ys : list a} (cs : account xs) (ds : account ys)
+  : has_cost (appendDF xs ys)
+             (cs, ds)
+             (map_account S cs ++ ds).
+Proof.
+Admitted.
+
+Fixpoint drop_account_ (acc : nat) {a : AA} (n : nat) {xs : list a} (cs : account xs)
+  : account (drop n xs) :=
+  match n, xs, cs with
+  | O, _, _ => map_account_head (Nat.add acc) cs
+  | S n, [], c => acc + c + 1
+  | S n, x :: xs, (c, cs) => drop_account_ (acc + c + 1) n cs
+  end.
+
+Definition drop_account {a : AA} (n : nat) {xs : list a} (cs : account xs)
+  : account (drop n xs) :=
+  drop_account_ 0 n cs.
+
+Theorem drop_cost {a : AA} {n : nat} {xs : list a} (cs : account_list xs)
+  : has_cost (dropDF n xs)
+             (zero, cs)
+             (drop_account n cs).
+Proof.
+Admitted.
+
+Definition drop_append {a : AA} (n : nat) (xs ys : list a) : DF (n, xs, ys) (drop n (xs ++ ys)) :=
+  (pairDF (project n) (tuple _ >>> appendDF xs ys)) >>> (dropDF n (xs ++ ys)).
+
+Theorem has_cost_compose {a b c : AA} `{Account a, Account b, Account c}
+    {x : a} {y : b} {z : c} {f : DF x y} {g : DF y z}
+    {p : account x} {q : account y} {r : account z}
+  : has_cost f p q -> has_cost g q r -> has_cost (f >>> g) p r.
+Proof.
+  unfold has_cost, cost_with, DF.compose; intros Hf Hg. cbn.
+  etransitivity; [ | apply Hg ].
+  rewrite (Nat.add_comm (Tick.cost (g _))), Nat.add_assoc.
+  apply Nat.add_le_mono_r.
+  apply Hf.
+Qed.
+
+Theorem has_cost_pair {a b c : AA} `{Account a, Account b, Account c}
+    {x : a} {y : b} {z : c} {f : DF x y} {g : DF x z}
+    {p : account x} {q : account y} {r : account z}
+  : has_cost f p q -> has_cost g p r -> has_cost (pairDF f g) p (q, r).
+Proof.
+Admitted.
+
+Arguments append_account : simpl never.
+
+Theorem drop_append_cost {a : AA} (n : nat) (xs ys : list a) (cs : account_list xs) (ds : account_list ys)
+  : has_cost (drop_append n xs ys)
+             (zero, cs, ds)
+             (drop_account n (map_account S cs ++ ds)).
+Proof.
+  unfold drop_append.
+  eapply has_cost_compose; [ | apply drop_cost ].
+  eapply has_cost_pair.
+  - admit.
+  - eapply has_cost_compose; [ | apply append_cost ].
+    admit.
+Admitted.
 
 (*
 Definition lam {a b : AA} (x' : a) (y' : b)
@@ -541,18 +749,6 @@ Definition match_list {r a b : AA} {s : r} {f : list a -> b} {xs : list a} (xsD 
   | nil => fun _ => NIL
   | x :: xs => fun '(xD, xsD) => CONS x xs xD xsD
   end (unconsD xsD).
-
-Definition Credits (a : AA) : Type := approx a -> nat.
-
-Definition cost_with {t} {P : t -> Prop} (p : t -> nat) (u : Tick (sig P)) : nat :=
-  p (proj1_sig (Tick.val u)) + Tick.cost u.
-
-Definition is_pure {a b : AA} {x' : a} {y' : b} (f : DF x' y') : Prop :=
-  forall y, Tick.cost (f y) = 0.
-
-Definition solvent {a b : AA} {x' : a} {y' : b} (f : DF x' y') (budget : nat) (p : Credits a) (q : Credits b)
-  : Prop :=
-  forall y, cost_with p (f y) <= budget + q (proj1_sig y).
 
 Definition credit_thunk {a} (f : a -> nat) : T a -> nat :=
   fun t =>
@@ -602,25 +798,16 @@ Definition apply_list {a : Type} (q : credit_list) (xs : T (listA a)) : nat :=
 
 Inductive cred_list {a b : AA} {x' : a} {ys' : list b}
   (f : DF x' ys') (p : Credits a) (q : credit_list) : Prop :=
-| cred_nil : ys' = nil -> solvent f 0 p (apply_list q) -> cred_list f p q
+| cred_nil : ys' = nil -> has_cost f 0 p (apply_list q) -> cred_list f p q
 | cred_cons y' y2' : ys' = y' :: y2' -> cred_list f p q
 .
 *)
 
 Class Value (a : AA) : Type :=
   { value : forall {s : AA} {x : s} {y : a}, DF x y -> Credits s -> Credits a -> Prop
-  ; value_solvent : forall {s : AA} {x : s} {y : a} (f : DF x y) (p : Credits s) (q : Credits a),
-      value f p q -> solvent f 0 p q
+  ; value_has_cost : forall {s : AA} {x : s} {y : a} (f : DF x y) (p : Credits s) (q : Credits a),
+      value f p q -> has_cost f 0 p q
   }.
-
-Definition tensor {a b : AA} (p : Credits a) (q : Credits b) : Credits (a ** b) :=
-  fun xy => p (fst xy) + q (snd xy).
-
-Definition add_pw {a : AA} (p q : Credits a) : Credits a :=
-  fun x => p x + q x.
-
-Infix "+++" := tensor (left associativity, at level 50).
-Infix "+" := add_pw (left associativity, at level 50).
 
 #[global]
 Instance Value_pair {a b : AA} `{Value a, Value b} : Value (a ** b).
@@ -641,19 +828,19 @@ Admitted.
 (* p1 |- q      p2 |- r
    --------------------
    p1 + p2  |-  q +++ r *)
-Lemma solvent_pairDF {a b c : AA} {x' : a} {y' : b} {z' : c} (f : DF x' y') (g : DF x' z')
+Lemma has_cost_pairDF {a b c : AA} {x' : a} {y' : b} {z' : c} (f : DF x' y') (g : DF x' z')
     (n m : nat) (p1 p2 : Credits a) (q : Credits b) (r : Credits c)
-  : solvent f n p1 q -> solvent g m p2 r -> solvent (pairDF f g) (n + m) (p1 + p2) (q +++ r).
+  : has_cost f n p1 q -> has_cost g m p2 r -> has_cost (pairDF f g) (n + m) (p1 + p2) (q +++ r).
 Proof.
 Admitted.
 
-Lemma solvent_lam2 {a1 a2 b : AA} `{Value a1, Value a2} (x1' : a1) (x2' : a2) (y' : b)
+Lemma has_cost_lam2 {a1 a2 b : AA} `{Value a1, Value a2} (x1' : a1) (x2' : a2) (y' : b)
   (f : forall (r : AA) (s' : r), DF s' x1' -> DF s' x2' -> DF s' y')
   (n : nat)
   (p1 : Credits a1) (p2 : Credits a2) (q : Credits b)
   : (forall (r : AA) (s' : r) (x1D : DF s' x1') (x2D : DF s' x2') (pr1 pr2 : Credits r),
-      value x1D pr1 p1 -> value x2D pr2 p2 -> solvent (f r s' x1D x2D) n (pr1 + pr2) q) ->
-   solvent (lam2 x1' x2' y' f) n (p1 +++ p2) q.
+      value x1D pr1 p1 -> value x2D pr2 p2 -> has_cost (f r s' x1D x2D) n (pr1 + pr2) q) ->
+   has_cost (lam2 x1' x2' y' f) n (p1 +++ p2) q.
 Proof.
   intros Hf; unfold lam2. apply Hf.
   - apply (value_proj1DF (xy' := (x1', x2'))).
@@ -673,25 +860,25 @@ Definition zero {a} : Credits a := fun _ => 0.
 Definition listCred {a} (x : Credits a) (xs : Credits (AA_listA a)) : Credits (AA_listA a).
 Admitted.
 
-Lemma solvent_match_list {r a b : AA} `{Value a} {s : r} {f : list a -> b} {xs : list a} (xsD : DF s xs)
+Lemma has_cost_match_list {r a b : AA} `{Value a} {s : r} {f : list a -> b} {xs : list a} (xsD : DF s xs)
     (NIL : DF s (f nil))
     (CONS : forall x ys, DF s x -> DF s ys -> DF s (f (x :: ys)))
     (n : nat)
     (prNIL prHEAD prTAIL prCONS : Credits r)
     (pHEAD : Credits a) (pTAIL : Credits (AA_listA a))
     (q : Credits b)
-    (solvent_xsD : value xsD (if null xs then zero else prHEAD + prTAIL) (listCred pHEAD pTAIL))
-    (solvent_NIL : solvent NIL n prNIL q)
-    (solvent_CONS : forall x ys (xD : DF s x) (ysD : DF s ys),
+    (has_cost_xsD : value xsD (if null xs then zero else prHEAD + prTAIL) (listCred pHEAD pTAIL))
+    (has_cost_NIL : has_cost NIL n prNIL q)
+    (has_cost_CONS : forall x ys (xD : DF s x) (ysD : DF s ys),
       value xD prHEAD pHEAD ->
       value ysD prTAIL pTAIL ->
-      solvent (CONS _ _ xD ysD) n prCONS q)
-  : solvent (match_list (f := f) xsD NIL CONS) n ((if null xs then prNIL else prCONS)) q.
+      has_cost (CONS _ _ xD ysD) n prCONS q)
+  : has_cost (match_list (f := f) xsD NIL CONS) n ((if null xs then prNIL else prCONS)) q.
 Proof.
   destruct xs; cbn.
-  - apply solvent_NIL.
+  - apply has_cost_NIL.
   - destruct (unconsD _) as [? ?] eqn:W.
-    apply solvent_CONS.
+    apply has_cost_CONS.
     + (* TODO: I need another predicate for variables to assert that they actually cost 0
          to be able to split them *)
 Admitted.
