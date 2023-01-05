@@ -402,9 +402,71 @@ Definition Credits (a : AA) : Type := approx a -> nat.
 Definition cost_with {t} {P : t -> Prop} (p : t -> nat) (u : Tick (sig P)) : nat :=
   p (proj1_sig (Tick.val u)) + Tick.cost u.
 
+Definition is_pure {a b : AA} {x' : a} {y' : b} (f : DF x' y') : Prop :=
+  forall y, Tick.cost (f y) = 0.
+
 Definition solvent {a b : AA} {x' : a} {y' : b} (f : DF x' y') (budget : nat) (p : Credits a) (q : Credits b)
   : Prop :=
   forall y, cost_with p (f y) <= budget + q (proj1_sig y).
+
+Definition credit_thunk {a} (f : a -> nat) : T a -> nat :=
+  fun t =>
+    match t with
+    | Thunk x => f x
+    | Undefined => 0
+    end.
+
+Definition credit_nil {a : AA} (n : nat) : Credits (AA_listA a) :=
+  credit_thunk (fun l =>
+    match l with
+    | NilA => n
+    | ConsA _ _ => 0
+    end).
+
+(** Either listA should have T only in the tail, or AA structures should be
+    redefined to not include the toplevel T.
+ *)
+Definition credit_cons {a : AA} (n : nat) (ft : Credits (AA_listA a)) : Credits (AA_listA a) :=
+  credit_thunk (fun l =>
+    match l with
+    | NilA => 0
+    | ConsA h t => n + ft t
+    end).
+
+(*
+CoInductive credit_list : Type :=
+  { credit_nil : nat
+  ; credit_cons : nat * credit_list
+  }.
+
+Definition apply_Tlist {a : Type} (al : credit_list -> listA a -> nat) (q : credit_list) (xs : T (listA a)) : nat :=
+  match xs with
+  | Undefined => 0
+  | Thunk ys => al q ys
+  end.
+
+Fixpoint apply_list_ {a : Type} (q : credit_list) (xs : listA a) : nat :=
+  match xs with
+  | NilA => credit_nil q
+  | ConsA _ ys =>
+    fst (credit_cons q) + apply_Tlist apply_list_ (snd (credit_cons q)) ys
+  end.
+
+Definition apply_list {a : Type} (q : credit_list) (xs : T (listA a)) : nat :=
+  apply_Tlist apply_list_ q xs.
+
+Inductive cred_list {a b : AA} {x' : a} {ys' : list b}
+  (f : DF x' ys') (p : Credits a) (q : credit_list) : Prop :=
+| cred_nil : ys' = nil -> solvent f 0 p (apply_list q) -> cred_list f p q
+| cred_cons y' y2' : ys' = y' :: y2' -> cred_list f p q
+.
+*)
+
+Class Value (a : AA) : Type :=
+  { value : forall {s : AA} {x : s} {y : a}, DF x y -> Credits s -> Credits a -> Prop
+  ; value_solvent : forall {s : AA} {x : s} {y : a} (f : DF x y) (p : Credits s) (q : Credits a),
+      value f p q -> solvent f 0 p q
+  }.
 
 Definition tensor {a b : AA} (p : Credits a) (q : Credits b) : Credits (a ** b) :=
   fun xy => p (fst xy) + q (snd xy).
@@ -415,15 +477,19 @@ Definition add_pw {a : AA} (p q : Credits a) : Credits a :=
 Infix "+++" := tensor (left associativity, at level 50).
 Infix "+" := add_pw (left associativity, at level 50).
 
+#[global]
+Instance Value_pair {a b : AA} `{Value a, Value b} : Value (a ** b).
+Admitted.
+
 (* p +++ 0  |-  p *)
-Lemma solvent_proj1DF {a b : AA} {xy' : a ** b} (p : Credits a)
-  : solvent (proj1DF (xy' := xy')) 0 (fun xy : approx (a ** b) => p (fst xy)) p.
+Lemma value_proj1DF {a b : AA} `{Value a, Value b} {xy' : a ** b} (p : Credits a)
+  : value (proj1DF (xy' := xy')) (fun xy : approx (a ** b) => p (fst xy)) p.
 Proof.
 Admitted.
 
 (* 0 +++ p  |-  p *)
-Lemma solvent_proj2DF {a b : AA} {xy' : a ** b} (q : Credits b)
-  : solvent (proj2DF (xy' := xy')) 0 (fun xy : approx (a ** b) => q (snd xy)) q.
+Lemma value_proj2DF {a b : AA} `{Value a, Value b} {xy' : a ** b} (q : Credits b)
+  : value (proj2DF (xy' := xy')) (fun xy : approx (a ** b) => q (snd xy)) q.
 Proof.
 Admitted.
 
@@ -436,17 +502,17 @@ Lemma solvent_pairDF {a b c : AA} {x' : a} {y' : b} {z' : c} (f : DF x' y') (g :
 Proof.
 Admitted.
 
-Lemma solvent_lam2 {a1 a2 b : AA} (x1' : a1) (x2' : a2) (y' : b)
+Lemma solvent_lam2 {a1 a2 b : AA} `{Value a1, Value a2} (x1' : a1) (x2' : a2) (y' : b)
   (f : forall (r : AA) (s' : r), DF s' x1' -> DF s' x2' -> DF s' y')
   (n : nat)
   (p1 : Credits a1) (p2 : Credits a2) (q : Credits b)
   : (forall (r : AA) (s' : r) (x1D : DF s' x1') (x2D : DF s' x2') (pr1 pr2 : Credits r),
-      solvent x1D 0 pr1 p1 -> solvent x2D 0 pr2 p2 -> solvent (f r s' x1D x2D) n (pr1 + pr2) q) ->
+      value x1D pr1 p1 -> value x2D pr2 p2 -> solvent (f r s' x1D x2D) n (pr1 + pr2) q) ->
    solvent (lam2 x1' x2' y' f) n (p1 +++ p2) q.
 Proof.
   intros Hf; unfold lam2. apply Hf.
-  - apply (solvent_proj1DF (xy' := (x1', x2'))).
-  - apply (solvent_proj2DF (xy' := (x1', x2'))).
+  - apply (value_proj1DF (xy' := (x1', x2'))).
+  - apply (value_proj2DF (xy' := (x1', x2'))).
 Qed.
 
 Definition null {a} (xs : list a) : bool :=
@@ -457,21 +523,22 @@ Definition null {a} (xs : list a) : bool :=
 
 Definition zero {a} : Credits a := fun _ => 0.
 
+(*
 Definition listCred {a} (x : Credits a) (xs : Credits (AA_listA a)) : Credits (AA_listA a).
 Admitted.
 
-Lemma solvent_match_list {r a b : AA} {s : r} {f : list a -> b} {xs : list a} (xsD : DF s xs)
+Lemma solvent_match_list {r a b : AA} `{Value a} {s : r} {f : list a -> b} {xs : list a} (xsD : DF s xs)
     (NIL : DF s (f nil))
     (CONS : forall x ys, DF s x -> DF s ys -> DF s (f (x :: ys)))
     (n : nat)
     (prNIL prHEAD prTAIL prCONS : Credits r)
     (pHEAD : Credits a) (pTAIL : Credits (AA_listA a))
     (q : Credits b)
+    (solvent_xsD : value xsD (if null xs then zero else prHEAD + prTAIL) (listCred pHEAD pTAIL))
     (solvent_NIL : solvent NIL n prNIL q)
-    (solvent_xsD : solvent xsD 0 (if null xs then zero else prHEAD + prTAIL) (listCred pHEAD pTAIL))
     (solvent_CONS : forall x ys (xD : DF s x) (ysD : DF s ys),
-      solvent xD 0 prHEAD pHEAD ->
-      solvent ysD 0 prTAIL pTAIL ->
+      value xD prHEAD pHEAD ->
+      value ysD prTAIL pTAIL ->
       solvent (CONS _ _ xD ysD) n prCONS q)
   : solvent (match_list (f := f) xsD NIL CONS) n ((if null xs then prNIL else prCONS)) q.
 Proof.
@@ -482,6 +549,7 @@ Proof.
     + (* TODO: I need another predicate for variables to assert that they actually cost 0
          to be able to split them *)
 Admitted.
+*)
 
 (* Attempt to define an ApproxAlgebra of functions (exponential object) *)
 
