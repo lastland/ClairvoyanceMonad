@@ -2,8 +2,7 @@
 From Coq Require Import Arith List Psatz Morphisms Relations.
 From Equations Require Import Equations.
 
-From Clairvoyance Require Export ListA.
-From Clairvoyance Require Import Core Approx ApproxM Tick Demand Misc.
+From Clairvoyance Require Import Core Approx ApproxM Tick Misc ListA.
 
 #[local] Existing Instance Exact_id | 1.
 #[local] Existing Instance LessDefined_id | 100.
@@ -41,6 +40,34 @@ Fixpoint rev_ {a} (xs : list a) (ys : list a) : list a :=
   match xs with 
   | nil => ys
   | x :: xs1 => rev_ xs1 (x :: ys)
+  end.
+
+Definition p {a} (n : nat) (xs ys : list a) : list a :=
+  let zs := append xs ys in
+  take n zs.
+
+Fixpoint drop {a} (n : nat) (xs : list a) : list a :=
+  match n, xs with
+  | O, _ => xs
+  | S _, nil => nil
+  | S n1, x :: xs1 => drop n1 xs1
+  end.
+
+(* ---------------------- Section 4: Translation ---------------------- *)
+
+(* Definitions needed for the by-hand translation of the examples from Section 2 *)
+
+
+(** * Figure 9.
+
+    Definition of the [foldrA] function used in the translation of [foldr]. *)
+Fixpoint foldrA' {a b} (n : M b) (c : T a -> T b -> M b) (x' : listA a) : M b :=
+  tick >>
+  match x' with
+  | NilA => n
+  | ConsA x1 x2 =>
+    let~ y2 := foldrA' n c $! x2 in
+    c x1 y2
   end.
 
 Definition rev {a} (xs : list a) := rev_ xs nil.
@@ -194,6 +221,7 @@ Fixpoint appendD {a} (xs ys : list a) (outD : listA a) : Tick (T (listA a) * T (
   | _, _ => bottom (* Nonsense: if (xs = _ :: _) then append xs ys = (_ :: _)
                       so the demand cannot be of the form [] *)
   end.
+
 
 (* Demand function for [revA].
    [revA] has to traverse the list: the input demand is the whole list.
@@ -827,3 +855,32 @@ Lemma selectsortA_cost' {l n}
     selectsortA n lA [[ fun sorted cost => d `less_defined` sorted /\ cost <= m * (length l + 1) ]].
 Proof.
 Admitted.
+
+(* Partial function: we assume that both arguments approximate the same list *)
+Fixpoint lub_listA {a} (xs ys : listA a) : listA a :=
+  match xs, ys with
+  | NilA, NilA => NilA
+  | ConsA x xs, ConsA y ys => ConsA (lub_T (fun r _ => r) x y) (lub_T lub_listA xs ys)
+  | _, _ => NilA  (* silly case *)
+  end.
+
+#[global] Instance Lub_listA {a} : Lub (listA a) := lub_listA.
+
+#[global] Instance LubLaw_listA {a} : LubLaw (listA a).
+Proof.
+  constructor.
+  - intros x y z Hx; revert y; induction Hx; intros ?; inversion 1; subst; cbn; constructor; auto.
+    1: inversion H; subst; inversion H4; subst; try constructor; auto.
+    1: inversion H; subst; inversion H5; subst; try constructor; auto.
+    inversion H6; constructor; auto.
+  - intros x y [z [ Hx Hy] ]; revert y Hy; induction Hx; intros ?; inversion 1; subst; cbn;
+      constructor; auto.
+    1: inversion H; inversion H3; constructor; reflexivity + auto.
+    1: inversion H; inversion H4; constructor; reflexivity.
+    inversion H5; subst; constructor; [ reflexivity | auto ].
+  - intros x y [z [Hx Hy] ]; revert x Hx; induction Hy; intros ?; inversion 1; subst; cbn;
+      constructor; auto.
+    1: inversion H; inversion H3; subst; invert_approx; constructor; reflexivity + auto; inversion H7; invert_approx; reflexivity.
+    1: inversion H; inversion H4; subst; invert_approx; constructor; reflexivity + auto; inversion H8; invert_approx; reflexivity.
+    inversion H5; subst; constructor; [ reflexivity | auto ].
+Qed.

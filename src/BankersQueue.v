@@ -19,7 +19,7 @@ From Equations Require Import Equations.
 
 From Coq Require Import Arith List Lia Setoid Morphisms.
 Import ListNotations.
-From Clairvoyance Require Import Core Approx ApproxM List Misc Tick Demand.
+From Clairvoyance Require Import Core Approx ApproxM List ListA Misc Tick Demand.
 
 Import Tick.Notations.
 

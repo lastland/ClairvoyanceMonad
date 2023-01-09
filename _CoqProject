@@ -13,7 +13,6 @@ src/List.v
 src/BankersQueue.v
 src/RealtimeBankersQueue.v
 src/Eval.v
-src/Demand.v
 src/Interfaces.v
 src/QueueInterface.v
 src/Launchbury.v
@@ -24,4 +23,7 @@ src/QueueTrace.v
 src/FingerTreeInterface.v
 src/Tick.v
 src/TwoListQueue.v
+src/Relations.v
+src/Setoid.v
+src/Demand.v
 src/DemandLogic.v

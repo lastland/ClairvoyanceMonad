@@ -6,7 +6,7 @@
    But how can we formalize the stronger non-amortized bounds? *)
 
 From Coq Require Import List Arith Lia RelationClasses.
-From Clairvoyance Require Import Core Approx ApproxM List Demand Misc BankersQueue Tick.
+From Clairvoyance Require Import Core Approx ApproxM List ListA Demand Misc BankersQueue Tick.
 
 Import ListNotations.
 Import Tick.Notations.
@@ -420,7 +420,7 @@ Proof.
             eapply thunkD_sound;
             [ apply (@rotateD_sound _ f b []) | auto ] ] ] ].
     intros [ [fD bD] dD] [ [fD' bD'] dD'] n n' [Hrotate [ [ [HfD HbD] HdD] [ [HfD' HbD'] HdD'] ] ].
-    cbn [fst snd exact Exact_prod Exact_id id] in *.
+    cbn [fst snd exact Exact_prod Exact_id Datatypes.id] in *.
     apply ret_rspec; unfold debt_; cbn [front back schedule sizeX sizeX' length].
     assert (sizeX 1 fD' <= length b).
     { apply sizeX1_length in HfD'. lia. }

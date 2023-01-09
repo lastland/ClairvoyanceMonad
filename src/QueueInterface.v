@@ -1,6 +1,6 @@
 (* Instantiate Interfaces with BankersQueue *)
-From Coq Require Import List Lia.
-From Clairvoyance Require Import Core Approx ApproxM List Misc BankersQueue Cost Interfaces Tick.
+From Coq Require Import List Lia RelationClasses.
+From Clairvoyance Require Import Core Approx ApproxM List ListA Misc BankersQueue Cost Interfaces Tick.
 
 Import ListNotations.
 Import Tick.Notations.
@@ -16,7 +16,9 @@ Set Maximal Implicit Insertion.
 
 #[global] Instance BottomIsLeast_QueueA {a} : BottomIsLeast (QueueA a).
 Proof.
-  intros []; constructor; constructor.
+  intros []; constructor; try constructor.
+  - cbn. symmetry. apply H.
+  - cbn. symmetry. apply H.
 Qed.
 
 Definition a := nat.
@@ -35,7 +37,7 @@ Notation Eval := (Eval op value).
 Notation Budget := (Budget op value).
 Notation Exec := (Exec op valueA).
 Notation Demand := (Demand op value valueA).
-Notation ApproxAlgebra := (ApproxAlgebra value valueA).
+Notation IsApproxAlgebra := (IsApproxAlgebra value valueA).
 Notation Potential := (Potential valueA).
 
 Definition eval : Eval :=
@@ -97,7 +99,7 @@ Proof.
     apply ret_mon. repeat constructor; apply H.
 Qed.
 
-Definition approx_algebra : ApproxAlgebra.
+Definition approx_algebra : IsApproxAlgebra.
 Proof. econstructor; try typeclasses eauto. Defined.
 #[export] Existing Instance approx_algebra.
 
@@ -148,17 +150,17 @@ Definition demand : Demand :=
 
 Lemma pd : PureDemand.
 Proof.
-  do 2 red. intros [] [|q qs] [|yD ysD] Hq; try apply bottom_is_least; cbn in Hq |- *.
+  do 2 red. intros [] [|q qs] [|yD ysD] Hq; try apply bottom_is_less; cbn in Hq |- *.
   - inv Hq.
     destruct (Tick.val (pushD q x _)) eqn:EpushD.
-    constructor; [ | apply bottom_is_least ].
+    constructor; [ | apply bottom_is_less ].
     apply (f_equal fst) in EpushD. cbn in EpushD. rewrite <- EpushD.
     apply pushD_approx.
-    apply less_defined_forceD; [ apply bottom_is_least | auto ].
-  - constructor; [ | apply bottom_is_least ].
+    apply less_defined_forceD; [ apply bottom_is_less | auto ].
+  - constructor; [ | apply bottom_is_less ].
     unfold valueA. rewrite pop_popD; [ reflexivity | ].
     destruct pop as [ [] |]; [ inv Hq | reflexivity ].
-  - constructor; [ | apply bottom_is_least ].
+  - constructor; [ | apply bottom_is_less ].
     apply popD_approx. destruct pop as [ [] |]; inv Hq.
     repeat constructor; auto.
 Qed.
@@ -178,7 +180,7 @@ Proof.
       match goal with [ H : context [ match ?u with _ => _ end ] |- _ ] => destruct u end.
       cbn in EpushD. auto. }
     eapply optimistic_mon; [ eapply pushD_spec |].
-    { eapply less_defined_forceD; [ apply bottom_is_least | eassumption ]. }
+    { eapply less_defined_forceD; [ apply bottom_is_less | eassumption ]. }
     { rewrite EpushD. reflexivity. }
     cbn beta. intros ? ? []. mforward idtac.
     split.
@@ -224,10 +226,10 @@ Proof.
 Qed.
 #[export] Existing Instance well_defined_potential.
 
-Lemma less_defined_onThunk {a b} `{Exact b a, LessDefined a, BottomOf a, !BottomIsLeast a} (x : T a) (y : b)
+Lemma less_defined_onThunk {a b} `{Exact b a, LessDefined a, BottomOf a, !BottomIsLeast a, PreOrder a less_defined} (x : T a) (y : b)
   : x `less_defined` exact y -> onThunk (bottom_of (exact y)) (fun x => x) x `less_defined` exact y.
 Proof.
-  intros Hy; inv Hy; cbn; [ apply bottom_is_least | auto ].
+  intros Hy; inv Hy; cbn; [ apply bottom_is_less | auto ].
 Qed.
 
 Lemma less_defined_onThunk_inv {a} `{LessDefined a, BottomOf a, !BottomIsLeast a}
@@ -260,7 +262,7 @@ Proof.
     cbn. rewrite Hsp. inv Hvs.
     inv Houtput. inv H6.
     unshelve eassert (HH := pushD_cost H1 _ (f_equal Tick.val (eq_sym EpushD))).
-    { apply less_defined_forceD; [ apply bottom_is_least | auto ]. }
+    { apply less_defined_forceD; [ apply bottom_is_less | auto ]. }
     rewrite EpushD in HH. cbn [Tick.cost] in HH. cbn [sumof fold_right].
     change (potential t) with (debt t).
     destruct v0; cbn [forceD] in HH.

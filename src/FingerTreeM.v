@@ -1,5 +1,5 @@
 From Coq Require Import List Arith Lia RelationClasses.
-From Clairvoyance Require Import Core Approx ApproxM List Misc BankersQueue.
+From Clairvoyance Require Import Core Approx ApproxM List ListA Misc BankersQueue.
 
 From Clairvoyance Require Import FingerTree.
 
