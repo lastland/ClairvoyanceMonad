@@ -38,7 +38,6 @@ Import ListNotations.
 (* Type classes declared under this flag will have less confusing resolution.
   We will exclude [Exact] because in [Exact a b],
   [b] is supposed to be determined by [a], so it's fine to leave it as a flexible metavariable. *)
-Set Typeclasses Strict Resolution.
 
 Definition is_defined {a} (t : T a) : Prop :=
   match t with
@@ -52,6 +51,8 @@ Definition is_defined {a} (t : T a) : Prop :=
 
 Class LessDefined a := less_defined : a -> a -> Prop.
 Infix "`less_defined`" := less_defined (at level 42).
+
+#[global] Hint Mode LessDefined ! : typeclass_instances.
 
 (** [less_defined] should be a preorder (reflexive and transitive).
   (The paper says "order", which is imprecise. That was an oversight.)
@@ -116,8 +117,6 @@ constructor.
   + inversion H2; subst. f_equal. apply Ho. constructor; assumption.
 Qed.
 
-Unset Typeclasses Strict Resolution.
-
 (** * [exact]: embedding pure values as approximations *)
 Class Exact a b : Type := exact : a -> b.
 
@@ -158,8 +157,6 @@ Qed.
 Notation is_approx xA x := (xA `less_defined` exact x) (only parsing).
 Infix "`is_approx`" := is_approx (at level 42, only parsing).
 
-Set Typeclasses Strict Resolution.
-
 (** This corresponds to the proposition [approx_exact] in Section 5.3.
 
   And because of our particular definition, this is true by
@@ -191,6 +188,8 @@ Qed.
 Class Lub (a : Type) : Type :=
   lub : a -> a -> a.
 
+#[global] Hint Mode Lub ! : typeclass_instances.
+
 Create HintDb lub.
 
 Definition lub_T {a} (_lub : a -> a -> a) : T a -> T a -> T a :=
@@ -217,6 +216,7 @@ Class LubLaw a `{Lub a, LessDefined a} : Prop :=
   ; lub_upper_bound_r : forall x y : a, cobounded x y -> y `less_defined` lub x y
   }.
 
+#[global] Hint Mode LubLaw ! - - : typeclass_instances.
 #[global] Hint Resolve lub_least_upper_bound lub_upper_bound_l lub_upper_bound_r : lub.
 
 Lemma lub_inv {a} `{LubLaw a} `{!Transitive (less_defined (a := a))}
@@ -243,6 +243,8 @@ Qed.
 Class Bottom (a : Type) : Type :=
   bottom : a.
 
+#[global] Hint Mode Bottom ! : typeclass_instances.
+
 #[global] Instance Bottom_T {a} : Bottom (T a) := Undefined.
 #[global] Instance Bottom_prod {a b} `{Bottom a, Bottom b} : Bottom (a * b) := (bottom, bottom).
 
@@ -254,6 +256,8 @@ Proof. constructor. Qed.
 
 Class BottomOf (a : Type) : Type :=
   bottom_of : a -> a.
+
+#[global] Hint Mode BottomOf !.
 
 #[global] Instance BottomOf_list {a} `{BottomOf a} : BottomOf (list a) :=
   fix _bottom_of (xs : list a) : list a :=
@@ -284,7 +288,6 @@ Qed.
 #[global] Instance BottomIsLeast_T {a} `{LessDefined a} : BottomIsLeast (T a).
 Proof. constructor. Qed.
 
-Unset Typeclasses Strict Resolution.
 
 (** Order structure on approximation values [valueA].
     Core operations ([exact], [less_defined], [lub], [bottom_of])
@@ -300,7 +303,7 @@ Class IsApproxAlgebra (t tA : Type) : Type :=
   ; AO_BottomIsLeast :> BottomIsLeast tA
   }.
 
-Set Typeclasses Strict Resolution.
+#[global] Hint Mode IsApproxAlgebra - - : typeclass_instances.
 
 Notation IsAA := IsApproxAlgebra (only parsing).
 
@@ -529,8 +532,6 @@ Qed.
 
 (** * Deriving instances via isomorphisms *)
 
-Unset Typeclasses Strict Resolution.
-
 (** Bijection between [a] and [b]. *)
 Class Rep (a b : Type) : Type :=
   { to_rep : a -> b
@@ -647,7 +648,6 @@ Ltac mgo_ := repeat (intros; cbn in *; (mforward idtac + solve_approx + lia)).
   Having is_approx as a separate primitive may be necessary to generalize
   ApproxAlgebra to infinite values (streams and functions). *)
 Module IsApprox.
-Unset Typeclasses Strict Resolution.
 
 Class IsApprox (a e : Type) : Type :=
   is_approx : a -> e -> Prop.

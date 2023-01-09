@@ -8,7 +8,7 @@
 
 From Coq Require Import Setoid SetoidClass Morphisms Lia Arith List.
 From Equations Require Import Equations.
-From Clairvoyance Require Import Core Approx List ApproxM Relations Setoid Tick.
+From Clairvoyance Require Import Core Approx List ApproxM Relations Setoid Tick Misc.
 
 Import ListNotations.
 
@@ -331,13 +331,30 @@ Fixpoint lub_listA {a} {_ : Lub a} (xs ys : listA a) : listA a :=
 #[global] Instance LubLaw_listA {a} `{LubLaw a} : LubLaw (listA a).
 Admitted.
 
+#[global] Instance BottomOf_listA {a : Type} {H : BottomOf a} : BottomOf (listA a) :=
+  fun xs => match xs with NilA => NilA | ConsA x xs => ConsA Undefined Undefined end.
+
+#[global] Instance BottomIsLeast_listA {a : Type} {H : BottomOf a} {H0 : LessDefined a}
+  : BottomIsLeast a -> BottomIsLeast (listA a).
+Proof.
+  intros ? ? ? HH; inv HH; repeat constructor.
+Qed.
+
+(*
+#[global] Instance IsAA_listA' {a' a} {_ : IsAA a' a} : IsAA (list a') (listA a).
+Proof.
+  econstructor; try typeclasses eauto.
+Defined.
+*)
+
 #[global] Instance IsAA_listA {a' a} {_ : IsAA a' a} : IsAA (list a') (T (listA a)).
 Proof.
   econstructor; try typeclasses eauto.
-  eapply @LubLaw_T.
-  - eapply @LubLaw_listA.
-    typeclasses eauto.
-  - typeclasses eauto.
+Defined.
+
+#[global] Instance IsAA_T {a' a} {_ : IsAA a' a} : IsAA a' (T a).
+Proof.
+  econstructor; try typeclasses eauto.
 Defined.
 
 Parameter TODO : forall {P : Prop}, P.
@@ -418,21 +435,34 @@ End DF.
 Import DF.Notations.
 
 Definition proj1DF {a b : AA} {xy' : a ** b} : DF xy' (fst xy').
-Admitted.
+Proof.
+  refine (
+  fun '(exist _ x x_le) =>
+    Tick.ret (exist _ (x, bottom_of (exact (snd xy'))) _)).
+  { constructor; cbn; [assumption | apply bottom_is_less]. }
+Defined.
 
 Definition proj2DF {a b : AA} {xy' : a ** b} : DF xy' (snd xy').
-Admitted.
+Proof.
+  refine (
+  fun '(exist _ y y_le) =>
+    Tick.ret (exist _ (bottom_of (exact (fst xy')), y) _)).
+  { constructor; cbn; [apply bottom_is_less | assumption]. }
+Defined.
 
-Definition proj1DF' {a b : AA} {x' : a} {y' : b} : DF (x', y') x'.
-Admitted.
-
-Definition proj2DF' {a b : AA} {x' : a} {y' : b} : DF (x', y') y'.
-Admitted.
-
+Definition proj1DF' {a b : AA} {x' : a} {y' : b} : DF (x', y') x' := proj1DF.
+Definition proj2DF' {a b : AA} {x' : a} {y' : b} : DF (x', y') y' := proj2DF.
 
 Definition pairDF {a b c : AA} {x' : a} {y' : b} {z' : c} (f : DF x' y') (g : DF x' z')
   : DF x' (y', z').
-Admitted.
+Proof.
+  refine (
+  fun '(exist _ (y, z) ys_le) =>
+    let+ exist _ x1 x1_le := f (exist _ y (fst_rel ys_le)) in
+    let+ exist _ x2 x2_le := g (exist _ z (snd_rel ys_le)) in
+    Tick.ret (a := {x : approx a | x `less_defined` exact x'}) (exist _ (lub x1 x2) _)).
+  apply (lub_least_upper_bound x1 x2 (exact x') x1_le x2_le). (* TODO: inlining this fails typechecking ??? *)
+Defined.
 
 Definition tickDF {a b : AA} {x' : a} {y' : b} : DF x' y' -> DF x' y' :=
   fun f y => Tick.tick >> f y.
@@ -570,6 +600,12 @@ TODO: should account encode data structure invariants too? Or is it better to tr
 Class Account (a : AA) : Type :=
   { account : a -> Type
   ; credits : forall {x : a}, account x -> approx a -> nat
+  ; credits_lub : forall {x : a} {x1 x2 : approx a} (p : account x),
+      x1 `less_defined` exact x ->
+      x2 `less_defined` exact x ->
+      credits p (lub x1 x2) <= credits p x1 + credits p x2
+  ; credits_bottom : forall {x : a} (p : account x),
+      credits p (bottom_of (exact x)) = 0
   }.
 (* Morally, the approximation should be less than x,
    but we don't need a proof as an argument because
@@ -601,20 +637,28 @@ Fixpoint credits_list {a : AA} {xs : list a} (cs : account_list xs) (xs' : appro
 Instance Account_list {a : AA} : Account (AA_listA a) :=
   {| account := account_list
   ;  credits := @credits_list a
+  ;  credits_lub := TODO
+  ;  credits_bottom := TODO
   |}.
+
+Inductive Zero : Type := Z.
 
 #[global]
-Instance Account_nat : Account AA_nat :=
-  {| account := fun _ => unit
+Instance Account_zero {a : AA} : Account a | 9 :=
+  {| account := fun _ => Zero
   ;  credits := fun _ _ _  => 0
+  ;  credits_lub := TODO
+  ;  credits_bottom := TODO
   |}.
 
-Definition zero {n : nat} : account n := tt.
+Definition zero {a : AA} {x : a} : @account a Account_zero x := Z.
 
 #[global]
 Instance Account_pair {a b : AA} `{Account a, Account b} : Account (a ** b) :=
   {| account := fun xy => (account (fst xy) * account (snd xy))%type
   ;  credits := fun xy cd uv => credits (fst cd) (fst uv) + credits (snd cd) (snd uv)
+  ;  credits_lub := TODO
+  ;  credits_bottom := TODO
   |}.
 
 Definition cost_with {t} {P : t -> Prop} (p : t -> nat) (u : Tick (sig P)) : nat :=
@@ -660,11 +704,29 @@ Fixpoint map_account (f : nat -> nat) {a : AA} {xs : list a} (cs : account xs)
   | x :: xs, (c, cs) => (f c, map_account f cs)
   end.
 
+Theorem has_cost_tick {a b : AA} {x : a} {y : b} `{Account a, Account b} (f : DF x y)
+    (p : account x) (q q' : account y)
+    (TICKY : forall y', y' `less_defined` exact y -> S (credits q y') = credits q' y')
+  : has_cost f p q -> has_cost (tickDF f) p q'.
+Proof.
+Admitted.
+
+Lemma account_head_ticky {a b : AA} `{Account a, Account b} {x : a} {ys : list b}
+    {f : DF x ys}
+    {p : account x} {q : account ys}
+  : has_cost f p q -> has_cost (tickDF f) p (map_account_head S q).
+Proof.
+  apply has_cost_tick.
+  destruct ys; intros y' Hy'. inv Hy'.
+Admitted.
+
 Theorem append_cost {a : AA} {xs ys : list a} (cs : account xs) (ds : account ys)
   : has_cost (appendDF xs ys)
              (cs, ds)
              (map_account S cs ++ ds).
 Proof.
+  induction xs; cbn.
+  - 
 Admitted.
 
 Fixpoint drop_account_ (acc : nat) {a : AA} (n : nat) {xs : list a} (cs : account xs)
@@ -701,14 +763,109 @@ Proof.
   apply Hf.
 Qed.
 
+Theorem has_cost_id {a : AA} `{Account a} (x : a) (p : account x)
+  : has_cost DF.id p p.
+Proof.
+  unfold has_cost, cost_with; cbn. lia.
+Qed.
+
+Theorem has_cost_proj1 {a b : AA} `{Account a, Account b}
+    (x : a) (y : b) (p : account x) (q : account y)
+   : has_cost (x' := (x, y)) proj1DF' (p, q) p.
+Proof.
+  intros []; cbn. rewrite credits_bottom. lia.
+Qed.
+
+Theorem has_cost_proj2 {a b : AA} `{Account a, Account b}
+    (x : a) (y : b) (p : account x) (q : account y)
+   : has_cost (x' := (x, y)) proj2DF' (p, q) q.
+Proof.
+  intros []; cbn. rewrite credits_bottom. lia.
+Qed.
+
+Ltac spec HC1 :=
+  match type of HC1 with
+  | has_cost ?f _ _ => 
+    match goal with
+    | [ |- context [ f ?x ] ] =>
+      let h := fresh HC1 in
+      assert (h := HC1 x); unfold cost_with in h; cbn [proj1_sig] in h
+    end
+  end.
+
 Theorem has_cost_pair {a b c : AA} `{Account a, Account b, Account c}
     {x : a} {y : b} {z : c} {f : DF x y} {g : DF x z}
     {p : account x} {q : account y} {r : account z}
   : has_cost f p q -> has_cost g p r -> has_cost (pairDF f g) p (q, r).
 Proof.
-Admitted.
+  intros HC1 HC2 [ [] [] ]; cbn in *.
+  unfold cost_with; cbn.
+  destruct (Tick.val (f _)) eqn:Ef; cbn.
+  destruct (Tick.val (g _)) eqn:Eg; cbn.
+  rewrite credits_lub; [ | assumption .. ].
+  spec HC1.
+  spec HC2.
+  rewrite <- HC0.
+  rewrite <- HC3.
+  remember (Tick.cost (f _)).
+  remember (Tick.cost (g _)).
+  rewrite Ef, Eg; cbn.
+  lia.
+Qed.
 
-Arguments append_account : simpl never.
+Class AutoHasCost {a b : AA} `{Account a, Account b} {x : a} {y : b} (f : DF x y) (p : account x) (q : account y)
+  : Prop :=
+  auto_has_cost : has_cost f p q.
+
+#[global]
+Instance AutoHasCost_Project_here {a b : AA} `{Account a, Account b}
+    (x : a) (y : b) (p : account x) (q : account y)
+  : AutoHasCost (x := (x, y)) (y := y) (project y) (p, q) q.
+Proof.
+  unfold project, Project_here. apply has_cost_proj2.
+Qed.
+
+#[global]
+Instance AutoHasCost_Project_here1 {a : AA} `{Account a}
+    (x : a) (p : account x)
+  : AutoHasCost (x := x) (project x) p p.
+Proof.
+  unfold AutoHasCost. apply has_cost_id.
+Qed.
+
+#[global]
+Instance AutoHasCost_Project_there {a b c : AA} (x : a) (y : b) (z : c)
+    `{Account a, Account b, Account c}
+    (p : account x) (q : account y) (r : account z)
+    `{!Project x z, !AutoHasCost (x := x) (project z) p r}
+  : AutoHasCost (x := (x, y)) (project z) (p, q) r.
+Proof.
+  unfold project, Project_there.
+  eapply has_cost_compose.
+  - apply has_cost_proj1.
+  - apply auto_has_cost.
+Qed.
+
+#[global]
+Instance AutoHasCost_Tuple_pair {a b c : AA} (x : a) (y : b) (z : c) `{!Tuple x y, !Tuple x z}
+    `{Account a, Account b, Account c}
+    (p : account x) (q : account y) (r : account z)
+    `{!AutoHasCost (x := x) (tuple y) p q, !AutoHasCost (x := x) (tuple z) p r}
+  : AutoHasCost (x := x) (tuple (y, z)) p (q, r).
+Proof.
+  apply has_cost_pair; apply auto_has_cost.
+Qed.
+
+#[global]
+Instance AutoHasCost_Tuple_single {a b : AA} (x : a) (y : b) `{!Project x y}
+    `{Account a, Account b}
+    (p : account x) (q : account y)
+    `{!AutoHasCost (x := x) (project y) p q}
+  : AutoHasCost (x := x) (tuple y) p q.
+Proof.
+  unfold tuple, Tuple_single.
+  apply auto_has_cost.
+Qed.
 
 Theorem drop_append_cost {a : AA} (n : nat) (xs ys : list a) (cs : account_list xs) (ds : account_list ys)
   : has_cost (drop_append n xs ys)
@@ -718,10 +875,10 @@ Proof.
   unfold drop_append.
   eapply has_cost_compose; [ | apply drop_cost ].
   eapply has_cost_pair.
-  - admit.
+  - apply auto_has_cost.
   - eapply has_cost_compose; [ | apply append_cost ].
-    admit.
-Admitted.
+    apply auto_has_cost.
+Qed.
 
 (*
 Definition lam {a b : AA} (x' : a) (y' : b)

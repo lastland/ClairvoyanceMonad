@@ -151,7 +151,7 @@ Qed.
 
 Lemma lookups_lub_nth {a aA} `{IsApproxAlgebra a aA}
   : forall n x xs ns,
-      (exists x', nth_error xs n = Some x' /\ cobounded x x') ->
+      (exists (x' : aA), nth_error xs n = Some x' /\ cobounded x x') ->
       lookups xs ns `less_defined` lookups (lub_nth n x xs) ns.
 Proof.
   intros * [x' [Hn Hx'] ]. induction ns as [ | n' ns IH]; cbn.
