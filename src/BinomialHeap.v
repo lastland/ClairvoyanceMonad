@@ -21,34 +21,57 @@ From Coq Require Import Arith List Lia Setoid Morphisms Orders Program.
 Import ListNotations.
 From Clairvoyance Require Import Core Approx ApproxM List Misc BankersQueue Tick.
 
+(** Interface to construct demand functions *)
+
+(* ApproxAlgebra records minimized with only the component relevant to use this interface.
+   You can pretend that (a : AA) is really (a : Type).
+   (I will probably change this to be a type class.)
+ *)
+
 Record AA : Type :=
   { carrier :> Type
   (* ; approx : Type *)
   }.
 
+(* Every type in your code must implement AA *)
+
+(* Tuples *)
 Canonical AAProd (a b : AA) : AA :=
   {| carrier := (a * b)%type
   (* ;  approx :=(approx a * approx b)%type *)
   |}.
 
+(* List *)
 Canonical AAList (a : AA) : AA :=
   {| carrier := list a
   (* ;  approx := listA (approx a) *)
   |}.
 
+Canonical AAnat : AA :=
+  {| carrier := nat |}.
+
+Canonical AABool : AA :=
+  {| carrier := bool |}.
+
 Infix "**" := AAProd (at level 40).
 
 Parameter TODO : forall {A : Type}, A.
 
+(* Demand functions *)
 Module Import DF.
 
-Definition DF {a b : AA} (x' : a) (y' : b) : Type. Admitted.
-Definition id {a : AA} {x' : a} : DF x' x'. Admitted.
-Definition compose {a b c : AA} {x' : a} {y' : b} {z' : c}
-  (f : DF x' y') (g : DF y' z') : DF x' z'.
+(* Demand functions on input x and output y. *)
+Definition DF {a b : AA} (x : a) (y : b) : Type. Admitted.
+
+(* Identity *)
+Definition id {a : AA} {x : a} : DF x x. Admitted.
+
+(* Sequential composition *)
+Definition compose {a b c : AA} {x : a} {y : b} {z : c}
+  (f : DF x y) (g : DF y z) : DF x z.
 Admitted.
 
-Module Notations.
+Module Import Notations.
 
 Declare Scope df_scope.
 Delimit Scope df_scope with df.
@@ -58,43 +81,46 @@ Infix ">>>" := compose (left associativity, at level 40) : df_scope.
 
 End Notations.
 
+(* Projections *)
 Definition proj1DF {a b : AA} {xy' : a ** b} : DF xy' (fst xy'). Admitted.
 Definition proj2DF {a b : AA} {xy' : a ** b} : DF xy' (snd xy'). Admitted.
 
+(* Pairing *)
 Definition pairDF {a b c : AA} {x' : a} {y' : b} {z' : c} (f : DF x' y') (g : DF x' z')
   : DF x' (y', z'). Admitted.
 
-(* let y := f x in
-   g (x, y) *)
+(* The [letDF] combinator lets us compute an
+   intermediate result and "push" it in the context.
+
+   It encodes [let]:
+
+     Given f : X -> Y
+       and g : (X * Y) -> Z
+
+     they can be composed as
+
+     let y := f x in
+     g (x, y) *)
 Definition letDF {a b c : AA} {x : a} {y : b} {z : c}
   : DF x y ->  (* f *)
     DF (x, y) z -> (* g *)
     DF x z.
 Admitted.
 
+(* Increment the cost by 1 *)
 Definition tickDF {a b : AA} {x' : a} {y' : b} : DF x' y' -> DF x' y'.
 Admitted.
 
+(* Encoding of [] *)
 Definition nilD {a b : AA} {x : a} : DF x (nil (A := b)).
 Admitted.
 
+(* Encoding of (_ :: _) *)
 Definition consD {r a : AA} {s : r} {x : a} {xs : list a} (xD : DF s x) (xsD : DF s xs)
   : DF s (x :: xs).
 Admitted.
 
-End DF.
-
-Import DF.Notations.
-
-(* Pure implementation *)
-Definition A := nat.
-
-Inductive Tree : Type := 
-  | Node : nat -> A -> list Tree -> Tree.
-
-Canonical AAnat : AA :=
-  {| carrier := nat |}.
-
+(* Encoding of match on lists *)
 Definition match_list {a b c : AA} {g : b} {f : list a -> c} {xs : list a}
     (NIL : DF g (f nil))
     (CONS : forall x xs', DF (g, x, xs') (f (cons x xs')))
@@ -104,17 +130,51 @@ Definition match_list {a b c : AA} {g : b} {f : list a -> c} {xs : list a}
   | cons x xs' => TODO >>> (CONS x xs')
   end.
 
+(* Encoding of [if] *)
+Definition if_ {a b : AA} {x : a} {cond : bool}
+  {f : bool -> b}
+  (i : DF x cond)
+  (thn : DF x (f true))
+  (els : DF x (f false))
+  : DF x (f cond).
+Admitted.
+
+End DF.
+
+(* Encoding of operators *)
+
+Definition le_ {x y : nat} : DF (x, y) (x <=? y).
+Admitted.
+
+Definition lt_ {x y : nat} : DF (x, y) (x <? y).
+Admitted.
+
+Definition add1 {x : nat} : DF x (x + 1).
+Admitted.
+
+Import DF.Notations.
+#[local] Open Scope df.
+
+(* Pure implementation *)
+Definition A := nat.
+
 Canonical AAA : AA :=
   {| carrier := A |}.
 
+Inductive Tree : Type :=
+  | Node : nat -> A -> list Tree -> Tree.
+
+(* ApproximationAlgebra for Tree *)
 Canonical AATree : AA :=
   {| carrier := Tree |}.
 
+(* Encoding of Node *)
 Definition nodeD {r : AA} {s : r} {n : nat} {x : A} {ts : list Tree}
     (nD : DF s n) (xD : DF s x) (tsD : DF s ts)
   : DF s (Node n x ts).
 Admitted.
 
+(* Encoding of match on Tree *)
 Definition match_Tree {a c : AA}
     {g : c} {t : Tree} {f : Tree -> a}
     (NODE : forall n x ts, DF (g, n, x, ts) (f (Node n x ts)))
@@ -129,28 +189,6 @@ Definition link (t1 t2 : Tree) : Tree :=
     then Node (r1 + 1) v1 (t2 :: c1)
     else Node (r2 + 1) v2 (t1 :: c2)
   end.
-
-Canonical AABool : AA :=
-  {| carrier := bool |}.
-
-Definition if_ {a b : AA} {x : a} {cond : bool}
-  {f : bool -> b}
-  (i : DF x cond)
-  (thn : DF x (f true))
-  (els : DF x (f false))
-  : DF x (f cond).
-Admitted.
-
-Definition le_ {x y : nat} : DF (x, y) (x <=? y).
-Admitted.
-
-Definition lt_ {x y : nat} : DF (x, y) (x <? y).
-Admitted.
-
-Definition add1 {x : nat} : DF x (x + 1).
-Admitted.
-
-#[local] Open Scope df.
 
 Definition linkDF {t1 t2} : DF (t1, t2) (link t1 t2).
 Proof.
