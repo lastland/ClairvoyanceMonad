@@ -1,4 +1,28 @@
--Q . Clairvoyance
+-Q src Clairvoyance
 
-Clairvoyance.v
-Translation.v
+src/Misc.v
+src/Core.v
+src/Approx.v
+src/ApproxM.v
+src/Translation.v
+src/FingerTree.v
+src/FingerTreeM.v
+src/Fix.v
+src/List.v
+src/BankersQueue.v
+src/RealtimeBankersQueue.v
+src/Eval.v
+src/Interfaces.v
+src/QueueInterface.v
+src/Launchbury.v
+src/Fuel.v
+src/LazyT.v
+src/Cost.v
+src/QueueTrace.v
+src/FingerTreeInterface.v
+src/Tick.v
+src/Relations.v
+src/Setoid.v
+src/Demand.v
+
+src/DemandLogic.v

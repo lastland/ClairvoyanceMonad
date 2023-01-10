@@ -6,7 +6,7 @@ coq: Makefile.coq
 	$(MAKE) -f Makefile.coq
 
 clean_coq: Makefile.coq
-	$(MAKE) -f Makefile.coq clean
+	$(MAKE) -f Makefile.coq cleanall
 
 clean: clean_coq
 	$(RM) Makefile.coq
