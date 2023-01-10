@@ -21,20 +21,236 @@ From Coq Require Import Arith List Lia Setoid Morphisms Orders Program.
 Import ListNotations.
 From Clairvoyance Require Import Core Approx ApproxM List Misc BankersQueue Tick.
 
+(** Interface to construct demand functions *)
+
+(* ApproxAlgebra records minimized with only the component relevant to use this interface.
+   You can pretend that (a : AA) is really (a : Type).
+   (I will probably change this to be a type class.)
+ *)
+
+Record AA : Type :=
+  { carrier :> Type
+  (* ; approx : Type *)
+  }.
+
+(* Every type in your code must implement AA *)
+
+(* Tuples *)
+Canonical AAProd (a b : AA) : AA :=
+  {| carrier := (a * b)%type
+  (* ;  approx :=(approx a * approx b)%type *)
+  |}.
+
+(* List *)
+Canonical AAList (a : AA) : AA :=
+  {| carrier := list a
+  (* ;  approx := listA (approx a) *)
+  |}.
+
+Canonical AAnat : AA :=
+  {| carrier := nat |}.
+
+Canonical AABool : AA :=
+  {| carrier := bool |}.
+
+Infix "**" := AAProd (at level 40).
+
+Parameter TODO : forall {A : Type}, A.
+
+(* Demand functions *)
+Module Import DF.
+
+(* Demand functions on input x and output y. *)
+Definition DF {a b : AA} (x : a) (y : b) : Type. 
+Proof. refine TODO. Defined.
+
+(* Identity *)
+Definition id {a : AA} {x : a} : DF x x. 
+Proof. refine TODO. Defined.
+
+(* Sequential composition *)
+Definition compose {a b c : AA} {x : a} {y : b} {z : c}
+  (f : DF x y) (g : DF y z) : DF x z.
+Proof. refine TODO. Defined.
+
+Module Import Notations.
+
+Declare Scope df_scope.
+Delimit Scope df_scope with df.
+Bind Scope df_scope with DF.
+
+Infix ">>>" := compose (left associativity, at level 40) : df_scope.
+
+End Notations.
+
+(* Projections *)
+Definition proj1DF {a b : AA} {xy' : a ** b} : DF xy' (fst xy').
+Proof. refine TODO. Defined.
+
+Definition proj2DF {a b : AA} {xy' : a ** b} : DF xy' (snd xy').
+Proof. refine TODO. Defined.
+
+(* Pairing *)
+Definition pairDF {a b c : AA} {x' : a} {y' : b} {z' : c} (f : DF x' y') (g : DF x' z')
+  : DF x' (y', z').
+Proof. refine TODO. Defined.
+
+(* The [letDF] combinator lets us compute an
+   intermediate result and "push" it in the context.
+
+   It encodes [let]:
+
+     Given f : X -> Y
+       and g : (X * Y) -> Z
+
+     they can be composed as
+
+     let y := f x in
+     g (x, y) *)
+Definition letDF {a b c : AA} {x : a} {y : b} {z : c}
+  : DF x y ->  (* f *)
+    DF (x, y) z -> (* g *)
+    DF x z.
+Proof. refine TODO. Defined.
+
+(* Increment the cost by 1 *)
+Definition tickDF {a b : AA} {x' : a} {y' : b} : DF x' y' -> DF x' y'.
+Proof. refine TODO. Defined.
+
+(* Encoding of [] *)
+Definition nilD {a b : AA} {x : a} : DF x (nil (A := b)).
+Proof. refine TODO. Defined.
+
+(* Encoding of (_ :: _) *)
+Definition consD {r a : AA} {s : r} {x : a} {xs : list a} (xD : DF s x) (xsD : DF s xs)
+  : DF s (x :: xs).
+Proof. refine TODO. Defined.
+
+(* Encoding of match on lists *)
+Definition match_list {a b c : AA} {g : b} {f : list a -> c} {xs : list a}
+    (NIL : DF g (f nil))
+    (CONS : forall x xs', DF (g, x, xs') (f (cons x xs')))
+  : DF (g, xs) (f xs) :=
+  match xs with
+  | nil => TODO >>> NIL
+  | cons x xs' => TODO >>> (CONS x xs')
+  end.
+
+(* Encoding of [if] *)
+Definition if_ {a b : AA} {x : a} {cond : bool}
+  {f : bool -> b}
+  (i : DF x cond)
+  (thn : DF x (f true))
+  (els : DF x (f false))
+  : DF x (f cond).
+Proof. refine TODO. Defined.
+
+End DF.
+
+(* Encoding of operators *)
+
+Definition le_ {x y : nat} : DF (x, y) (x <=? y).
+Proof. refine TODO. Defined.
+
+Definition lt_ {x y : nat} : DF (x, y) (x <? y).
+Proof. refine TODO. Defined.
+
+Definition add1 {x : nat} : DF x (x + 1).
+Proof. refine TODO. Defined.
+
+Import DF.Notations.
+#[local] Open Scope df.
+
 (* Pure implementation *)
 Definition A := nat.
 
-Inductive Tree : Type := 
+Canonical AAA : AA :=
+  {| carrier := A |}.
+
+Inductive Tree : Type :=
   | Node : nat -> A -> list Tree -> Tree.
 
-Record Heap : Type := MkHeap 
-  { trees : list Tree }.
+(* ApproximationAlgebra for Tree *)
+Canonical AATree : AA :=
+  {| carrier := Tree |}.
+
+(* Encoding of Node *)
+Definition nodeD {r : AA} {s : r} {n : nat} {x : A} {ts : list Tree}
+    (nD : DF s n) (xD : DF s x) (tsD : DF s ts)
+  : DF s (Node n x ts).
+Proof. refine TODO. Defined.
+
+(* Encoding of match on Tree *)
+Definition match_Tree {a c : AA}
+    {g : c} {t : Tree} {f : Tree -> a}
+    (NODE : forall n x ts, DF (g, n, x, ts) (f (Node n x ts)))
+  : DF (g, t) (f t) :=
+  match t with
+  | Node n x ts => TODO >>> NODE n x ts
+  end.
 
 Definition link (t1 t2 : Tree) : Tree :=
   match (t1, t2) with
   | (Node r1 v1 c1, Node r2 v2 c2) => if leb v1 v2
     then Node (r1 + 1) v1 (t2 :: c1)
     else Node (r2 + 1) v2 (t1 :: c2)
+  end.
+
+Definition linkDF {t1 t2} : DF (t1, t2) (link t1 t2).
+Proof.
+  refine (
+  (TODO : DF (t1, t2) (t2, t1)) >>>
+  match_Tree (f := fun t1 => link t1 t2)
+    (fun r1 v1 c1 =>
+  (TODO : DF (t2, r1, v1, c1) (r1, v1, c1, t2)) >>>
+  match_Tree (f := fun t2 => link _ t2)
+    (fun r2 v2 c2 => _
+  )))%df.
+  cbn.
+  refine (
+    if_ (f := fun b => if b then _ else _)
+        _
+        _
+        _).
+  - refine (TODO >>> le_).
+  - refine (nodeD _ _ _).
+    + refine (TODO >>> add1).
+    + refine TODO.
+    + refine (consD _ _).
+      * refine (nodeD _ _ _).
+        ** refine TODO.
+        ** refine TODO.
+        ** refine TODO.
+      * refine TODO.
+  - refine (nodeD _ _ _).
+    + refine (TODO >>> add1).
+    + refine TODO.
+    + refine (consD _ _).
+      * refine (nodeD _ _ _).
+        ** refine TODO.
+        ** refine TODO.
+        ** refine TODO.
+      * refine TODO.
+Defined.
+
+Record Heap : Type := MkHeap
+  { trees : list Tree }.
+
+Canonical AAHeap : AA :=
+  {| carrier := Heap |}.
+
+Definition MkHeapD (ts : list Tree) : DF ts (MkHeap ts).
+Proof. refine TODO. Defined.
+
+Definition treesD {h : Heap} : DF h (trees h).
+Proof. refine TODO. Defined.
+
+Definition match_Heap {a c : AA}
+    {g : c} {t : Heap} {f : Heap -> a}
+    (MKHEAP : forall ts, DF (g, ts) (f (MkHeap ts)))
+  : DF (g, t) (f t) :=
+  match t with
+  | MkHeap ts => TODO >>> MKHEAP ts
   end.
 
 Definition rank (t : Tree) : nat :=
@@ -56,12 +272,41 @@ Fixpoint insTreeAux (t : Tree) (ts : list Tree) : list Tree :=
     else insTreeAux (link t t') ts' (*t and t' should have the same rank*)
   end.
 
+Fixpoint insTreeAuxDF (t : Tree) (ts : list Tree)
+  : DF (t, ts) (insTreeAux t ts).
+Proof.
+  refine (match_list (f := fun ts => insTreeAux t ts)
+    _ (fun t' ts' => _)).
+  - cbn. refine (consD id nilD).
+  - cbn [insTreeAux].
+    refine (if_ (f := fun b => if b then _ else _)
+              _ _ _).
+    + refine (TODO >>> lt_).
+    + refine (consD TODO (consD TODO TODO)).
+    + refine (letDF (TODO >>> @linkDF t t') _).
+      refine (TODO >>> insTreeAuxDF (link t t') ts').
+Defined.
+
 Definition insTree (t : Tree) (hp : Heap) : Heap :=
   MkHeap (insTreeAux t (trees hp)).
+
+Definition insTreeDF {t hp} : DF (t, hp) (insTree t hp).
+Proof.
+  refine (letDF (TODO >>> @treesD hp) _).
+  refine (letDF (TODO >>> insTreeAuxDF t (trees hp)) _).
+  refine (proj2DF >>> MkHeapD _).
+Defined.
 
 Definition insert (x : A) (hp : Heap) 
   : Heap :=
   insTree (Node 0 x []) hp.
+
+Definition insertDF {x hp} : DF (x, hp) (insert x hp).
+Proof.
+  refine (letDF (_ : DF _ (Node 0 x [])) _).
+  - refine (nodeD TODO TODO nilD).
+  - refine (TODO >>> insTreeDF).
+Defined.
 
 Fixpoint mergeAux (trs1 trs2 : list Tree) : list Tree :=
   match trs1 with
@@ -79,8 +324,55 @@ Fixpoint mergeAux (trs1 trs2 : list Tree) : list Tree :=
     merge_trs1 trs2
   end.
 
+Print Nat.compare.
+
+Canonical AABComparison : AA :=
+  {| carrier := comparison |}.
+
+(* Encoding of [if] *)
+Definition natCompare {b : AA} {x y : nat} 
+  {f : comparison -> b}
+  (Lt_ : DF (x, y) (f Lt))
+  (Eq_ : DF (x, y) (f Eq))
+  (Gt_ : DF (x, y) (f Gt))
+  : DF (x, y) (f (Nat.compare x y)).
+Admitted.
+
+Fixpoint mergeAuxDF (trs1 trs2 : list Tree) : DF (trs1, trs2) (mergeAux trs1 trs2).
+Proof.
+  refine ((TODO : DF (trs1, trs2) (trs2, trs1)) >>>
+    (match_list (f := fun trs => mergeAux trs trs2)
+    _ (fun t1 trs1' => _))).
+  - cbn. refine TODO.
+  - refine ((TODO: DF (trs2, t1, trs1') (t1, trs1', trs2)) >>>
+    match_list (f := fun trs => mergeAux _ trs)
+    _ (fun t2 trs2' => _)).
+    + cbn [mergeAux]. refine (consD TODO TODO).
+    + cbn [mergeAux]. refine (letDF (TODO >>> natCompare 
+      (f := fun c => match c with
+        | Lt => _
+        | Eq => _
+        | Gt => _
+        end)
+        _
+        _ 
+        _) _).
+        * refine TODO.
+        * refine TODO.
+        * refine TODO.
+        * refine TODO.
+Admitted.
+
 Definition merge (hp1 hp2 : Heap) : Heap :=
   MkHeap (mergeAux (trees hp1) (trees hp2)).
+
+Definition mergeDF {hp1 hp2} : DF (hp1, hp2) (merge hp1 hp2).
+Proof.
+  refine (letDF (TODO >>> @treesD hp1) _).
+  refine (letDF (TODO >>> @treesD hp2) _).
+  refine (letDF (TODO >>> mergeAuxDF (trees hp1) (trees hp2)) _).
+  refine (proj2DF >>> MkHeapD _).
+Defined.
 
 Fixpoint removeMinAux (ts : list Tree) := 
   match ts with
@@ -93,12 +385,42 @@ Fixpoint removeMinAux (ts : list Tree) :=
     end
   end.
 
+Canonical AAoption (a : AA) : AA :=
+  {| carrier := option a |}.
+
+(* Encoding of match on options *)
+Definition match_option {a b c : AA} {g : b} {f : option a -> c} {xM : option a}
+    (NONE : DF g (f None))
+    (SOME : forall x, DF (g, x) (f (Some x)))
+  : DF (g, xM) (f xM) :=
+  match xM with
+  | None => TODO >>> NONE
+  | Some x => TODO >>> (SOME x)
+  end.
+
+Fixpoint removeMinAuxDF {ts} : DF ts (removeMinAux ts).
+Proof.
+  refine (TODO >>> 
+    match_list (f := fun ts => removeMinAux ts) _ (fun t ts' => _)).
+  - cbn. refine TODO.
+  - cbn. refine TODO.
+Admitted.
+
 Definition removeMinTree (hp : Heap) 
   : option ((Tree) * (Heap)) :=
   match removeMinAux (trees hp) with
   | Some (t, ts) => Some (t, MkHeap ts)
   | None => None
   end.
+
+Definition removeMinTreeDF {hp} : DF hp (removeMinTree hp).
+Proof.
+  refine (letDF (TODO >>> @treesD hp) _).
+  refine (letDF (TODO >>> removeMinAuxDF) _).
+  refine (match_option (f := fun pM => _) _ _).
+  - refine TODO.
+  - refine TODO. 
+Admitted.
 
 Definition findMin (hp : Heap)
   : option A :=
@@ -107,499 +429,18 @@ Definition findMin (hp : Heap)
   | Some (t, _) => Some (root t)
   end.
 
+Definition findMindDF {hp} : DF hp (findMin hp).
+Proof.
+Admitted.
+
 Definition deleteMin (hp : Heap)
   : Heap :=
   match removeMinTree hp with
   | None => MkHeap []
   | Some (Node r v c, ts) =>
     merge (MkHeap (rev c)) ts
-  end. 
-
-(* Monadic implementation *)
-
-Inductive TreeA : Type := 
-  | NodeA : nat -> A -> T (listA TreeA) -> TreeA.
-
-Record HeapA : Type := MkHeapA
-  { treesA : T (listA TreeA) }.
-
-Definition mkHeapA (trs : T (listA TreeA)) : M HeapA :=
-  ret (MkHeapA trs).
-
-Definition emptyA : M HeapA :=
-  mkHeapA (Thunk NilA).
-
-Definition linkA (t1 t2 : T TreeA) : M TreeA :=
-  tick >>
-  let! t1' := force t1 in
-  let! t2' := force t2 in
-  match (t1', t2') with
-  | (NodeA r1 v1 c1, NodeA r2 v2 c2) => if leb v1 v2
-    then ret (NodeA (r1 + 1) v1 (Thunk (ConsA t2 c1)))
-    else ret (NodeA (r2 + 1) v2 (Thunk (ConsA t1 c2)))
   end.
-
-Definition rankA (t : T TreeA) : M nat :=
-  let! tval := force t in
-  match tval with
-  | (NodeA r v c) => ret r
-  end.
-
-Definition rootA (t : T TreeA) : M A :=
-  let! tval := force t in
-  match tval with
-  | (NodeA r v c) => ret v
-  end.
-
-Definition insertHelper1 (t t' : T TreeA) (ts : T (listA TreeA)) : M (listA TreeA) :=
-  let! r := rankA t in
-  let! r' := rankA t' in
-  if r <? r'
-    then ret (ConsA t ts)
-    else let~ linkedT := linkA t t' in
-      ret (ConsA linkedT ts).
-
-Definition insertHelper2 (t t' : T TreeA) (ts : listA TreeA) : M (listA TreeA) :=
-  let! r := rankA t in
-  let! r' := rankA t' in
-  if r <? r'
-    then ret (ConsA t (Thunk ts))
-    else let~ linkedT := linkA t t' in
-      ret (ConsA linkedT (Thunk ts)).
-
-Fixpoint listA_rect {a : Type} 
-  (C : listA a -> Type)
-  (base : C NilA)
-  (rec1 : forall (x : T a), C (ConsA x Undefined))
-  (rec2 : forall (x : T a) (l' : listA a),
-     C l' -> C (ConsA x (Thunk l')))
-  (l : listA a)
-  : C l :=
-  match l with
-  | NilA => base
-  | ConsA x Undefined => rec1 x
-  | ConsA x (Thunk l') => rec2 x l' (listA_rect C base rec1 rec2 l')
-  end.
-
-Definition lengthDefinedA {a : Type} (l : listA a) : nat :=
-  let C := (fun t => nat) in
-  let base := 0 in
-  let rec1 := (fun xT => 1) in
-  let rec2 := fun xT xsT =>
-    fun recResult => recResult + 1 in
-  listA_rect C base rec1 rec2 l.
-
-
-Definition insTreeAuxA (t : T TreeA) (ts : listA TreeA) : M (listA TreeA) :=
-  let C := (fun t => M (listA TreeA)) in
-  let base := ret (ConsA t (Thunk NilA)) in
-  let rec1 := (fun t' => insertHelper1 t t' Undefined) in
-  let rec2 := fun t' ts => 
-    fun recResult => (bind recResult
-          (fun l => insertHelper2 t t' l)) in
-  listA_rect C base rec1 rec2 ts.
-
-Definition insTreeA (t : T TreeA) (hp : HeapA) : M HeapA :=
-  let! trs := force (treesA hp) in
-  bind (insTreeAuxA t trs) (fun ts => ret (MkHeapA (Thunk ts))).
-
-Definition insertA (x : A) (hp : HeapA) : M HeapA :=
-  insTreeA (Thunk (NodeA 0 x (Thunk (NilA)))) hp.
-
-(*Program Fixpoint mergeTreeAuxA (trs1 trs2 : listA TreeA) 
-  {measure ((lengthDefinedA trs1) + (lengthDefinedA trs2))} : M (listA TreeA)
-  :=
-  match (trs1, trs2) with
-  | (NilA, _) => ret trs2
-  | (_, NilA) => ret trs1
-  | (ConsA t1 trs1T', ConsA t2 trs2T') =>
-    let! r1 := rankA t1 in
-    let! r2 := rankA t2 in
-    if r1 <? r2 
-      then let! trs1' := force trs1T' in
-        bind (mergeTreeAuxA trs1' trs2)
-        (fun t => ret (ConsA t1 (Thunk t)))
-      else 
-        let! trs2' := force trs2T' in
-        if r2 <? r1
-        then 
-          bind (mergeTreeAuxA trs1 trs2')
-          (fun t => ret (ConsA t2 (Thunk t)))
-        else 
-          let! trs1' := force trs1T' in
-          bind (bind (linkA t1 t2)
-          (fun linked => bind (mergeTreeAuxA trs1' trs2')
-          (fun merged => insTreeA (Thunk linked) (MkHeapA (Thunk merged)))))
-          (fun hp => force (treesA hp))
-  end.*)
-
-Definition mergeCasesA (t1 t2 : T TreeA) (mrg1p2 mrg12p mrg1p2p : M (listA TreeA)) : M (listA TreeA) :=
-  let! r1 := rankA t1 in
-  let! r2 := rankA t2 in
-  if r1 <? r2
-    then bind mrg1p2 (fun t => ret (ConsA t1 (Thunk t)))
-    else if r2 <? r1
-      then bind mrg12p (fun t => ret (ConsA t2 (Thunk t)))
-      else bind (bind (linkA t1 t2) (fun x => bind mrg1p2p (fun t => (insTreeA (Thunk x) (MkHeapA (Thunk t))))))
-        (fun h => force (treesA h)).
-
-Definition mergeAuxA (trs1 trs2 : listA TreeA) : M (listA TreeA) :=
-  let u := force Undefined in
-  let C := (fun t => M (listA TreeA)) in
-  let base := ret trs2 in
-  let rec1 := fun t1 => (
-    let base2 := ret (ConsA t1 Undefined) in
-    let rec12 := (fun t2 => mergeCasesA t1 t2 u u u) in
-    let rec22 := (fun t2 trs2' => (fun recResult2 =>
-      mergeCasesA t1 t2 u recResult2 u )) in
-    listA_rect C base2 rec12 rec22 trs2
-  ) in
-  let rec2 := fun t1 trs1' => (fun recResult1 => (
-    let base2 := ret (ConsA t1 Undefined) in
-    let rec12 := (fun t2 => mergeCasesA t1 t2 recResult1 u u) in
-    let rec22 := (fun t2 trs2' => (fun recResult2 =>
-      mergeCasesA t1 t2 recResult1 recResult2 recResult1)) in
-    listA_rect C base2 rec12 rec22 trs2
-  )) in
-  listA_rect C base rec1 rec2 trs1.
-
-Definition mergeA (hp1 hp2 : HeapA) : M HeapA :=
-  let! trs1 := force (treesA hp1) in
-  let! trs2 := force (treesA hp2) in
-  bind (mergeAuxA trs1 trs2) (fun trs => mkHeapA (Thunk trs)).
-
-(*trs1 = ConsA t1 Undefined*)
-(*Definition mergeHelper1 (t1 : T TreeA) (trs2 : listA TreeA) : M (listA TreeA) :=
-  let C := (fun t => M (listA TreeA)) in
-  let base := ret (ConsA t1 Undefined) in
-  let rec1 := fun t2 => (*trs2 = ConsA t2 Undefined*)
-    let! r1 := rankA t1 in
-    let! r2 := rankA t2 in
-    if r1 <? r2
-      then ret (ConsA t1 Undefined) (*TODO: (Thunk trs2)? Merge is constant because trs1' is undefined*)
-      else if r2 <? r1
-        then ret (ConsA t2 Undefined) (*TODO: (Thunk (ConsA t1 (Thunk NilA)))? Merge is constant because trs2' is undefined*)
-        else bind (linkA t1 t2) (fun linked => ret (ConsA (Thunk linked) Undefined)) (*Merge is constant because trs1' and trs2' are undefined *) in
-  let rec2 := fun t2 trs2' =>
-    fun recResult =>
-    let! r1 := rankA t1 in
-    let! r2 := rankA t2 in
-    if r1 <? r2
-      then ret (ConsA t1 Undefined) (*TODO: Thunk trs2? Merge is constant because trs1' is undefined*)
-      else if r2 <? r1
-        then bind recResult (fun t => ret (ConsA t2 (Thunk t))) (*trs2' is defined*)
-        else bind (linkA t1 t2) (fun linked => ret (ConsA (Thunk linked) (Thunk NilA))) (*TODO: trs2' ? Merge is constant because trs1' is undefined*) in
-  listA_rect C base rec1 rec2 trs2.
-(*
-(*trs1 = ConsA t2 (Thunk trs1')*)
-(*recResult1 = mergeTreeAuxA trs1' trs2*)
-Definition mergeHelper2 (t1 : T TreeA) (trs1' : listA TreeA) (recResult1 : M listA TreeA) (trs2 : listA TreeA) : M (listA TreeA) :=
-  let C := (fun t => M (listA TreeA)) in
-  let base := ret (ConsA t1 (Thunk trs1')) in
-  let rec1 := fun t2 => (*trs2 = ConsA t2 Undefined*)
-    let! r1 := rankA t1 in
-    let! r2 := rankA t2 in
-    if r1 <? r2
-      then ret (ConsA t1 recResult1)
-      else if r2 <? r1
-        then ret (ConsA t2 Undefined) (*Merge ConsA t2 (mergeTreeAuxA trs1 trs2') is constant because trs2' is undefined*)
-        else bind (linkA t1 t2) (fun linked => ret (ConsA (Thunk linked) Undefined)) (*Merge is constant because trs1' and trs2' are undefined *) in
-  let rec2 := fun t2 trs2' =>
-    fun recResult2 => (*recResult2 = mergeTreeAux trs1' trs2'*)
-    let! r1 := rankA t1 in
-    let! r2 := rankA t2 in
-    if r1 <? r2
-      then ret (ConsA t1 (Thunk trs2)) (*Merge is constant because trs1' is undefined*)
-      else if r2 <? r1
-        then bind recResult (fun t => ret (ConsA t2 (Thunk t))) (*trs2' is defined*)
-        else bind (linkA t1 t2) (fun linked => insTreeAuxA (Thunk linked) trs2') (*Merge is constant because trs1' is undefined*) in
-  listA_rect C base rec1 rec2 trs2.
-
-Definition mergeTreeAuxA (trs1 trs2 : listA TreeA) : M (listA TreeA) :=
-  match trs1
-  | (NilA, _) => ret trs2
-  | (_, NilA) => ret trs1
-  | (t1 :: trs1', t2 :: trs2') =>
-    let! r1 := rank t1 in
-    let! r2 := rank t2 in
-    if r1 <? r2 
-      then ConsA t1 (mergeTreeAuxA trs1' trs2)
-      else if r2 <? r1
-        then ConsA t2 (mergeTreeAuxA trs1 trs2')
-        else insTreeA (linkA t1 t2) (mergeTreeAuxA trs1' trs2')
-  end.
-  let C := (fun t => M (listA TreeA)) in
-  let base := ret (trs2) in
-  let base2 := ret (trs1) in
-  let rec1_1 := (fun x => )
-  let rec1_2 :=
-  let rec2_1 :=
-  let rec2_2 :=
-  in 
-
-Definition mergeA (hp1 hp2 : HeapA) : M HeapA :=
-  let~ trsM := (fun trsR => merge_ trsR (treesA hp2)) $! (treesA hp1) in
-  mkHeapA trsM.*)*)
-
-Definition removeMinTreeAuxA :
-  T TreeA ->
-  T (option ((T TreeA) * (HeapA))) ->
-  M (option ((T TreeA) * (HeapA))) :=
-  fun t => (fun acc => 
-  let! accVal := force acc in
-  match accVal with
-  | None => ret (Some (t, MkHeapA (Thunk NilA)))
-  | Some (t', hp) => 
-    let! r := rootA t in
-    let! r' := rootA t' in
-    if r <? r'
-      then bind (insTreeA t' hp) (fun hp' => ret (Some (t, hp')))
-      else ret (Some (t', MkHeapA (Thunk (ConsA t (treesA hp)))))
-  end).
-
-Definition removeMinTreeA (hp : HeapA) : M (option ((T TreeA) * (HeapA))) :=
-  foldrA (ret None) removeMinTreeAuxA (treesA hp).
-
-Definition findMinA (hp : HeapA) : M (option A) :=
-  let! minPair := removeMinTreeA hp in
-  match minPair with
-  | None => ret None
-  | Some (t, _) => bind (rootA t) (fun x => ret (Some x))
-  end.
-
-Definition deleteMinA (hp : HeapA) : M (HeapA) :=
-  let! minPair := removeMinTreeA hp in
-  match minPair with
-  | None => ret (MkHeapA (Thunk NilA))
-  | Some (t, ts) =>
-    let! (NodeA r v c) := force t in
-    bind (List.TakeCompare.revA c)
-      (fun children => mergeA (MkHeapA (Thunk children)) ts)
-  end.
-
-(** * Approximation structure for [HeapA] *)
-
-(** [less_defined], [exact], [lub] *)
-
-#[global] Existing Instance LessDefined_list.
-#[local] Existing Instance Exact_id | 1.
-#[local] Existing Instance LessDefined_id | 100.
-#[local] Existing Instance PreOrder_LessDefined_id | 100.
-#[local] Existing Instance ExactMaximal_id | 100.
-#[local] Existing Instance Exact_T | 100.
-#[local] Existing Instance ExactMaximal_T | 100.
-
-(*Definition less_defined_TreeA (t1 t2 : TreeA) : Prop :=
-  match t1, t2 with
-  | (NodeA r1 v1 c1), (NodeA r2 v2 c2) =>
-    less_defined c1 c2
-  end.
-
-#[local] Instance LessDefined_TreeA : LessDefined TreeA :=
-  less_defined_TreeA.*)
-
-Record less_defined_HeapA (hp1 hp2 : HeapA) : Prop :=
-  { ld_trs : less_defined (treesA hp1) (treesA hp2) }.
-
-#[global] Instance LessDefined_HeapA : LessDefined HeapA :=
-  less_defined_HeapA.
-
-#[global]
-Instance Rep_HeapA : Rep HeapA (T (listA TreeA)) :=
-  {| to_rep := fun hp => treesA hp
-  ;  from_rep := fun trs => MkHeapA trs
-  |}.
-
-#[global] Instance RepLaw_HeapA : RepLaw HeapA _.
-Proof.
-  constructor.
-  - intros trs; reflexivity.
-  - intros []; reflexivity.
-Qed.
   
-#[global] Instance LessDefinedRep_HeapA : LessDefinedRep HeapA _.
+Definition deleteMindDF {hp} : DF hp (deleteMin hp).
 Proof.
-  intros [] []; cbn; firstorder.
-Qed.
-
-#[global] Instance PreOrder_HeapA : PreOrder (less_defined (a := HeapA)).
-Proof. exact PreOrder_Rep. Qed.
-
-Fixpoint treeConvert (t : Tree) : TreeA :=
-  match t with
-  | (Node r v c) => NodeA r v (exact (map treeConvert c))
-  end.
-
-#[global] Instance Exact_Tree : Exact Tree TreeA :=
-  treeConvert.
-
-Definition treeListConvert (trs : list Tree) : listA TreeA :=
-  match trs with
-  | [] => NilA
-  | t :: trs' => ConsA (Thunk (exact t)) (exact (map exact trs'))
-  end.
-
-#[global] Instance Exact_ListTree : Exact (list Tree) (listA TreeA) :=
-  treeListConvert.
-
-#[global] Instance Exact_Heap : Exact Heap HeapA :=
-  fun hp => MkHeapA (exact (trees hp)).
-
-#[global] Instance ExactMaximal_HeapA : ExactMaximal HeapA Heap.
-Proof. Admitted.
-
-(*TODO: should this be shallow or check the trees also?*)
-(*TODO: Lub_listA should probably not be in BankersQueue.*)
-#[global] Instance Lub_HeapA : Lub HeapA :=
-  fun hp1 hp2 =>
-    MkHeapA (lub_T (BankersQueue.Lub_listA) (treesA hp1) (treesA hp2)).
-
-#[global] Instance LubRep_HeapA : LubRep HeapA (T (listA TreeA)).
-Proof.
-  intros [] []; reflexivity.
-Qed.
-    
-#[global] Instance LubLaw_HeapA : LubLaw HeapA.
-Proof.
-  exact LubLaw_LubRep.
-Qed.
-
-Import Tick.Notations.
-
-(*Demand functions*)
-
-(*Definition linkA (t1 t2 : T TreeA) : M TreeA :=
-  tick >>
-  let! t1' := force t1 in
-  let! t2' := force t2 in
-  match (t1', t2') with
-  | (NodeA r1 v1 c1, NodeA r2 v2 c2) => if leb v1 v2
-    then ret (NodeA (r1 + 1) v1 (Thunk (ConsA t2 c1)))
-    else ret (NodeA (r2 + 1) v2 (Thunk (ConsA t1 c2)))
-  end.*)
-
-Definition linkD (outD : TreeA) : Tick ((T TreeA) * (T TreeA)) :=
-  Tick.tick >>
-  match outD with
-  | NodeA r1 v1 (Thunk (ConsA (Thunk (NodeA r2 v2 c2)) cs1)) => 
-    let tD1 := NodeA r1 v1 cs1 in
-    let tD2 := NodeA r2 v2 c2 in
-    if (Nat.ltb v2 v1)
-      then Tick.ret (Thunk tD1, Thunk tD2)
-      else Tick.ret (Thunk tD2, Thunk tD1)
-  | _ => bottom
-  end.
-
-(*Definition rankA (t : T TreeA) : M nat :=
-  let! tval := force t in
-  match tval with
-  | (NodeA r v c) => ret r
-  end.*)
-
-Definition rankD (t : Tree) : Tick (T TreeA) :=
-  Tick.tick >>
-  match t with
-  | Node r v c => Tick.ret (Thunk (NodeA r v Undefined))
-  end.
-
-(*Definition rootA (t : T TreeA) : M A :=
-  let! tval := force t in
-  match tval with
-  | (NodeA r v c) => ret v
-  end.*)
-
-Definition rootD (t : Tree) : Tick (T TreeA) :=
-  Tick.tick >>
-  match t with
-  | Node r v c => Tick.ret (Thunk (NodeA r v Undefined))
-  end.
-
-(*
-Definition insertHelper1 (t t' : T TreeA) (ts : T (listA TreeA)) : M (listA TreeA) :=
-  let! r := rankA t in
-  let! r' := rankA t' in
-  if r <? r'
-    then ret (ConsA t ts)
-    else let~ linkedT := linkA t t' in
-      ret (ConsA linkedT ts).
-
-Definition insertHelper2 (t t' : T TreeA) (ts : listA TreeA) : M (listA TreeA) :=
-  let! r := rankA t in
-  let! r' := rankA t' in
-  if r <? r'
-    then ret (ConsA t (Thunk ts))
-    else let~ linkedT := linkA t t' in
-      ret (ConsA linkedT (Thunk ts)).
-
-Definition insTreeAuxA (t : T TreeA) (ts : listA TreeA) : M (listA TreeA) :=
-  let C := (fun t => M (listA TreeA)) in
-  let base := ret (ConsA t (Thunk NilA)) in
-  let rec1 := (fun t' => insertHelper1 t t' Undefined) in
-  let rec2 := fun t' ts => 
-    fun recResult => (bind recResult
-          (fun l => insertHelper2 t t' l)) in
-  listA_rect C base rec1 rec2 ts.*)
-
-(*Definition insTreeA (t : T TreeA) (hp : HeapA) : M HeapA :=
-  let! trs := force (treesA hp) in
-  bind (insTreeAuxA t trs) (fun ts => ret (MkHeapA (Thunk ts))).*)
-
-Definition insTreeD (t : T TreeA) (outD : HeapA) : Tick ((T TreeA) * (T HeapA)) :=
-  (*Todo*) Tick.ret (Undefined, Undefined).
-
-(*Definition insertA (x : A) (hp : HeapA) : M HeapA :=
-  insTreeA (Thunk (NodeA 0 x (Thunk (NilA)))) hp.*)
-
-Definition insertD (x : A) (outD : HeapA) :=
-  insTreeD (Thunk (NodeA 0 x (Thunk (NilA)))) outD.
-
-(*Definition removeMinTreeAuxA :
-  T TreeA ->
-  T (option ((T TreeA) * (HeapA))) ->
-  M (option ((T TreeA) * (HeapA))) :=
-  fun t => (fun acc => 
-  let! accVal := force acc in
-  match accVal with
-  | None => ret (Some (t, MkHeapA (Thunk NilA)))
-  | Some (t', hp) => 
-    let! r := rootA t in
-    let! r' := rootA t' in
-    if r <? r'
-      then bind (insTreeA t' hp) (fun hp' => ret (Some (t, hp')))
-      else ret (Some (t', MkHeapA (Thunk (ConsA t (treesA hp)))))
-  end).
-
-Definition removeMinTreeA (hp : HeapA) : M (option ((T TreeA) * (HeapA))) :=
-  foldrA (ret None) removeMinTreeAuxA (treesA hp).*)
-
-(*TODO: does not use outD*)
-Definition removeMinTreeD (hp : Heap) (outD : option ((T TreeA) * (HeapA))) : Tick HeapA :=
-  Tick.tick >>
-  Tick.ret (MkHeapA (Thunk (treeListConvert (trees hp)))). (* removeMin must traverse the whole heap. *)
-
-(*Definition findMinA (hp : HeapA) : M (option A) :=
-  let! minPair := removeMinTreeA hp in
-  match minPair with
-  | None => ret None
-  | Some (t, _) => bind (rootA t) (fun x => ret (Some x))
-  end.*)
-
-(*TODO: does not use outD*)
-Definition findMinD (hp : Heap) (outD : option A) : Tick HeapA :=
-  Tick.tick >>
-  Tick.ret (MkHeapA (Thunk (treeListConvert (trees hp)))). (* findMin must traverse the whole heap. *)
-
-(*Definition deleteMinA (hp : HeapA) : M (HeapA) :=
-  let! minPair := removeMinTreeA hp in
-  match minPair with
-  | None => ret (MkHeapA (Thunk NilA))
-  | Some (t, ts) =>
-    let! (NodeA r v c) := force t in
-    bind (List.TakeCompare.revA c)
-      (fun children => mergeA (MkHeapA (Thunk children)) ts)
-  end.*)
-
-(*TODO: does not use outD*)
-Definition deleteMinD (hp : Heap) (outD : HeapA) : Tick HeapA :=
-  Tick.tick >>
-  Tick.ret (MkHeapA (Thunk (treeListConvert (trees hp)))). (* deleteMin must traverse the whole heap. *)
+Admitted.
