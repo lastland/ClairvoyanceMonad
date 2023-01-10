@@ -19,22 +19,232 @@ From Equations Require Import Equations.
 
 From Coq Require Import Arith List Lia Setoid Morphisms Orders Program.
 Import ListNotations.
-From Clairvoyance Require Import Core Approx ApproxM List Misc BankersQueue Tick Demand.
+From Clairvoyance Require Import Core Approx ApproxM List Misc BankersQueue Tick.
+
+(** Interface to construct demand functions *)
+
+(* ApproxAlgebra records minimized with only the component relevant to use this interface.
+   You can pretend that (a : AA) is really (a : Type).
+   (I will probably change this to be a type class.)
+ *)
+
+Record AA : Type :=
+  { carrier :> Type
+  (* ; approx : Type *)
+  }.
+
+(* Every type in your code must implement AA *)
+
+(* Tuples *)
+Canonical AAProd (a b : AA) : AA :=
+  {| carrier := (a * b)%type
+  (* ;  approx :=(approx a * approx b)%type *)
+  |}.
+
+(* List *)
+Canonical AAList (a : AA) : AA :=
+  {| carrier := list a
+  (* ;  approx := listA (approx a) *)
+  |}.
+
+Canonical AAnat : AA :=
+  {| carrier := nat |}.
+
+Canonical AABool : AA :=
+  {| carrier := bool |}.
+
+Infix "**" := AAProd (at level 40).
+
+Parameter TODO : forall {A : Type}, A.
+
+(* Demand functions *)
+Module Import DF.
+
+(* Demand functions on input x and output y. *)
+Definition DF {a b : AA} (x : a) (y : b) : Type. Admitted.
+
+(* Identity *)
+Definition id {a : AA} {x : a} : DF x x. Admitted.
+
+(* Sequential composition *)
+Definition compose {a b c : AA} {x : a} {y : b} {z : c}
+  (f : DF x y) (g : DF y z) : DF x z.
+Admitted.
+
+Module Import Notations.
+
+Declare Scope df_scope.
+Delimit Scope df_scope with df.
+Bind Scope df_scope with DF.
+
+Infix ">>>" := compose (left associativity, at level 40) : df_scope.
+
+End Notations.
+
+(* Projections *)
+Definition proj1DF {a b : AA} {xy' : a ** b} : DF xy' (fst xy'). Admitted.
+Definition proj2DF {a b : AA} {xy' : a ** b} : DF xy' (snd xy'). Admitted.
+
+(* Pairing *)
+Definition pairDF {a b c : AA} {x' : a} {y' : b} {z' : c} (f : DF x' y') (g : DF x' z')
+  : DF x' (y', z'). Admitted.
+
+(* The [letDF] combinator lets us compute an
+   intermediate result and "push" it in the context.
+
+   It encodes [let]:
+
+     Given f : X -> Y
+       and g : (X * Y) -> Z
+
+     they can be composed as
+
+     let y := f x in
+     g (x, y) *)
+Definition letDF {a b c : AA} {x : a} {y : b} {z : c}
+  : DF x y ->  (* f *)
+    DF (x, y) z -> (* g *)
+    DF x z.
+Admitted.
+
+(* Increment the cost by 1 *)
+Definition tickDF {a b : AA} {x' : a} {y' : b} : DF x' y' -> DF x' y'.
+Admitted.
+
+(* Encoding of [] *)
+Definition nilD {a b : AA} {x : a} : DF x (nil (A := b)).
+Admitted.
+
+(* Encoding of (_ :: _) *)
+Definition consD {r a : AA} {s : r} {x : a} {xs : list a} (xD : DF s x) (xsD : DF s xs)
+  : DF s (x :: xs).
+Admitted.
+
+(* Encoding of match on lists *)
+Definition match_list {a b c : AA} {g : b} {f : list a -> c} {xs : list a}
+    (NIL : DF g (f nil))
+    (CONS : forall x xs', DF (g, x, xs') (f (cons x xs')))
+  : DF (g, xs) (f xs) :=
+  match xs with
+  | nil => TODO >>> NIL
+  | cons x xs' => TODO >>> (CONS x xs')
+  end.
+
+(* Encoding of [if] *)
+Definition if_ {a b : AA} {x : a} {cond : bool}
+  {f : bool -> b}
+  (i : DF x cond)
+  (thn : DF x (f true))
+  (els : DF x (f false))
+  : DF x (f cond).
+Admitted.
+
+End DF.
+
+(* Encoding of operators *)
+
+Definition le_ {x y : nat} : DF (x, y) (x <=? y).
+Admitted.
+
+Definition lt_ {x y : nat} : DF (x, y) (x <? y).
+Admitted.
+
+Definition add1 {x : nat} : DF x (x + 1).
+Admitted.
+
+Import DF.Notations.
+#[local] Open Scope df.
 
 (* Pure implementation *)
 Definition A := nat.
 
-Inductive Tree : Type := 
+Canonical AAA : AA :=
+  {| carrier := A |}.
+
+Inductive Tree : Type :=
   | Node : nat -> A -> list Tree -> Tree.
 
-Record Heap : Type := MkHeap 
-  { trees : list Tree }.
+(* ApproximationAlgebra for Tree *)
+Canonical AATree : AA :=
+  {| carrier := Tree |}.
+
+(* Encoding of Node *)
+Definition nodeD {r : AA} {s : r} {n : nat} {x : A} {ts : list Tree}
+    (nD : DF s n) (xD : DF s x) (tsD : DF s ts)
+  : DF s (Node n x ts).
+Admitted.
+
+(* Encoding of match on Tree *)
+Definition match_Tree {a c : AA}
+    {g : c} {t : Tree} {f : Tree -> a}
+    (NODE : forall n x ts, DF (g, n, x, ts) (f (Node n x ts)))
+  : DF (g, t) (f t) :=
+  match t with
+  | Node n x ts => TODO >>> NODE n x ts
+  end.
 
 Definition link (t1 t2 : Tree) : Tree :=
   match (t1, t2) with
   | (Node r1 v1 c1, Node r2 v2 c2) => if leb v1 v2
     then Node (r1 + 1) v1 (t2 :: c1)
     else Node (r2 + 1) v2 (t1 :: c2)
+  end.
+
+Definition linkDF {t1 t2} : DF (t1, t2) (link t1 t2).
+Proof.
+  refine (
+  (TODO : DF (t1, t2) (t2, t1)) >>>
+  match_Tree (f := fun t1 => link t1 t2)
+    (fun r1 v1 c1 =>
+  (TODO : DF (t2, r1, v1, c1) (r1, v1, c1, t2)) >>>
+  match_Tree (f := fun t2 => link _ t2)
+    (fun r2 v2 c2 => _
+  )))%df.
+  cbn.
+  refine (
+    if_ (f := fun b => if b then _ else _)
+        _
+        _
+        _).
+  - refine (TODO >>> le_).
+  - refine (nodeD _ _ _).
+    + refine (TODO >>> add1).
+    + refine TODO.
+    + refine (consD _ _).
+      * refine (nodeD _ _ _).
+        ** refine TODO.
+        ** refine TODO.
+        ** refine TODO.
+      * refine TODO.
+  - refine (nodeD _ _ _).
+    + refine (TODO >>> add1).
+    + refine TODO.
+    + refine (consD _ _).
+      * refine (nodeD _ _ _).
+        ** refine TODO.
+        ** refine TODO.
+        ** refine TODO.
+      * refine TODO.
+Defined.
+
+Record Heap : Type := MkHeap
+  { trees : list Tree }.
+
+Canonical AAHeap : AA :=
+  {| carrier := Heap |}.
+
+Definition MkHeapD (ts : list Tree) : DF ts (MkHeap ts).
+Admitted.
+
+Definition treesD {h : Heap} : DF h (trees h).
+Admitted.
+
+Definition match_Heap {a c : AA}
+    {g : c} {t : Heap} {f : Heap -> a}
+    (MKHEAP : forall ts, DF (g, ts) (f (MkHeap ts)))
+  : DF (g, t) (f t) :=
+  match t with
+  | MkHeap ts => TODO >>> MKHEAP ts
   end.
 
 Definition rank (t : Tree) : nat :=
@@ -56,12 +266,41 @@ Fixpoint insTreeAux (t : Tree) (ts : list Tree) : list Tree :=
     else insTreeAux (link t t') ts' (*t and t' should have the same rank*)
   end.
 
+Fixpoint insTreeAuxDF (t : Tree) (ts : list Tree)
+  : DF (t, ts) (insTreeAux t ts).
+Proof.
+  refine (match_list (f := fun ts => insTreeAux t ts)
+    _ (fun t' ts' => _)).
+  - cbn. refine (consD id nilD).
+  - cbn [insTreeAux].
+    refine (if_ (f := fun b => if b then _ else _)
+              _ _ _).
+    + refine (TODO >>> lt_).
+    + refine (consD TODO (consD TODO TODO)).
+    + refine (letDF (TODO >>> @linkDF t t') _).
+      refine (TODO >>> insTreeAuxDF (link t t') ts').
+Defined.
+
 Definition insTree (t : Tree) (hp : Heap) : Heap :=
   MkHeap (insTreeAux t (trees hp)).
+
+Definition insTreeDF {t hp} : DF (t, hp) (insTree t hp).
+Proof.
+  refine (letDF (TODO >>> @treesD hp) _).
+  refine (letDF (TODO >>> insTreeAuxDF t (trees hp)) _).
+  refine (proj2DF >>> MkHeapD _).
+Defined.
 
 Definition insert (x : A) (hp : Heap) 
   : Heap :=
   insTree (Node 0 x []) hp.
+
+Definition insertDF {x hp} : DF (x, hp) (insert x hp).
+Proof.
+  refine (letDF (_ : DF _ (Node 0 x [])) _).
+  - refine (nodeD TODO TODO nilD).
+  - refine (TODO >>> insTreeDF).
+Defined.
 
 Fixpoint mergeAux (trs1 trs2 : list Tree) : list Tree :=
   match trs1 with
