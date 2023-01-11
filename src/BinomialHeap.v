@@ -19,7 +19,7 @@ From Equations Require Import Equations.
 
 From Coq Require Import Arith List Lia Setoid Morphisms Orders Program.
 Import ListNotations.
-From Clairvoyance Require Import Core Approx ApproxM List Misc BankersQueue Tick.
+From Clairvoyance Require Import Core Approx ApproxM List Misc BankersQueue Tick Demand.
 
 (** Interface to construct demand functions *)
 
@@ -28,7 +28,7 @@ From Clairvoyance Require Import Core Approx ApproxM List Misc BankersQueue Tick
    (I will probably change this to be a type class.)
  *)
 
-Record AA : Type :=
+ Record AA : Type :=
   { carrier :> Type
   (* ; approx : Type *)
   }.
@@ -50,19 +50,19 @@ Canonical AAList (a : AA) : AA :=
 Canonical AAnat : AA :=
   {| carrier := nat |}.
 
+Parameter TODO : forall {A : Type}, A.
+
 Canonical AABool : AA :=
   {| carrier := bool |}.
 
 Infix "**" := AAProd (at level 40).
-
-Parameter TODO : forall {A : Type}, A.
 
 (* Demand functions *)
 Module Import DF.
 
 (* Demand functions on input x and output y. *)
 Definition DF {a b : AA} (x : a) (y : b) : Type. 
-Proof. refine TODO. Defined.
+Admitted.
 
 (* Identity *)
 Definition id {a : AA} {x : a} : DF x x. 
@@ -258,10 +258,24 @@ Definition rank (t : Tree) : nat :=
   | (Node r v c) => r
   end.
 
+Definition rankDF {t} : DF t (rank t).
+Proof.
+  refine (TODO >>> match_Tree (f := fun t => rank t) (g := t) (*TODO*)
+    (fun r1 v1 c1 => _)).
+  cbn. refine TODO.
+Defined. 
+
 Definition root (t : Tree) : A :=
   match t with
   | (Node r v c) => v
   end.
+
+Definition rootDF {t} : DF t (root t).
+Proof.
+  refine (TODO >>> match_Tree (f := fun t => root t) (g := t) (*TODO*)
+    (fun r1 v1 c1 => _)).
+  cbn. refine TODO.
+Defined. 
 
 (*Assumes t has rank <= the rank of the first element of ts (if any).*)
 Fixpoint insTreeAux (t : Tree) (ts : list Tree) : list Tree :=
@@ -324,19 +338,26 @@ Fixpoint mergeAux (trs1 trs2 : list Tree) : list Tree :=
     merge_trs1 trs2
   end.
 
-Print Nat.compare.
-
 Canonical AABComparison : AA :=
   {| carrier := comparison |}.
 
-(* Encoding of [if] *)
-Definition natCompare {b : AA} {x y : nat} 
+Definition if_ {a b : AA} {x : a} {cond : bool}
+  {f : bool -> b}
+  (i : DF x cond)
+  (thn : DF x (f true))
+  (els : DF x (f false))
+  : DF x (f cond).
+Proof. refine TODO. Defined.  
+
+(* Encoding of [Nat.compare] *)
+Definition natCompare {a b : AA} {c : a} {x y : nat} 
   {f : comparison -> b}
-  (Lt_ : DF (x, y) (f Lt))
-  (Eq_ : DF (x, y) (f Eq))
-  (Gt_ : DF (x, y) (f Gt))
-  : DF (x, y) (f (Nat.compare x y)).
-Admitted.
+  (nats : DF c (x, y))
+  (Lt_ : DF c (f Lt))
+  (Eq_ : DF c (f Eq))
+  (Gt_ : DF c (f Gt))
+  : DF c (f (Nat.compare x y)).
+Proof. refine TODO. Defined.
 
 Fixpoint mergeAuxDF (trs1 trs2 : list Tree) : DF (trs1, trs2) (mergeAux trs1 trs2).
 Proof.
@@ -348,20 +369,21 @@ Proof.
     match_list (f := fun trs => mergeAux _ trs)
     _ (fun t2 trs2' => _)).
     + cbn [mergeAux]. refine (consD TODO TODO).
-    + cbn [mergeAux]. refine (letDF (TODO >>> natCompare 
+    + cbn [mergeAux]. refine (natCompare 
       (f := fun c => match c with
         | Lt => _
         | Eq => _
         | Gt => _
         end)
         _
+        _
         _ 
-        _) _).
+        _).
         * refine TODO.
         * refine TODO.
         * refine TODO.
-        * refine TODO.
-Admitted.
+        * refine TODO. 
+Defined.
 
 Definition merge (hp1 hp2 : Heap) : Heap :=
   MkHeap (mergeAux (trees hp1) (trees hp2)).
@@ -398,13 +420,22 @@ Definition match_option {a b c : AA} {g : b} {f : option a -> c} {xM : option a}
   | Some x => TODO >>> (SOME x)
   end.
 
+(* Encoding of None *)
+Definition noneD {a b : AA} {x : a} : DF x (None (A := b)).
+Proof. refine TODO. Defined.
+
+(* Encoding of (Some _) *)
+Definition someD {r a : AA} {s : r} {x : a} {xM : option a} (sD : DF s x)
+  : DF s (Some x).
+Proof. refine TODO. Defined.
+
 Fixpoint removeMinAuxDF {ts} : DF ts (removeMinAux ts).
 Proof.
   refine (TODO >>> 
-    match_list (f := fun ts => removeMinAux ts) _ (fun t ts' => _)).
+    match_list (f := fun ts => removeMinAux ts) (g := ts) _ (fun t ts' => _)). (*TODO*)
   - cbn. refine TODO.
   - cbn. refine TODO.
-Admitted.
+Defined.
 
 Definition removeMinTree (hp : Heap) 
   : option ((Tree) * (Heap)) :=
@@ -417,10 +448,17 @@ Definition removeMinTreeDF {hp} : DF hp (removeMinTree hp).
 Proof.
   refine (letDF (TODO >>> @treesD hp) _).
   refine (letDF (TODO >>> removeMinAuxDF) _).
-  refine (match_option (f := fun pM => _) _ _).
-  - refine TODO.
-  - refine TODO. 
-Admitted.
+  refine (TODO >>> match_option 
+    (f := fun pM => match pM with
+      | None => None
+      | Some (t, ts) => Some (t, MkHeap ts) 
+      end)
+    (g := hp) (*TODO*)
+    (xM := removeMinAux (trees hp))
+    _ (fun x => _)). 
+  - refine noneD.
+  - refine TODO. Unshelve. cbn. apply trees. assumption. (*TODO*)
+Defined.
 
 Definition findMin (hp : Heap)
   : option A :=
@@ -431,7 +469,17 @@ Definition findMin (hp : Heap)
 
 Definition findMindDF {hp} : DF hp (findMin hp).
 Proof.
-Admitted.
+  refine (TODO >>> match_option 
+    (f := fun pM => match pM with
+      | None => None
+      | Some (t, _) => Some (root t) 
+  end)
+  (g := hp) (*TODO*)
+  (xM := removeMinTree hp)
+  _ (fun x => _)). 
+  - refine noneD.
+  - refine TODO. (*TODO*)
+Defined.
 
 Definition deleteMin (hp : Heap)
   : Heap :=
@@ -443,4 +491,16 @@ Definition deleteMin (hp : Heap)
   
 Definition deleteMindDF {hp} : DF hp (deleteMin hp).
 Proof.
-Admitted.
+  refine (TODO >>> match_option 
+    (f := fun pM => match pM with
+      | None => MkHeap []
+      | Some (Node r v c, ts) =>
+        merge (MkHeap (rev c)) ts
+    end)
+  (g := hp) (*TODO*)
+  (xM := removeMinTree hp)
+  _ (fun x => _)). 
+  - refine TODO.
+  - refine TODO. (*TODO*)
+Defined.
+  
