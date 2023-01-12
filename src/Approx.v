@@ -676,3 +676,8 @@ Infix "`is_approx`" := is_approx : approx_scope.
 
 End IsApprox.
 
+Definition thunkD {a b} `{Bottom b} (f : a -> b) (x : T a) : b :=
+  match x with
+  | Undefined => bottom
+  | Thunk x => f x
+ end.

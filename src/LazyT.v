@@ -2,7 +2,7 @@ Set Implicit Arguments.
 Set Maximal Implicit Insertion.
 Set Contextual Implicit.
 
-From Clairvoyance Require Import Core List Fuel BankersQueue.
+From Clairvoyance Require Import Core List ListA Fuel BankersQueue.
 
 From Coq Require Import Nat List.
 

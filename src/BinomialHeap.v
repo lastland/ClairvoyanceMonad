@@ -503,4 +503,3 @@ Proof.
   - refine TODO.
   - refine TODO. (*TODO*)
 Defined.
-  

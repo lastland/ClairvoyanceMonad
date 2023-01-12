@@ -127,8 +127,10 @@ Proof.
     typeclasses eauto.
 Qed.
 
-#[global] Instance Lub_SeqA {a} `{Lub a} : Lub (SeqA a). Admitted.
-#[global] Instance LubLaw_SeqA {a} `{LubLaw a} : LubLaw (SeqA a). Admitted.
+#[global] Instance Lub_SeqA {a} `{Lub a} : Lub (SeqA a). 
+Admitted.
+#[global] Instance LubLaw_SeqA {a} `{LubLaw a} : LubLaw (SeqA a). 
+Admitted.
 
 #[global] Instance BottomOf_SeqA {a} : BottomOf (SeqA a) := fun q =>
   match q with
@@ -201,8 +203,38 @@ Definition exec : Exec :=
 
 #[export] Existing Instances eval budget exec.
 
+
+Require  Coq.Classes.RelationClasses.
+
 Lemma monotonic_exec (o : op) : Monotonic (exec o).
 Proof.
+unfold Monotonic. intros.
+destruct o; simpl.
+- (* Empty *) reflexivity.
+- (* Cons *)
+  inversion H. reflexivity.
+  subst.
+  apply bind_mon.
+  unfold consA.
+  apply bind_mon.
+  apply force_mon.
+  + eauto.
+  + intros x y LT. 
+    clear H H1 H0 xs ys x1 y0.
+    generalize x y LT.
+    induction 1; simpl.
+    apply bind_mon.
+    reflexivity.
+    intros x1 y1 LT1. 
+    apply ret_mon.
+    admit.
+    apply bind_mon. reflexivity.
+    intros x2 y2 LT2.
+    apply ret_mon.
+    eapply less_defined_More; try reflexivity.
+    eapply LessDefined_Thunk. 
+    eapply less_defined_One.
+    eapply LessDefined_Thunk. 
 Admitted.
 
 Definition approx_algebra : IsApproxAlgebra.

@@ -1,6 +1,6 @@
 From Coq Require Import Arith List Lia Setoid Morphisms RelationClasses.
 Import ListNotations.
-From Clairvoyance Require Import Core Approx ApproxM List Misc Tick.
+From Clairvoyance Require Import Core Approx ApproxM List Misc Tick ListA.
 
 (** * The approximation version (with clairvoyance monad)
 

@@ -8,7 +8,7 @@
 
 From Coq Require Import Setoid SetoidClass Morphisms Lia Arith List.
 From Equations Require Import Equations.
-From Clairvoyance Require Import Core Approx List ApproxM Relations Setoid Tick Misc.
+From Clairvoyance Require Import Core Approx List ApproxM Relations Setoid Tick Misc ListA.
 
 Import ListNotations.
 
