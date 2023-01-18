@@ -357,7 +357,7 @@ Proof.
   econstructor; try typeclasses eauto.
 Defined.
 
-Parameter TODO : forall {P : Prop}, P.
+Parameter TODO : forall {P : Type}, P.
 
 #[global] Instance IsAS_listA {a' a} {_ : Setoid a'} {_ : IsAA a' a} {_ : IsAS a' a} : IsAS (list a') (T (listA a)).
 Proof.
@@ -400,10 +400,124 @@ Definition exact_AA (a : Type) : AA :=
 
 Canonical AA_nat : AA := exact_AA nat.
 
-(* Demand functions *)
-Definition DF {a b : AA} (x' : a) (y' : b) : Type :=
-  { y | y `is_approx` y' } -> Tick { x | x `is_approx` x' }.
+Module OTick.
+Definition OTick (a : Type) : Type := option (Tick a).
 
+Definition ret {a : Type} (x : a) : OTick a :=
+  Some (Tick.ret x).
+
+Definition bind {a b : Type} (ox : OTick a) (k : a -> OTick b) : OTick b :=
+  match ox with
+  | None => None
+  | Some x => match k (Tick.val x) with
+              | None => None
+              | Some y => Some (Tick.MkTick (Tick.cost x + Tick.cost y) (Tick.val y))
+              end
+  end.
+
+Definition fail {a : Type} : OTick a := None.
+
+(* Weakest precondition transformer *)
+Definition wp {a : Type} (P : a -> Prop) (ox : OTick a) : Prop :=
+  match ox with
+  | None => False
+  | Some x => P (Tick.val x)
+  end.
+
+Definition tick_wp2 {a b : Type} (P : a -> b -> Prop) (ox : Tick a) (oy : Tick b) : Prop :=
+  Tick.cost ox <= Tick.cost oy /\ P (Tick.val ox) (Tick.val oy).
+
+Definition wp2 {a b : Type} (P : a -> b -> Prop) (ox : OTick a) (oy : OTick b) : Prop :=
+  match ox, oy with
+  | Some x, Some y => tick_wp2 P x y
+  | _, _ => False
+  end.
+
+(* Ordering between OTick computations *)
+#[global] Instance LessDefined_OTick {a : Type} `{LessDefined a} : LessDefined (OTick a) :=
+  wp2 less_defined.
+
+Theorem wp_ret {a : Type} (P : a -> Prop) (x : a) : P x -> wp P (ret x).
+Proof.
+  exact (fun x => x).
+Qed.
+
+Definition wp_bind {a b : Type} (P : b -> Prop) (ox : OTick a) (k : a -> OTick b)
+  : wp (fun x => wp P (k x)) ox -> wp P (OTick.bind ox k).
+Proof.
+  destruct ox; cbn; [ | auto ].
+  destruct k; cbn; auto.
+Qed.
+
+Definition wp_mono {a : Type} {P Q : a -> Prop} {ox : OTick a}
+  : (forall x, P x -> Q x) -> wp P ox -> wp Q ox.
+Proof.
+  destruct ox; cbn; auto.
+Qed.
+
+Definition wp2_mono {a b : Type} {P Q : a -> b -> Prop} {ox : OTick a} {oy : OTick b}
+  : (forall x y, P x y -> Q x y) -> wp2 P ox oy -> wp2 Q ox oy.
+Proof.
+  destruct ox; cbn; [ | contradiction ].
+  destruct oy; cbn; [ | contradiction ].
+  intros HPQ HP; constructor; [ | apply HPQ ]; apply HP.
+Qed.
+
+Definition wp2_wp_l {a b : Type} {P : a -> Prop} {Q : a -> b -> Prop} {ox : OTick a} {oy : OTick b}
+  : wp P ox -> wp2 (fun x y => P x -> Q x y) ox oy -> wp2 Q ox oy.
+Proof.
+  destruct ox; cbn; [ | contradiction ].
+  destruct oy; cbn; [ | contradiction ].
+  intros HP HPQ; constructor; apply HPQ; apply HP.
+Qed.
+
+Definition wp2_wp_r {a b : Type} {P : b -> Prop} {Q : a -> b -> Prop} {ox : OTick a} {oy : OTick b}
+  : wp P oy -> wp2 (fun x y => P y -> Q x y) ox oy -> wp2 Q ox oy.
+Proof.
+  destruct ox; cbn; [ | contradiction ].
+  destruct oy; cbn; [ | contradiction ].
+  intros HP HPQ; constructor; apply HPQ; apply HP.
+Qed.
+
+Theorem wp2_ret {a b : Type} {P : a -> b -> Prop} {x y}
+  : P x y -> wp2 P (ret x) (ret y).
+Proof.
+  cbn; unfold tick_wp2; cbn. auto.
+Qed.
+
+Theorem wp2_bind {a b : Type}
+    (P : b -> b -> Prop)
+    (ox ox' : OTick a) (k k' : a -> OTick b)
+  : wp2 (fun x x' => wp2 P (k x) (k' x')) ox ox' ->
+    wp2 P (bind ox k) (bind ox' k').
+Proof.
+Admitted.
+
+End OTick.
+
+Notation OTick := OTick.OTick.
+
+Definition RawDF (a' b' : Type) : Type := b' -> OTick a'.
+
+Record IsDF {a a' b b'} `{IsAA a a', IsAA b b'} (x : a) (y : b) (f : RawDF a' b') : Prop :=
+  { exact_apply : forall y',
+      y' `less_defined` exact y ->
+      OTick.wp (fun x' => x' `less_defined` exact x) (f y')
+  ; less_defined_apply : forall y1' y2',
+      y1' `less_defined` y2' ->
+      y2' `less_defined` exact y ->
+      f y1' `less_defined` f y2' }.
+
+(* Demand functions. We make the approximation types explicit because there may be more
+   than one (a', b') for each (a, b) (notably IsAA a a' -> Is a (T a')) *)
+Record DF {a a' b b'} `{IsAA a a', IsAA b b'} (x : a) (y : b) : Type :=
+  { apply :> RawDF a' b'
+  ; isDF :> IsDF x y apply }.
+
+Arguments DF {a} a' {b} b' {_ _} x y.
+Arguments apply {a a' b b' _ _ x y} _.
+Arguments exact_apply {a a' b b' _ _ x y f} _.
+Arguments less_defined_apply {a a' b b' _ _ x y f} _.
 (* DF is only the backwards direction.
 It's a category but its objects are terms rather than types.
 
@@ -413,14 +527,47 @@ a category whose objects are types:
 a ~> b = { f : a -> b | forall x, DF x (f x) }
 *)
 
+Generalizable All Variables.
+Implicit Types a b c : Type.
+
 Module DF.
 
-Definition id {a : AA} {x' : a} : DF x' x' := fun x => Tick.ret x.
+Definition Raw_id {a'} : RawDF a' a' :=
+  fun x => OTick.ret x.
 
-Definition compose {a b c : AA} {x' : a} {y' : b} {z' : c} (f : DF x' y') (g : DF y' z')
-  : DF x' z' := fun z => let+ y := g z in f y.
+Theorem IsDF_id `{IsAA a a'} {x : a} : IsDF x x Raw_id.
+Proof.
+  constructor.
+  - cbn. auto.
+  - cbn. intros. apply less_defined_ret. assumption.
+Qed.
 
-Module Notations.
+Definition id `{IsAA a a'} (x : a) : DF a' a' x x :=
+  {| isDF := IsDF_id |}.
+
+Definition Raw_compose {a' b' c'} (f : RawDF a' b') (g : RawDF b' c') : RawDF a' c' :=
+  fun z' => OTick.bind (g z') (fun y' => f y').
+
+Theorem IsDF_compose `{IsAA a a', IsAA b b', IsAA c c'} {x : a} {y : b} {z : c}
+  `(Hf : IsDF x y f) `(Hg : IsDF y z g) : IsDF x z (Raw_compose f g).
+Proof.
+  constructor.
+  - unfold Raw_compose. intros z' Hz; apply OTick.wp_bind.
+    refine (OTick.wp_mono _ (exact_apply Hg _ Hz)).
+    intros y' Hy. refine (OTick.wp_mono _ (exact_apply Hf _ Hy)).
+    auto.
+  - unfold Raw_compose. intros y1' y2' H1 H2.
+    apply OTick.wp2_bind.
+    apply (OTick.wp2_wp_r (exact_apply Hg _ H2)).
+    refine (OTick.wp2_mono _ (less_defined_apply Hg _ _ H1 H2)).
+    apply Hf.
+Qed.
+
+Definition compose `{IsAA a a', IsAA b b', IsAA c c'} {x : a} {y : b} {z : c}
+  (f : DF a' b' x y) (g : DF b' c' y z) : DF a' c' x z :=
+  {| isDF := IsDF_compose f g |}.
+
+Module Import Notations.
 
 Declare Scope df_scope.
 Delimit Scope df_scope with df.
@@ -430,63 +577,170 @@ Infix ">>>" := compose (left associativity, at level 40) : df_scope.
 
 End Notations.
 
+Section Product.
+
+Context `{IsAA a a', IsAA b b', IsAA c c'}.
+
+Definition Raw_proj1 (y : b) : RawDF (a' * b') a' :=
+  fun (x' : a') => OTick.ret (x', bottom_of (exact y)).
+
+Theorem IsDF_proj1 {x : a} {y : b} : IsDF (x, y) x (Raw_proj1 y).
+Proof.
+  constructor.
+  - apply TODO.
+  - apply TODO.
+Qed.
+
+Definition proj1 {x : a} {y : b} : DF (a' * b') a' (x, y) x :=
+  {| isDF := IsDF_proj1 |}.
+
+Definition Raw_proj2 (x : a) : RawDF (a' * b') b' :=
+  fun (y' : b') => OTick.ret (bottom_of (exact x), y').
+
+Theorem IsDF_proj2 {x : a} {y : b} : IsDF (x, y) y (Raw_proj2 x).
+Proof.
+  constructor.
+  - apply TODO.
+  - apply TODO.
+Qed.
+
+Definition proj2 {x : a} {y : b} : DF (a' * b') b' (x, y) y :=
+  {| isDF := IsDF_proj2 |}.
+
+Definition Raw_pair (f : RawDF a' b') (g : RawDF a' c') : RawDF a' (b' * c') :=
+  fun '(y', z') =>
+    OTick.bind (f y') (fun x1 : a' =>
+    OTick.bind (g z') (fun x2 : a' =>
+    OTick.ret (lub x1 x2))).
+
+Theorem IsDF_pair {x : a} {y : b} {z : c}
+  `(Hf : IsDF x y f) `(Hg : IsDF x z g) : IsDF x (y, z) (Raw_pair f g).
+Proof.
+  constructor.
+  - unfold Raw_pair. intros [y' z'] [Hy Hz]; cbn in Hy, Hz.
+    apply OTick.wp_bind.
+    refine (OTick.wp_mono _ (exact_apply Hf _ Hy)). intros x1 Hx1.
+    apply OTick.wp_bind.
+    refine (OTick.wp_mono _ (exact_apply Hg _ Hz)). intros x2 Hx2.
+    apply OTick.wp_ret.
+    apply lub_least_upper_bound; auto.
+  - intros [y1 z1] [y2 z2] [Hy1 Hz1] [Hy2 Hz2]; cbn in Hy1, Hz1, Hy2, Hz2 |- *.
+    apply OTick.wp2_bind.
+    apply (OTick.wp2_wp_r (exact_apply Hf _ Hy2)).
+    refine (OTick.wp2_mono _ (less_defined_apply Hf _ _ Hy1 Hy2)).
+    intros x1 x1' Hx1 Hx1'.
+    apply OTick.wp2_bind.
+    refine (OTick.wp2_mono _ (less_defined_apply Hg _ _ Hz1 Hz2)).
+    intros x2 x2' Hx2.
+    apply OTick.wp2_ret.
+    apply TODO. (* TODO: move Proper_lub to IsAA *)
+Defined.
+
+Definition pair `(f : DF a' b' x y) `(g : DF a' c' x z) : DF a' (b' * c') x (y, z) :=
+  {| isDF := IsDF_pair f g |}.
+
+End Product.
+
+Section Misc.
+
+Context `{IsAA a a', IsAA b b', IsAA c c'}.
+
+Definition Raw_tick (f : RawDF a' b') : RawDF a' b' :=
+  fun (y' : b') => option_map (fun o => Tick.tick >> o) (f y').
+
+Theorem IsDF_tick {x : a} {y : b} `(IsDF x y f) : IsDF x y (Raw_tick f).
+Admitted.
+
+Definition tick `(f : DF a' b' x y) : DF a' b' x y :=
+  {| isDF := IsDF_tick f |}.
+
+Definition bind `(f : DF a' b' x y) `(g : DF (a' * b') c' (x, y) z) : DF a' c' x z :=
+  pair (id x) f >>> g.
+
+Definition lazy `(f : DF a' b' x y) : DF a' (T b') x y.
+Admitted.
+
+End Misc.
+
 End DF.
 
 Import DF.Notations.
+#[local] Open Scope df.
 
-Definition proj1DF {a b : AA} {xy' : a ** b} : DF xy' (fst xy').
-Proof.
-  refine (
-  fun '(exist _ x x_le) =>
-    Tick.ret (exist _ (x, bottom_of (exact (snd xy'))) _)).
-  { constructor; cbn; [assumption | apply bottom_is_less]. }
-Defined.
+Module EmbedDF.
 
-Definition proj2DF {a b : AA} {xy' : a ** b} : DF xy' (snd xy').
-Proof.
-  refine (
-  fun '(exist _ y y_le) =>
-    Tick.ret (exist _ (bottom_of (exact (fst xy')), y) _)).
-  { constructor; cbn; [apply bottom_is_less | assumption]. }
-Defined.
+Record lazyprod (a b : Type) : Type := lazypair
+  { lazyfst : a
+  ; lazysnd : b }.
 
-Definition proj1DF' {a b : AA} {x' : a} {y' : b} : DF (x', y') x' := proj1DF.
-Definition proj2DF' {a b : AA} {x' : a} {y' : b} : DF (x', y') y' := proj2DF.
+Arguments lazypair {a b}.
+Arguments lazyfst {a b}.
+Arguments lazysnd {a b}.
 
-Definition pairDF {a b c : AA} {x' : a} {y' : b} {z' : c} (f : DF x' y') (g : DF x' z')
-  : DF x' (y', z').
-Proof.
-  refine (
-  fun '(exist _ (y, z) ys_le) =>
-    let+ exist _ x1 x1_le := f (exist _ y (fst_rel ys_le)) in
-    let+ exist _ x2 x2_le := g (exist _ z (snd_rel ys_le)) in
-    Tick.ret (a := {x : approx a | x `less_defined` exact x'}) (exist _ (lub x1 x2) _)).
-  apply (lub_least_upper_bound x1 x2 (exact x') x1_le x2_le). (* TODO: inlining this fails typechecking ??? *)
-Defined.
+Arguments IsAA_prod {_ _ _ _} _ _.
+Arguments IsAA_T {_ _} _.
 
-Definition tickDF {a b : AA} {x' : a} {y' : b} : DF x' y' -> DF x' y' :=
-  fun f y => Tick.tick >> f y.
+#[global] Instance IsAA_lazyprod `{IsAA a a', IsAA b b'} : IsAA (lazyprod a b) (a' * T b') :=
+  TODO.
 
-Definition nilD {a b : AA} {x : a} : DF x (nil (A := b)).
+Class HasAA (a : Type) : Type :=
+  { approx : Type
+  ; isAA :> IsAA a approx }.
+
+Arguments approx a {_}.
+
+#[global] Instance HasAA_lazyprod `{HasAA a, HasAA b} : HasAA (lazyprod a b) :=
+  {| approx := approx a * T (approx b) |}.
+
+#[global] Instance HasAA_prod `{HasAA a, HasAA b} : HasAA (prod a b) :=
+  {| approx := approx a * (approx b) |}.
+
+#[global] Instance IsAA_listA `{IsAA a a'} : IsAA (list a) (listA a').
 Admitted.
 
-Definition consD {r a : AA} {s : r} {x : a} {xs : list a} (xD : DF s x) (xsD : DF s xs)
-  : DF s (x :: xs).
+#[global] Instance HasAA_list `{HasAA a} : HasAA (list a) :=
+  {| approx := listA (approx a) |}.
+
+#[global] Instance IsAA_unit : IsAA unit unit.
 Admitted.
 
-Definition bindD {r a b : AA} {s : r} {x : a} {y : b} (xD : DF s x)
-    (k : DF (s, x) y)
-  : DF s y :=
-  DF.compose (pairDF DF.id xD) k.
+#[global] Instance HasAA_unit : HasAA unit :=
+  {| approx := unit |}.
 
-Definition force_nil {a b c : AA} {g' : b} {y' : c} (f : DF g' y') : DF (g', nil (A := a)) y' :=
-  fun y =>
-    let+ (exist _ g gle) := f y in
-    Tick.ret (exist  _ (g, Thunk NilA)
-      (prod_rel _ _ (_, _) (_, _)
-                gle
-                (LessDefined_Thunk _ _ less_defined_list_NilA))).
+#[global] Instance HasAA_nat : HasAA nat.
+Admitted.
 
+Definition embedDF {a b : Type} {Ha : HasAA a} {Hb : HasAA b} : a -> b -> Type :=
+  DF (approx a) (approx b).
+
+Declare Scope embedDF_context_scope.
+Delimit Scope embedDF_context_scope with embedDF_context.
+
+Notation "( x , y , .. , z )" := (lazypair .. (lazypair x y) .. z) : embedDF_context_scope.
+
+Arguments embedDF {a b Ha Hb} _%embedDF_context _.
+
+Definition var `{HasAA G, HasAA a} {g : G} (x : a) : embedDF g x.
+Admitted.
+
+Definition nilD `{HasAA G, HasAA a} {g : G} : embedDF g (nil (A := a)).
+Admitted.
+
+Definition consD `{HasAA G, HasAA a} {g : G} {x : a} {xs : list a}
+  : embedDF g x -> embedDF g xs -> embedDF g (x :: xs).
+Admitted.
+
+Definition to_lazyprod `{HasAA G, HasAA a} {g : G} {x : a}
+  : DF (approx G * T (approx a)) (approx G * T (approx a)) (g, x) (lazypair g x).
+Admitted.
+
+Definition bind `{HasAA G, HasAA a, HasAA b} {g : G} {x : a} {y : b}
+    (f : embedDF g x)
+    (k : embedDF (g, x) y)
+  : embedDF g y :=
+  DF.bind (DF.lazy f) (to_lazyprod (g := g) (x := x) >>> k).
+
+(* Auxiliary definition for match_list *)
 Definition force_cons_lemma {a b : AA} {g' : b} {x' : a} {xs' : list a} {g x xs}
   : g `less_defined` exact g' ->
     x `less_defined` exact x' ->
@@ -498,91 +752,70 @@ Proof.
   repeat constructor; assumption.
 Qed.
 
-Definition force_cons {a b c : AA} {g' : b} {x' : a} {xs' : list a} {y' : c}
-    (f : DF (g', x', xs') y')
-  : DF (g', cons x' xs') y' :=
-  fun y =>
-    let+ (exist _ (g, x, xs) (prod_rel _ _ _ _ (prod_rel _ _ _ _ gle xle) xsle)) := f y in
-    Tick.ret (exist _ (g, Thunk (ConsA (Thunk x) xs))
-      (force_cons_lemma gle xle xsle)).
-
-Definition match_list {a b c : AA} {g : b} {f : list a -> c} {xs : list a}
-    (NIL : DF g (f nil))
-    (CONS : forall x xs', DF (g, x, xs') (f (cons x xs')))
-  : DF (g, xs) (f xs) :=
-  match xs with
-  | nil => force_nil NIL
-  | cons x xs' => force_cons (CONS x xs')
-  end.
-
-Definition swap {a b : AA} {x : a} {y : b} : DF (x, y) (y, x).
+(* Auxiliary definition for match_list *)
+Definition force_cons `{HasAA G, HasAA a} {g : G} {x : a} {xs : list a}
+  : embedDF (pair g (cons x xs)) (lazypair (lazypair g x) xs).
 Admitted.
 
-Class Project {a b : AA} (x : a) (y : b) : Type :=
-  project : DF x y.
+Definition match_list `{HasAA G, HasAA a, HasAA b} (P : list a -> b) {g : G} {xs : list a}
+    (CASE : embedDF g xs)
+    (NIL : embedDF g (P []))
+    (CONS : forall x ys, embedDF (g, x, ys) (P (x :: ys)))
+  : embedDF g (P xs) :=
+  DF.bind CASE
+  match xs with
+  | [] => DF.proj1 >>> NIL
+  | x :: xs => force_cons >>> CONS x xs
+  end.
 
-Arguments project : clear implicits.
-Arguments project {a b x} y {_}.
+Definition tick `{HasAA G, HasAA a} {g : G} {x : a} (f : embedDF g x) : embedDF g x :=
+  DF.tick f.
 
-#[global]
-Instance Project_here {a b : AA} (x : a) (y : b) : Project (x, y) y := proj2DF.
+Definition call `{HasAA G1, HasAA G2, HasAA a} {g1 : G1} {g2 : G2} {x : a} (f : embedDF g1 x)
+  : embedDF g2 x.
+Admitted.
 
-#[global]
-Instance Project_here1 {a : AA} (x : a) : Project x x := DF.id.
+End EmbedDF.
 
-#[global]
-Instance Project_there {a b c : AA} (x : a) (y : b) (z : c) `{!Project x z}
-  : Project (x, y) z := DF.compose proj1DF (project z).
-
-Class Tuple {a b : AA} (x : a) (y : b) : Type :=
-  tuple : DF x y.
-Arguments tuple : clear implicits.
-Arguments tuple {a b x} y {_}.
-
-#[global]
-Instance Tuple_pair {a b c : AA} (x : a) (y : b) (z : c) `{!Tuple x y, !Tuple x z}
-  : Tuple x (y, z) := pairDF (tuple y) (tuple z).
-
-#[global]
-Instance Tuple_single {a b : AA} (x : a) (y : b) `{!Project x y}
-  : Tuple x y := project y.
+Import EmbedDF.
 
 Fixpoint append {a} (xs ys : list a) : list a :=
   match xs with
   | nil => ys
-  | cons x xs1 => let zs := append xs1 ys in x :: zs
+  | cons x xs1 => x :: append xs1 ys
   end.
 
-Fixpoint appendDF {a : AA} (xs ys : list a) : DF (xs, ys) (xs ++ ys) :=
-  tickDF (
-  DF.compose swap (match_list (f := fun xs => xs ++ ys)
-    (* nil => ys *)
-    DF.id
-    (* cons x xs' => x :: xs ++ ys *)
-    (fun x xs' => consD (project x) (DF.compose (tuple _) (appendDF xs' ys))))).
+Fixpoint appendDF `{HasAA a} (xs ys : list a) : embedDF (tt, xs, ys) (xs ++ ys) :=
+  EmbedDF.tick
+  (EmbedDF.match_list (fun xs => xs ++ ys) (var xs)
+    (var ys)
+    (fun x xs1 => EmbedDF.consD (var x) (call (appendDF xs1 ys)))
+  ).
 
-Definition predDF {a : AA} {g : a} {n : nat} : DF (g, S n) (g, n).
+Definition predDF `{HasAA a} {g : a} {n : nat} : embedDF (pair g (S n)) (lazypair g n).
 Admitted.
 
-Definition match_nat {b c : AA} {g : b} {f : nat -> c} {n : nat}
-    (ZERO : DF g (f O))
-    (SUCC : forall n', DF (g, n') (f (S n')))
-  : DF (g, n) (f n) :=
+Definition match_nat `{HasAA G, HasAA a} {g : G} (f : nat -> a) {n : nat}
+    (CASE : embedDF g n)
+    (ZERO : embedDF g (f O))
+    (SUCC : forall n', embedDF (g, n') (f (S n')))
+  : embedDF g (f n) :=
+  DF.bind CASE
   match n with
-  | O => proj1DF' >>> ZERO
+  | O => DF.proj1 >>> ZERO
   | S n' => predDF >>> SUCC n'
   end.
 
-Fixpoint dropDF {a : AA} (n : nat) (xs : list a) : DF (n, xs) (drop n xs) :=
-  tickDF (
-  swap >>> match_nat (f := fun n => drop n xs)
+Fixpoint dropDF `{HasAA a} (n : nat) (xs : list a) : embedDF (tt, n, xs) (drop n xs) :=
+  EmbedDF.tick
+  (match_nat (fun n => drop n xs) (var n)
     (* 0 => xs *)
-    DF.id
+    (var xs)
     (* S n => ... *)
-    (fun n => swap >>> match_list (f := fun xs => drop (S n) xs)
+    (fun n => match_list (fun xs => drop (S n) xs) (var xs)
       nilD
-      (fun x xs => tuple _ >>> dropDF n xs)
-    ))%df.
+      (fun x xs => call (dropDF n xs))
+    )).
 
 (* An account stores credits in a data structure.
 
