@@ -15,6 +15,8 @@ Import ListNotations.
 Import Tick.Notations.
 #[local] Open Scope tick_scope.
 
+Parameter TODO : forall {P : Type}, P.
+
 (** * Approximation algebras *)
 
 Module Export AA.
@@ -347,17 +349,16 @@ Proof.
 Defined.
 *)
 
-#[global] Instance IsAA_listA {a' a} {_ : IsAA a' a} : IsAA (list a') (T (listA a)).
-Proof.
-  econstructor; try typeclasses eauto.
-Defined.
-
 #[global] Instance IsAA_T {a' a} {_ : IsAA a' a} : IsAA a' (T a).
 Proof.
   econstructor; try typeclasses eauto.
 Defined.
 
-Parameter TODO : forall {P : Type}, P.
+(*
+#[global] Instance IsAA_listA {a' a} {_ : IsAA a' a} : IsAA (list a') (T (listA a)).
+Proof.
+  econstructor; try typeclasses eauto.
+Defined.
 
 #[global] Instance IsAS_listA {a' a} {_ : Setoid a'} {_ : IsAA a' a} {_ : IsAS a' a} : IsAS (list a') (T (listA a)).
 Proof.
@@ -370,6 +371,7 @@ Canonical AA_listA (a : AA) : AA :=
   {| carrier := list a
   ;  approx := T (listA (approx a))
   |}.
+*)
 
 (* Values that are always total (no partial approximations). *)
 Definition eq_Setoid (a : Type) : Setoid a :=
@@ -696,7 +698,9 @@ Arguments approx a {_}.
   {| approx := approx a * (approx b) |}.
 
 #[global] Instance IsAA_listA `{IsAA a a'} : IsAA (list a) (listA a').
-Admitted.
+Proof.
+  econstructor; try typeclasses eauto.
+Defined.
 
 #[global] Instance HasAA_list `{HasAA a} : HasAA (list a) :=
   {| approx := listA (approx a) |}.
@@ -830,7 +834,7 @@ Fixpoint dropDF `{HasAA a} (n : nat) (xs : list a) : embedDF (tt, n, xs) (drop n
 
 TODO: should account encode data structure invariants too? Or is it better to track them separately?
     *)
-Class Account (a : AA) : Type :=
+Class Accountable (a : Type) `{HasAA a} : Type :=
   { account : a -> Type
   ; credits : forall {x : a}, account x -> approx a -> nat
   ; credits_lub : forall {x : a} {x1 x2 : approx a} (p : account x),
@@ -845,31 +849,38 @@ Class Account (a : AA) : Type :=
    we can just return 0 in the bad cases. *)
 
 Declare Scope account_scope.
+Delimit Scope account_scope with account.
 Bind Scope account_scope with account.
+
+Definition credits_T {a : Type} (c : a -> nat) (x : T a) : nat :=
+  match x with
+  | Undefined => 0
+  | Thunk x => c x
+  end.
 
 (* We store one [nat] for each constructor, including [nil].
    For simplicity, we do not store credits in [a];
    we could.
  *)
-Fixpoint account_list {a : AA} (xs : list a) : Type :=
+Fixpoint account_list {a : Type} (xs : list a) : Type :=
   match xs with
   | [] => nat
   | x :: xs => nat * account_list xs
   end.
 
 (* Sum of the credits used by an approximation of a list [xs]. *)
-Fixpoint credits_list {a : AA} {xs : list a} (cs : account_list xs) (xs' : approx (AA_listA a)) : nat :=
+Fixpoint credits_list {a : Type} `{HasAA a}
+   {xs : list a} (cs : account_list xs) (xs' : approx (list a)) : nat :=
   match xs, cs, xs' with
-  | _, _, Undefined => 0
-  | [], c, Thunk NilA => c
-  | x :: xs, (c, cs), Thunk (ConsA x' xs') => c + credits_list cs xs'
+  | [], c, NilA => c
+  | x :: xs, (c, cs), ConsA x' xs' => c + credits_T (credits_list cs) xs'
   | _, _, _ => 0
   end.
 
 #[global]
-Instance Account_list {a : AA} : Account (AA_listA a) :=
+Instance Accountable_list {a} `{HasAA a} : Accountable (list a) :=
   {| account := account_list
-  ;  credits := @credits_list a
+  ;  credits := fun xs => credits_list (xs := xs)
   ;  credits_lub := TODO
   ;  credits_bottom := TODO
   |}.
@@ -877,90 +888,132 @@ Instance Account_list {a : AA} : Account (AA_listA a) :=
 Inductive Zero : Type := Z.
 
 #[global]
-Instance Account_zero {a : AA} : Account a | 9 :=
-  {| account := fun _ => Zero
-  ;  credits := fun _ _ _  => 0
-  ;  credits_lub := TODO
-  ;  credits_bottom := TODO
-  |}.
-
-Definition zero {a : AA} {x : a} : @account a Account_zero x := Z.
-
-#[global]
-Instance Account_pair {a b : AA} `{Account a, Account b} : Account (a ** b) :=
-  {| account := fun xy => (account (fst xy) * account (snd xy))%type
+Instance Accountable_pair {a b : Type} `{Accountable a, Accountable b} : Accountable (a * b) :=
+  {| account := fun (xy : a * b) => (account (fst xy) * account (snd xy))%type
   ;  credits := fun xy cd uv => credits (fst cd) (fst uv) + credits (snd cd) (snd uv)
   ;  credits_lub := TODO
   ;  credits_bottom := TODO
   |}.
 
-Definition cost_with {t} {P : t -> Prop} (p : t -> nat) (u : Tick (sig P)) : nat :=
-  p (proj1_sig (Tick.val u)) + Tick.cost u.
+#[global]
+Instance Accountable_lazypair {a b : Type} `{Accountable a, Accountable b} : Accountable (lazyprod a b) :=
+  {| account := fun (xy : lazyprod a b) => (account (lazyfst xy) * account (lazysnd xy))%type
+  ;  credits := fun (xy : lazyprod a b) cd uv => credits (fst cd) (fst uv) + credits_T (credits (snd cd)) (snd uv)
+  ;  credits_lub := TODO
+  ;  credits_bottom := TODO
+  |}.
 
-Definition is_pure {a b : AA} {x' : a} {y' : b} (f : DF x' y') : Prop :=
-  forall y, Tick.cost (f y) = 0.
+#[global]
+Instance Accountable_unit : Accountable unit :=
+  {| account := fun _ => unit
+  ;  credits := fun _ _ _ => 0
+  ;  credits_lub := TODO
+  ;  credits_bottom := TODO
+  |}.
 
-(* f : DF x y = { y' : b' | ... }  -> Tick { x' : a' | ... }
+Definition OTick_credits {a : Type} (c : a -> nat) (u : OTick a) : nat :=
+  match u with
+  | None => 0
+  | Some v => c (Tick.val v) + Tick.cost v
+  end.
 
-     p : a' -> nat
-     q : b' -> nat
-
-    has_cost f p q = forall y', cost (f y') + p (value (f y')) <= q y'
- *)
-
-Definition has_cost {a b : AA} `{Account a, Account b} {x' : a} {y' : b} (f : DF x' y') (p : account x') (q : account y')
+Definition has_cost `{Accountable a, Accountable b} {x : a} {y : b}
+    (f : embedDF x y) (n : nat) (p : account x) (q : account y)
   : Prop :=
-  forall y, cost_with (credits p) (f y) <= credits q (proj1_sig y).
+  forall y', y' `less_defined` exact y ->
+    n + OTick_credits (credits p) (apply f y') <= credits q y'.
 
-Definition map_account_head (f : nat -> nat) {a : AA} {xs : list a} (cs : account xs)
+Definition map_account_head `{HasAA a} (f : nat -> nat) {xs : list a} (cs : account xs)
   : account xs :=
   match xs, cs with
   | [], c => f c
   | x :: xs, (c, cs) => (f c, cs)
   end.
 
-Fixpoint append_account {a : AA}
+Fixpoint append_account `{HasAA a}
     {xs : list a} (cs : account xs)
     {ys : list a} (ds : account ys)
   : account (xs ++ ys) :=
   match xs, cs, ys, ds with
-  | [], c, _, _ => map_account_head S ds
+  | [], c, _, _ => map_account_head (fun d => c + d) ds
   | x :: xs, (c, cs), ys, ds => (c, append_account cs ds)
   end.
 
 Infix "++" := append_account : account_scope.
 
-Fixpoint map_account (f : nat -> nat) {a : AA} {xs : list a} (cs : account xs)
+Fixpoint map_account `{HasAA a} (f : nat -> nat) {xs : list a} (cs : account xs)
   : account xs :=
   match xs, cs with
   | [], c => f c
   | x :: xs, (c, cs) => (f c, map_account f cs)
   end.
 
-Theorem has_cost_tick {a b : AA} {x : a} {y : b} `{Account a, Account b} (f : DF x y)
-    (p : account x) (q q' : account y)
+Theorem has_cost_tick `{Accountable a, Accountable b} {x : a} {y : b}
+    (f : embedDF x y) (n : nat) (p : account x) (q q' : account y)
     (TICKY : forall y', y' `less_defined` exact y -> S (credits q y') = credits q' y')
-  : has_cost f p q -> has_cost (tickDF f) p q'.
+  : has_cost f n p q -> has_cost (EmbedDF.tick f) n p q'.
 Proof.
 Admitted.
 
-Lemma account_head_ticky {a b : AA} `{Account a, Account b} {x : a} {ys : list b}
-    {f : DF x ys}
-    {p : account x} {q : account ys}
-  : has_cost f p q -> has_cost (tickDF f) p (map_account_head S q).
+Lemma account_head_ticky `{Accountable a, HasAA b} {x : a} {ys : list b}
+    {f : embedDF x ys} (n : nat) {p : account x} {q : account ys}
+  : has_cost f n p q -> has_cost (EmbedDF.tick f) n p (map_account_head S q).
 Proof.
   apply has_cost_tick.
-  destruct ys; intros y' Hy'. inv Hy'.
+  destruct ys; intros y' Hy'.
 Admitted.
 
-Theorem append_cost {a : AA} {xs ys : list a} (cs : account xs) (ds : account ys)
+Theorem has_cost_match_list `{Accountable G, Accountable a, Accountable b}
+    {P : list a -> b} {g : G} {xs : list a}
+    {CASE : embedDF g xs}
+    {NIL : embedDF g (P [])}
+    {CONS : forall x ys, embedDF (g, x, ys) (P (x :: ys))}
+    {n : nat}
+    (aP : forall xs, account xs -> account (P xs))
+    {ag ag' : account g} {axs : account xs}
+    {zero : forall x : a, account x}  (* TODO *)
+    (H_todo : TODO (* ag <= ag' + anil *))
+    (cost_match :
+      match xs, axs with
+      | [], anil => has_cost NIL (n + anil) ag' (aP [] anil)
+      | x :: ys, (acons, ays) =>
+        has_cost (CONS x ys) (n + acons) (ag', zero x, ays) (aP (x :: ys) (acons, ays))
+      end)
+  : has_cost (match_list P CASE NIL CONS) n ag (aP xs axs).
+Proof.
+Admitted.
+
+Theorem has_cost_match_list_nil `{Accountable G, HasAA a, Accountable b}
+    {P : list a -> b} {g : G}
+    {CASE : embedDF (b := list a) g []}
+    {NIL : embedDF g (P [])}
+    {CONS : forall x ys, embedDF (g, x, ys) (P (x :: ys))}
+    {n : nat}
+    {ag ag' : account g} {anil : account []} {q : account (P [])}
+    (H_todo : TODO (* ag <= ag' + anil *))
+    (cost_match : has_cost NIL (n + anil) ag' q)
+  : has_cost (match_list P CASE NIL CONS) n ag q.
+Proof.
+Admitted.
+
+Theorem append_cost `{HasAA a} {xs ys : list a} (cs : account xs) (ds : account ys)
   : has_cost (appendDF xs ys)
-             (cs, ds)
+             0
+             (tt, cs, ds)
              (map_account S cs ++ ds).
 Proof.
   induction xs; cbn.
-  - 
+  - replace (map_account_head (fun d : nat => S (cs + d)) ds)
+    with (map_account_head S (map_account_head (fun d : nat => (cs + d)) ds)); [ | admit ].
+    apply account_head_ticky.
+    unshelve eapply (has_cost_match_list_nil (P := fun xs => xs ++ ys) (g := (tt, [], ys)%embedDF_context) (ag' := ?[e]) (anil := cs)).
+    + exact (tt, 0, ds).
+    + exact TODO.
+    + admit.
+  - admit.
 Admitted.
+
+(* TODO *)
 
 Fixpoint drop_account_ (acc : nat) {a : AA} (n : nat) {xs : list a} (cs : account xs)
   : account (drop n xs) :=
