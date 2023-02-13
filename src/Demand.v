@@ -10,6 +10,8 @@ From Coq Require Import Setoid SetoidClass Morphisms Lia Arith List.
 From Equations Require Import Equations.
 From Clairvoyance Require Import Core Approx List ApproxM Relations Setoid Tick Misc ListA.
 
+Set Warnings "-redundant-canonical-projection".
+
 Import ListNotations.
 
 Import Tick.Notations.
@@ -399,6 +401,7 @@ Definition exact_AA (a : Type) : AA :=
   |}.
 
 Canonical AA_nat : AA := exact_AA nat.
+Canonical AA_bool : AA := exact_AA bool.
 
 Module OTick.
 Definition OTick (a : Type) : Type := option (Tick a).
@@ -657,100 +660,20 @@ End Misc.
 
 Notation let_ := bind.
 
+Definition if_ {G A : AA} {g : G} {b : bool} {P : bool -> A}
+    (CASE : DF g b)
+    (TRUE : DF g (P true))
+    (FALSE : DF g (P false))
+  : DF g (P b) :=
+  match b with
+  | true => TRUE
+  | false => FALSE
+  end.
+
 End DF.
 
 Import DF.Notations.
 #[local] Open Scope df.
-
-(*
-Module EmbedDF.
-
-Record lazyprod (a b : Type) : Type := lazypair
-  { lazyfst : a
-  ; lazysnd : b }.
-
-Arguments lazypair {a b}.
-Arguments lazyfst {a b}.
-Arguments lazysnd {a b}.
-
-Arguments IsAA_prod {_ _ _ _} _ _.
-Arguments IsAA_T {_ _} _.
-
-#[global] Instance IsAA_lazyprod `{IsAA a a', IsAA b b'} : IsAA (lazyprod a b) (a' * T b') :=
-  TODO.
-
-Class HasAA (a : Type) : Type :=
-  { approx : Type
-  ; isAA :> IsAA a approx }.
-
-Arguments approx a {_}.
-
-#[global] Instance HasAA_lazyprod `{HasAA a, HasAA b} : HasAA (lazyprod a b) :=
-  {| approx := approx a * T (approx b) |}.
-
-#[global] Instance HasAA_prod `{HasAA a, HasAA b} : HasAA (prod a b) :=
-  {| approx := approx a * (approx b) |}.
-
-#[global] Instance IsAA_listA `{IsAA a a'} : IsAA (list a) (listA a').
-Proof.
-  econstructor; try typeclasses eauto.
-Defined.
-
-#[global] Instance IsAA_unit : IsAA unit unit.
-Admitted.
-
-#[global] Instance HasAA_unit : HasAA unit :=
-  {| approx := unit |}.
-
-#[global] Instance HasAA_nat : HasAA nat.
-Admitted.
-
-Definition embedDF {a b : Type} {Ha : HasAA a} {Hb : HasAA b} : a -> b -> Type :=
-  DF (approx a) (approx b).
-
-Declare Scope embedDF_context_scope.
-Delimit Scope embedDF_context_scope with embedDF_context.
-
-Notation "( x , y , .. , z )" := (lazypair .. (lazypair x y) .. z) : embedDF_context_scope.
-
-Arguments embedDF {a b Ha Hb} _%embedDF_context _.
-
-Definition consD `{HasAA G, HasAA a} {g : G} {x : a} {xs : list a}
-  : embedDF g x -> embedDF g xs -> embedDF g (x :: xs).
-Admitted.
-
-Definition to_lazyprod `{HasAA G, HasAA a} {g : G} {x : a}
-  : DF (approx G * T (approx a)) (approx G * T (approx a)) (g, x) (lazypair g x).
-Admitted.
-
-Definition bind `{HasAA G, HasAA a, HasAA b} {g : G} {x : a} {y : b}
-    (f : embedDF g x)
-    (k : embedDF (g, x) y)
-  : embedDF g y :=
-  DF.bind (DF.lazy f) (to_lazyprod (g := g) (x := x) >>> k).
-
-Definition match_list `{HasAA G, HasAA a, HasAA b} (P : list a -> b) {g : G} {xs : list a}
-    (CASE : embedDF g xs)
-    (NIL : embedDF g (P []))
-    (CONS : forall x ys, embedDF (g, x, ys) (P (x :: ys)))
-  : embedDF g (P xs) :=
-  DF.bind CASE
-  match xs with
-  | [] => DF.proj1 >>> NIL
-  | x :: xs => force_cons >>> CONS x xs
-  end.
-
-Definition tick `{HasAA G, HasAA a} {g : G} {x : a} (f : embedDF g x) : embedDF g x :=
-  DF.tick f.
-
-Definition call `{HasAA G1, HasAA G2, HasAA a} {g1 : G1} {g2 : G2} {x : a} (f : embedDF g1 x)
-  : embedDF g2 x.
-Admitted.
-
-End EmbedDF.
-
-Import EmbedDF.
-TODO: remove this *)
 
 (* Auxiliary definition for match_list *)
 Definition force_cons_lemma {a b : AA} {g' : b} {x' : a} {xs' : list a} {g x xs}

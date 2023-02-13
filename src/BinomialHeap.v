@@ -21,137 +21,9 @@ From Coq Require Import Arith List Lia Setoid Morphisms Orders Program.
 Import ListNotations.
 From Clairvoyance Require Import Core Approx ApproxM List ListA Misc Tick Demand.
 
-(*
-(** Interface to construct demand functions *)
-
-(* ApproxAlgebra records minimized with only the component relevant to use this interface.
-   You can pretend that (a : AA) is really (a : Type).
-   (I will probably change this to be a type class.)
- *)
-
- Record AA : Type :=
-  { carrier :> Type
-  (* ; approx : Type *)
-  }.
-
-(* Every type in your code must implement AA *)
-
-(* Tuples *)
-Canonical AAProd (a b : AA) : AA :=
-  {| carrier := (a * b)%type
-  (* ;  approx :=(approx a * approx b)%type *)
-  |}.
-
-(* List *)
-Canonical AAList (a : AA) : AA :=
-  {| carrier := list a
-  (* ;  approx := listA (approx a) *)
-  |}.
-
-Canonical AAnat : AA :=
-  {| carrier := nat |}.
-
-Parameter TODO : forall {A : Type}, A.
-
-Infix "**" := AAProd (at level 40).
-
-(*
-(* Demand functions *)
-Module Import DF.
-
-(* Demand functions on input x and output y. *)
-Definition DF {a b : AA} (x : a) (y : b) : Type. 
-Admitted.
-
-(* Identity *)
-Definition id {a : AA} {x : a} : DF x x. 
-Proof. refine TODO. Defined.
-
-(* Sequential composition *)
-Definition compose {a b c : AA} {x : a} {y : b} {z : c}
-  (f : DF x y) (g : DF y z) : DF x z.
-Proof. refine TODO. Defined.
-
-Module Import Notations.
-
-Declare Scope df_scope.
-Delimit Scope df_scope with df.
-Bind Scope df_scope with DF.
-
-Infix ">>>" := compose (left associativity, at level 40) : df_scope.
-
-End Notations.
-
-(* Projections *)
-Definition proj1DF {a b : AA} {xy' : a ** b} : DF xy' (fst xy').
-Proof. refine TODO. Defined.
-
-Definition proj2DF {a b : AA} {xy' : a ** b} : DF xy' (snd xy').
-Proof. refine TODO. Defined.
-
-(* Pairing *)
-Definition pairDF {a b c : AA} {x' : a} {y' : b} {z' : c} (f : DF x' y') (g : DF x' z')
-  : DF x' (y', z').
-Proof. refine TODO. Defined.
-
-(* The [letDF] combinator lets us compute an
-   intermediate result and "push" it in the context.
-
-   It encodes [let]:
-
-     Given f : X -> Y
-       and g : (X * Y) -> Z
-
-     they can be composed as
-
-     let y := f x in
-     g (x, y) *)
-Definition letDF {a b c : AA} {x : a} {y : b} {z : c}
-  : DF x y ->  (* f *)
-    DF (x, y) z -> (* g *)
-    DF x z.
-Proof. refine TODO. Defined.
-
-(* Increment the cost by 1 *)
-Definition tickDF {a b : AA} {x' : a} {y' : b} : DF x' y' -> DF x' y'.
-Proof. refine TODO. Defined.
-
-(* Encoding of [] *)
-Definition nilD {a b : AA} {x : a} : DF x (nil (A := b)).
-Proof. refine TODO. Defined.
-
-(* Encoding of (_ :: _) *)
-Definition consD {r a : AA} {s : r} {x : a} {xs : list a} (xD : DF s x) (xsD : DF s xs)
-  : DF s (x :: xs).
-Proof. refine TODO. Defined.
-
-(* Encoding of match on lists *)
-Definition match_list {a b c : AA} {g : b} {f : list a -> c} {xs : list a}
-    (NIL : DF g (f nil))
-    (CONS : forall x xs', DF (g, x, xs') (f (cons x xs')))
-  : DF (g, xs) (f xs) :=
-  match xs with
-  | nil => TODO >>> NIL
-  | cons x xs' => TODO >>> (CONS x xs')
-  end.
-
-(* Encoding of [if] *)
-Definition if_ {a b : AA} {x : a} {cond : bool}
-  {f : bool -> b}
-  (i : DF x cond)
-  (thn : DF x (f true))
-  (els : DF x (f false))
-  : DF x (f cond).
-Proof. refine TODO. Defined.
-
-End DF.
-*)
-*)
-
 Import DF.Notations.
 #[local] Open Scope df.
 
-(* Pure implementation *)
 Notation A := nat (only parsing).
 
 Inductive Tree : Type :=
@@ -160,16 +32,6 @@ Inductive Tree : Type :=
 Inductive TreeA : Type :=
   | NodeA : T nat -> T A -> T (listA TreeA) -> TreeA.
 
-(*
-Canonical AA_A :=
-  {| carrier := A
-  ;  approx := A
-  ;  AA_Setoid := TODO
-  ;  AA_IsAA := TODO
-  ;  AA_IsAS := TODO
-  |}.
-*)
-
 Canonical AA_Tree :=
   {| carrier := Tree
   ;  approx := TreeA
@@ -177,26 +39,6 @@ Canonical AA_Tree :=
   ;  AA_IsAA := TODO
   ;  AA_IsAS := TODO
   |}.
-
-Canonical AA_Bool : AA :=
-  {| carrier := bool
-  ;  approx := bool
-  ;  AA_Setoid := TODO
-  ;  AA_IsAA := TODO
-  ;  AA_IsAS := TODO
-  |}.
-
-
-(* Encoding of operators *)
-
-Definition le_ (x y : nat) : DF (x, y) (x <=? y).
-Proof. refine TODO. Defined.
-
-Definition lt_ (x y : nat) : DF (x, y) (x <? y).
-Proof. refine TODO. Defined.
-
-Definition add1 (x : nat) : DF x (x + 1).
-Proof. refine TODO. Defined.
 
 (* Encoding of Node *)
 Definition nodeD {r : AA} {s : r} {n : nat} {x : A} {ts : list Tree}
@@ -214,15 +56,16 @@ Definition match_Tree {a c : AA}
   | Node n x ts => TODO >>> NODE n x ts
   end.
 
-Definition if_ {G A : AA} {g : G} {b : bool} {P : bool -> A}
-    (CASE : DF g b)
-    (TRUE : DF g (P true))
-    (FALSE : DF g (P false))
-  : DF g (P b) :=
-  match b with
-  | true => TRUE
-  | false => FALSE
-  end.
+(* Encoding of operators *)
+
+Definition le_ (x y : nat) : DF (x, y) (x <=? y).
+Proof. refine TODO. Defined.
+
+Definition lt_ (x y : nat) : DF (x, y) (x <? y).
+Proof. refine TODO. Defined.
+
+Definition add1 (x : nat) : DF x (x + 1).
+Proof. refine TODO. Defined.
 
 Definition link (t1 t2 : Tree) : Tree :=
   match (t1, t2) with
@@ -239,7 +82,7 @@ Definition linkDF t1 t2 : DF (t1, t2) (link t1 t2) :=
       match_Tree (fun t2 => link (Node r1 v1 c1) t2)
         (var t2)
         (fun r2 v2 c2 =>
-          if_ (P := fun b => if b then _ else _) (call (le_ v1 v2))
+          DF.if_ (P := fun b => if b then _ else _) (call (le_ v1 v2))
               (nodeD (call (add1 r1)) (var v1) (consD (nodeD (var r2) (var v2) (var c2)) (var c1)))
               (nodeD (call (add1 r2)) (var v2) (consD (nodeD (var r1) (var v1) (var c1)) (var c2))))
     )
@@ -253,7 +96,7 @@ Record HeapA : Type := MkHeapA
 
 Canonical AA_Heap : AA :=
   {| carrier := Heap
-  ;  approx := HeapA
+  ;  approx := T HeapA
   ;  AA_Setoid := TODO
   ;  AA_IsAA := TODO
   ;  AA_IsAS := TODO
@@ -315,7 +158,7 @@ Fixpoint insTreeDF (t : Tree) (ts : list Tree)
         DF.let_ (call (rankDF t)) (
         DF.let_ (call (rankDF t')) (
         DF.let_ (call (lt_ (rank t) (rank t'))) (
-        if_ (P := fun b => if b then _ else _) (var (rank t <? rank t'))
+        DF.if_ (P := fun b => if b then _ else _) (var (rank t <? rank t'))
           (consD (var t) (consD (var t') (var ts')))
           (DF.let_ (call (linkDF t t')) (
            call (insTreeDF (link t t') ts')))))))
@@ -333,15 +176,21 @@ Definition insertDF x hp : DF (x, hp) (insert x hp) :=
   DF.let_ (treesD (var hp)) (
   MkHeapD (call (insTreeDF _ _)))).
 
-Class Potential (a : AA) : Type :=
-  pot : approx a -> nat.
+(* Potential: number of trees
+   (times an implementation-dependent multiplicative factor)
+   It would be 1 if we just counted calls to [link].  *)
 
-(* number of trees *)
-#[global] Instance Potential_list {a : AA} : Potential (AA_listA a) :=
-  fun ts => 3 * sizeX 0 ts.
+Definition pot_list {A : Type} (ts : T (listA A)) : nat :=
+  3 * sizeX 0 ts.
 
-#[global] Instance Potential_Heap : Potential AA_Heap :=
-  fun h => pot (a := AA_listA AA_Tree) (treesA h).
+Definition measureT {a : Type} (f : a -> nat) (t : T a) : nat :=
+  match t with
+  | Undefined => 0
+  | Thunk x => f x
+  end.
+
+Definition pot_heap : T HeapA -> nat :=
+  measureT (fun h => pot_list (treesA h)).
 
 Definition valid_Trees (ts : list Tree) : Prop.
 Admitted.
@@ -365,10 +214,10 @@ Definition has_cost {A B : AA} {a : A} {b : B}
   : Prop :=
   has_cost_ f 0 pre post n.
 
-Definition potplus {A B : Type} (f : A -> nat) (g : B -> nat) (xy : A * B) : nat :=
+Definition measure_plus {A B : Type} (f : A -> nat) (g : B -> nat) (xy : A * B) : nat :=
   f (fst xy) + g (snd xy).
 
-Infix "+++" := potplus (at level 40).
+Infix "+++" := measure_plus (at level 40).
 
 Definition zero {A : Type} (_ : A) : nat := 0.
 
@@ -379,6 +228,43 @@ Class Subadditive {A : AA} (f : approx A -> nat) : Prop :=
   { subadditive_zero : forall x, f (bottom_of x) = 0
   ; subadditive_lub  : forall x y, f (lub x y) <= f x + f y
   }.
+
+#[global]
+Instance Subadditive_zero {A : AA} : Subadditive (A := A) zero.
+Proof.
+  constructor; reflexivity.
+Qed.
+
+#[global]
+Instance Subadditive_measure_plus {A B : AA}
+    (f : approx A -> nat) (g : approx B -> nat)
+    `(!Subadditive f, !Subadditive g)
+  : Subadditive (f +++ g).
+Proof.
+  constructor.
+  - intros []; unfold measure_plus; cbn.
+    rewrite 2 subadditive_zero. reflexivity.
+  - intros x y. unfold measure_plus; cbn.
+    rewrite 2 subadditive_lub. lia.
+Qed.
+
+#[global] Instance Proper_S_le : Proper (le ==> le) S.
+Proof. exact le_n_S. Qed.
+
+Lemma subadditive_sizeX' {a : Type} (n : nat) (xs ys : listA a)
+  : sizeX' n (lub xs ys) <= sizeX' n xs + sizeX' n ys.
+Proof.
+  revert ys; induction xs as [ | x | x xs IH ]; intros [| y [] ]; cbn; try rewrite IH; lia.
+Qed.
+
+#[global]
+Instance Subadditive_pot_list (A : AA)
+  : Subadditive (A := AA_listA A) pot_list.
+Proof.
+  constructor.
+  - reflexivity.
+  - intros [] []; cbn; try rewrite subadditive_sizeX'; lia.
+Qed.
 
 Lemma let_cost {A B C : AA} {a : A} {b : B} {c : C} (f : DF a b) (g : DF (a, b) c)
     (pre : approx A -> nat) (mid : approx B -> nat) (post : approx C -> nat) (m0 m n : nat)
@@ -418,7 +304,7 @@ Lemma match_list_nil_cost {G A B : AA} {P : list A -> B} {g : G}
     has_cost_ (match_list (var []) NIL CONS) m pre post n.
 Admitted.
 
-Definition pot_list {A  : AA} (x : A) (xs : list A) pot0 pot_hd pot_tl : Prop
+Definition measure_list_uncons {A  : AA} (x : A) (xs : list A) pot0 pot_hd pot_tl : Prop
   := forall (x' : approx A) (xs' : approx (AA_listA A)), x' `is_approx` x -> xs' `is_approx` xs ->
       pot0 (Thunk (ConsA (Thunk x') xs')) <= pot_hd x' + pot_tl xs'.
 
@@ -428,51 +314,49 @@ Lemma match_list_cons_cost {G A B : AA} {P : list A -> B} {g : G} (x : A) (xs : 
     (CONS : forall x ys, DF (g, x, ys) (P (x :: ys)))
     m pre pot0 m' pot_hd pot_tl post n
   : has_cost_ (var (g := g) (x :: xs)) m pre pot0 m' ->
-    pot_list x xs pot0 pot_hd pot_tl ->
+    measure_list_uncons x xs pot0 pot_hd pot_tl ->
     has_cost_ (CONS x xs) m ((pre +++ pot_hd) +++ pot_tl) post n ->
     has_cost_ (match_list (var (x :: xs)) NIL CONS) m pre post n.
 Admitted.
 
-Lemma pot_list_pot {A : AA} (x : A) (xs : list A)
-  : pot_list x xs pot (fun _ => 3) pot.
+Lemma pot_list_uncons {A : AA} (x : A) (xs : list A)
+  : measure_list_uncons x xs pot_list (fun _ => 3) pot_list.
 Proof.
   red. intros x' xs' Ax Axs; inv Axs; cbn; lia.
 Qed.
 
 Lemma consD_cost {G A : AA} {g : G} {x : A} {xs : list A}
-    (xD : DF g x) (xsD : DF g xs) m1 m2 m pre pot n
+    {xD : DF g x} {xsD : DF g xs} {m1 m2 m pre n}
     `{!Subadditive pre}
   : m1 + m2 <= m ->
     has_cost_ xD m1 pre zero 3 ->
-    has_cost_ xsD m2 pre pot n ->
-    has_cost_ (consD xD xsD) m pre pot n.
+    has_cost_ xsD m2 pre pot_list n ->
+    has_cost_ (consD xD xsD) m pre pot_list n.
 Admitted.
 
-Lemma nilD_cost {G A : AA} (g : G) pre n
+Lemma nilD_cost {G A : AA} {g : G} {pre n}
     `{!Subadditive pre}
-  : has_cost_ (a := g) (nilD (a := A)) 0 pre pot n.
+  : has_cost_ (a := g) (nilD (a := A)) 0 pre pot_list n.
 Proof.
 Admitted.
 
 Theorem insTree_cost (t : Tree) (ts : list Tree)
   : valid_Trees ts ->
-    has_cost_ (insTreeDF t ts) 0 (zero +++ pot) pot insert_budget.
+    has_cost_ (insTreeDF t ts) 0 (zero +++ pot_list) pot_list insert_budget.
 Proof.
   revert t; induction ts; intros t Vts.
   - unfold insTreeDF.
     apply tick_cost.
     apply match_list_nil_cost.
-    apply consD_cost with (m1 := 1) (m2 := 0).
-    + admit.
-    + admit.
+    apply (consD_cost (m1 := 1) (m2 := 0)).
+    + lia.
     + admit.
     + apply nilD_cost.
-      admit.
   - unfold insTreeDF.
     apply tick_cost.
-    apply match_list_cons_cost with (pot0 := pot) (pot_hd := fun _ => 3) (pot_tl := pot) (m' := 1).
+    apply match_list_cons_cost with (pot0 := pot_list) (pot_hd := fun _ => 3) (pot_tl := pot_list) (m' := 1).
     + admit.
-    + apply pot_list_pot.
+    + apply pot_list_uncons.
     + apply let_cost with (mid := zero) (m := 0).
 Admitted.
 
@@ -489,7 +373,7 @@ Admitted.
 
 Theorem insert_cost (x : A) (h : Heap)
   : valid_Heap h ->
-    has_cost_ (insertDF x h) 0 (zero +++ pot) pot insert_budget.
+    has_cost_ (insertDF x h) 0 (zero +++ pot_heap) pot_heap insert_budget.
 Proof.
   intros Vh.
   change insert_budget with (0 + insert_budget).
@@ -502,7 +386,7 @@ Proof.
   change insert_budget with (0 + insert_budget).
   apply let_cost with (mid := zero) (m := 0); [ admit | |].
   { admit. }
-  assert (HH : has_cost_ (insTreeDF (Node 0 x []) (trees h)) 0 (zero +++ pot) pot insert_budget).
+  assert (HH : has_cost_ (insTreeDF (Node 0 x []) (trees h)) 0 (zero +++ pot_list) pot_list insert_budget).
   { apply insTree_cost. assumption. }
   admit.
 Admitted.
