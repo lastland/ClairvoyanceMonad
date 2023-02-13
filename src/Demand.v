@@ -35,7 +35,7 @@ Notation IsAS := IsApproxSetoid.
 
 Record ApproxAlgebra : Type :=
   { carrier :> Type
-  ; AA_Setoid : Setoid carrier
+  ; AA_Setoid :> Setoid carrier
   ; approx : Type
   ; AA_IsAA :> IsApproxAlgebra carrier approx
   ; AA_IsAS :> IsApproxSetoid carrier approx
@@ -354,7 +354,6 @@ Proof.
   econstructor; try typeclasses eauto.
 Defined.
 
-(*
 #[global] Instance IsAA_listA {a' a} {_ : IsAA a' a} : IsAA (list a') (T (listA a)).
 Proof.
   econstructor; try typeclasses eauto.
@@ -371,7 +370,6 @@ Canonical AA_listA (a : AA) : AA :=
   {| carrier := list a
   ;  approx := T (listA (approx a))
   |}.
-*)
 
 (* Values that are always total (no partial approximations). *)
 Definition eq_Setoid (a : Type) : Setoid a :=
@@ -501,7 +499,7 @@ Notation OTick := OTick.OTick.
 
 Definition RawDF (a' b' : Type) : Type := b' -> OTick a'.
 
-Record IsDF {a a' b b'} `{IsAA a a', IsAA b b'} (x : a) (y : b) (f : RawDF a' b') : Prop :=
+Record IsDF {a b : AA} (x : a) (y : b) (f : RawDF (approx a) (approx b)) : Prop :=
   { exact_apply : forall y',
       y' `less_defined` exact y ->
       OTick.wp (fun x' => x' `less_defined` exact x) (f y')
@@ -512,14 +510,14 @@ Record IsDF {a a' b b'} `{IsAA a a', IsAA b b'} (x : a) (y : b) (f : RawDF a' b'
 
 (* Demand functions. We make the approximation types explicit because there may be more
    than one (a', b') for each (a, b) (notably IsAA a a' -> Is a (T a')) *)
-Record DF {a a' b b'} `{IsAA a a', IsAA b b'} (x : a) (y : b) : Type :=
-  { apply :> RawDF a' b'
+Record DF {a b : AA} (x : a) (y : b) : Type :=
+  { apply :> RawDF (approx a) (approx b)
   ; isDF :> IsDF x y apply }.
 
-Arguments DF {a} a' {b} b' {_ _} x y.
-Arguments apply {a a' b b' _ _ x y} _.
-Arguments exact_apply {a a' b b' _ _ x y f} _.
-Arguments less_defined_apply {a a' b b' _ _ x y f} _.
+Arguments DF {a} {b} x y.
+Arguments apply {a b x y} _.
+Arguments exact_apply {a b x y f} _.
+Arguments less_defined_apply {a b x y f} _.
 (* DF is only the backwards direction.
 It's a category but its objects are terms rather than types.
 
@@ -530,27 +528,27 @@ a ~> b = { f : a -> b | forall x, DF x (f x) }
 *)
 
 Generalizable All Variables.
-Implicit Types a b c : Type.
+Implicit Types a b c : AA.
 
 Module DF.
 
-Definition Raw_id {a'} : RawDF a' a' :=
+Definition Raw_id {a : Type} : RawDF a a :=
   fun x => OTick.ret x.
 
-Theorem IsDF_id `{IsAA a a'} {x : a} : IsDF x x Raw_id.
+Theorem IsDF_id {a : AA} {x : a} : IsDF x x Raw_id.
 Proof.
   constructor.
   - cbn. auto.
   - cbn. intros. apply less_defined_ret. assumption.
 Qed.
 
-Definition id `{IsAA a a'} (x : a) : DF a' a' x x :=
+Definition id {a : AA} (x : a) : DF x x :=
   {| isDF := IsDF_id |}.
 
-Definition Raw_compose {a' b' c'} (f : RawDF a' b') (g : RawDF b' c') : RawDF a' c' :=
+Definition Raw_compose {a b c : Type} (f : RawDF a b) (g : RawDF b c) : RawDF a c :=
   fun z' => OTick.bind (g z') (fun y' => f y').
 
-Theorem IsDF_compose `{IsAA a a', IsAA b b', IsAA c c'} {x : a} {y : b} {z : c}
+Theorem IsDF_compose {a b c : AA} {x : a} {y : b} {z : c}
   `(Hf : IsDF x y f) `(Hg : IsDF y z g) : IsDF x z (Raw_compose f g).
 Proof.
   constructor.
@@ -565,8 +563,8 @@ Proof.
     apply Hf.
 Qed.
 
-Definition compose `{IsAA a a', IsAA b b', IsAA c c'} {x : a} {y : b} {z : c}
-  (f : DF a' b' x y) (g : DF b' c' y z) : DF a' c' x z :=
+Definition compose {a b c : AA} {x : a} {y : b} {z : c}
+  (f : DF x y) (g : DF y z) : DF x z :=
   {| isDF := IsDF_compose f g |}.
 
 Module Import Notations.
@@ -581,41 +579,39 @@ End Notations.
 
 Section Product.
 
-Context `{IsAA a a', IsAA b b', IsAA c c'}.
-
-Definition Raw_proj1 (y : b) : RawDF (a' * b') a' :=
+Definition Raw_proj1 {a' b b' : Type} `{BottomOf b', Exact b b'} (y : b) : RawDF (a' * b') a' :=
   fun (x' : a') => OTick.ret (x', bottom_of (exact y)).
 
-Theorem IsDF_proj1 {x : a} {y : b} : IsDF (x, y) x (Raw_proj1 y).
+Theorem IsDF_proj1 {a b : AA} {x : a} {y : b} : IsDF (x, y) x (Raw_proj1 y).
 Proof.
   constructor.
   - apply TODO.
   - apply TODO.
 Qed.
 
-Definition proj1 {x : a} {y : b} : DF (a' * b') a' (x, y) x :=
+Definition proj1 {a b : AA} {x : a} {y : b} : DF (x, y) x :=
   {| isDF := IsDF_proj1 |}.
 
-Definition Raw_proj2 (x : a) : RawDF (a' * b') b' :=
+Definition Raw_proj2 {a a' b' : Type} `{BottomOf a', Exact a a'} (x : a) : RawDF (a' * b') b' :=
   fun (y' : b') => OTick.ret (bottom_of (exact x), y').
 
-Theorem IsDF_proj2 {x : a} {y : b} : IsDF (x, y) y (Raw_proj2 x).
+Theorem IsDF_proj2 {a b : AA} {x : a} {y : b} : IsDF (x, y) y (Raw_proj2 x).
 Proof.
   constructor.
   - apply TODO.
   - apply TODO.
 Qed.
 
-Definition proj2 {x : a} {y : b} : DF (a' * b') b' (x, y) y :=
+Definition proj2 {a b : AA} {x : a} {y : b} : DF (x, y) y :=
   {| isDF := IsDF_proj2 |}.
 
-Definition Raw_pair (f : RawDF a' b') (g : RawDF a' c') : RawDF a' (b' * c') :=
+Definition Raw_pair {a' b' c' : Type} `{Lub a'} (f : RawDF a' b') (g : RawDF a' c') : RawDF a' (b' * c') :=
   fun '(y', z') =>
     OTick.bind (f y') (fun x1 : a' =>
     OTick.bind (g z') (fun x2 : a' =>
     OTick.ret (lub x1 x2))).
 
-Theorem IsDF_pair {x : a} {y : b} {z : c}
+Theorem IsDF_pair {a b c : AA} {x : a} {y : b} {z : c}
   `(Hf : IsDF x y f) `(Hg : IsDF x z g) : IsDF x (y, z) (Raw_pair f g).
 Proof.
   constructor.
@@ -638,37 +634,35 @@ Proof.
     apply TODO. (* TODO: move Proper_lub to IsAA *)
 Defined.
 
-Definition pair `(f : DF a' b' x y) `(g : DF a' c' x z) : DF a' (b' * c') x (y, z) :=
+Definition pair `{x : a, y : b, z : c} `(f : DF x y) `(g : DF x z) : DF x (y, z) :=
   {| isDF := IsDF_pair f g |}.
 
 End Product.
 
 Section Misc.
 
-Context `{IsAA a a', IsAA b b', IsAA c c'}.
-
-Definition Raw_tick (f : RawDF a' b') : RawDF a' b' :=
+Definition Raw_tick {a' b' : Type} (f : RawDF a' b') : RawDF a' b' :=
   fun (y' : b') => option_map (fun o => Tick.tick >> o) (f y').
 
-Theorem IsDF_tick {x : a} {y : b} `(IsDF x y f) : IsDF x y (Raw_tick f).
+Theorem IsDF_tick {a b : AA} {x : a} {y : b} `(IsDF x y f) : IsDF x y (Raw_tick f).
 Admitted.
 
-Definition tick `(f : DF a' b' x y) : DF a' b' x y :=
+Definition tick `{x : a, y : b} `(f : DF x y) : DF x y :=
   {| isDF := IsDF_tick f |}.
 
-Definition bind `(f : DF a' b' x y) `(g : DF (a' * b') c' (x, y) z) : DF a' c' x z :=
+Definition bind `{x : a, y : b, z : c} `(f : DF x y) `(g : DF (x, y) z) : DF x z :=
   pair (id x) f >>> g.
 
-Definition lazy `(f : DF a' b' x y) : DF a' (T b') x y.
-Admitted.
-
 End Misc.
+
+Notation let_ := bind.
 
 End DF.
 
 Import DF.Notations.
 #[local] Open Scope df.
 
+(*
 Module EmbedDF.
 
 Record lazyprod (a b : Type) : Type := lazypair
@@ -702,9 +696,6 @@ Proof.
   econstructor; try typeclasses eauto.
 Defined.
 
-#[global] Instance HasAA_list `{HasAA a} : HasAA (list a) :=
-  {| approx := listA (approx a) |}.
-
 #[global] Instance IsAA_unit : IsAA unit unit.
 Admitted.
 
@@ -724,12 +715,6 @@ Notation "( x , y , .. , z )" := (lazypair .. (lazypair x y) .. z) : embedDF_con
 
 Arguments embedDF {a b Ha Hb} _%embedDF_context _.
 
-Definition var `{HasAA G, HasAA a} {g : G} (x : a) : embedDF g x.
-Admitted.
-
-Definition nilD `{HasAA G, HasAA a} {g : G} : embedDF g (nil (A := a)).
-Admitted.
-
 Definition consD `{HasAA G, HasAA a} {g : G} {x : a} {xs : list a}
   : embedDF g x -> embedDF g xs -> embedDF g (x :: xs).
 Admitted.
@@ -743,23 +728,6 @@ Definition bind `{HasAA G, HasAA a, HasAA b} {g : G} {x : a} {y : b}
     (k : embedDF (g, x) y)
   : embedDF g y :=
   DF.bind (DF.lazy f) (to_lazyprod (g := g) (x := x) >>> k).
-
-(* Auxiliary definition for match_list *)
-Definition force_cons_lemma {a b : AA} {g' : b} {x' : a} {xs' : list a} {g x xs}
-  : g `less_defined` exact g' ->
-    x `less_defined` exact x' ->
-    xs `less_defined` exact xs' ->
-    (g, Thunk (ConsA (Thunk x) xs)) `less_defined` exact (g', x' :: xs').
-Proof.
-  intros; constructor; cbn; auto.
-  constructor. simp exact.
-  repeat constructor; assumption.
-Qed.
-
-(* Auxiliary definition for match_list *)
-Definition force_cons `{HasAA G, HasAA a} {g : G} {x : a} {xs : list a}
-  : embedDF (pair g (cons x xs)) (lazypair (lazypair g x) xs).
-Admitted.
 
 Definition match_list `{HasAA G, HasAA a, HasAA b} (P : list a -> b) {g : G} {xs : list a}
     (CASE : embedDF g xs)
@@ -782,6 +750,42 @@ Admitted.
 End EmbedDF.
 
 Import EmbedDF.
+TODO: remove this *)
+
+(* Auxiliary definition for match_list *)
+Definition force_cons_lemma {a b : AA} {g' : b} {x' : a} {xs' : list a} {g x xs}
+  : g `less_defined` exact g' ->
+    x `less_defined` exact x' ->
+    xs `less_defined` exact xs' ->
+    (g, Thunk (ConsA (Thunk x) xs)) `less_defined` exact (g', x' :: xs').
+Proof.
+  intros; constructor; cbn; auto.
+  constructor. simp exact.
+  repeat constructor; assumption.
+Qed.
+
+(* Auxiliary definition for match_list *)
+Definition force_cons {G A : AA} {g : G} {x : A} {xs : list A}
+  : DF (g, (cons x xs)) (g, x, xs).
+Admitted.
+
+Definition match_list {G A B : AA} {P : list A -> B} {g : G} {xs : list A}
+    (CASE : DF g xs)
+    (NIL : DF g (P []))
+    (CONS : forall x ys, DF (g, x, ys) (P (x :: ys)))
+  : DF g (P xs) :=
+  DF.bind CASE
+  match xs with
+  | [] => DF.proj1 >>> NIL
+  | x :: xs => force_cons >>> CONS x xs
+  end.
+
+Definition nilD {G a : AA} {g : G} : DF g (nil (A := a)).
+Admitted.
+
+Definition consD {G A : AA} {g : G} {x : A} {xs : list A}
+  : DF g x -> DF g xs -> DF g (x :: xs).
+Admitted.
 
 Fixpoint append {a} (xs ys : list a) : list a :=
   match xs with
@@ -789,38 +793,62 @@ Fixpoint append {a} (xs ys : list a) : list a :=
   | cons x xs1 => x :: append xs1 ys
   end.
 
-Fixpoint appendDF `{HasAA a} (xs ys : list a) : embedDF (tt, xs, ys) (xs ++ ys) :=
-  EmbedDF.tick
-  (EmbedDF.match_list (fun xs => xs ++ ys) (var xs)
+Class AutoDF {A B : AA} (x : A) (y : B) : Type :=
+  autoDF : DF x y.
+
+#[global]
+Hint Mode AutoDF ! ! ! ! : typeclass_instances.
+
+#[global] Instance AutoDF_snd {A B : AA} {x : A} {y : B} : AutoDF (x, y) y :=
+  DF.proj2.
+
+#[global] Instance AutoDF_fst {A B C : AA} {x : A} {y : B} {z : C}
+  `{AutoDF _ _ x z} : AutoDF (x, y) z :=
+  DF.proj1 >>> autoDF.
+
+#[global] Instance AutoDF_id {A : AA} {x : A} : AutoDF x x := DF.id _.
+
+#[global] Instance AutoDF_pair {A B C : AA} {x : A} {y : B} {z : C}
+  `{AutoDF _ _ x y, AutoDF _ _ x z} : AutoDF x (y, z) | 0 :=
+  DF.pair autoDF autoDF.
+
+Definition var {G A : AA} {g : G} (x : A) `{AutoDF _ _ g x} : DF g x := autoDF.
+Definition call {G1 G2 A : AA} {g1 : G1} {g2 : G2} {x : A} `{AutoDF _ _ g2 g1} (f : DF g1 x)
+  : DF g2 x := autoDF >>> f.
+
+Fixpoint appendDF {a : AA} (xs ys : list a) : DF (xs, ys) (xs ++ ys) :=
+  DF.tick
+  (match_list (P := fun xs => xs ++ ys) (var xs)
     (var ys)
-    (fun x xs1 => EmbedDF.consD (var x) (call (appendDF xs1 ys)))
+    (fun x xs1 => consD (var x) (call (appendDF xs1 ys)))
   ).
 
-Definition predDF `{HasAA a} {g : a} {n : nat} : embedDF (pair g (S n)) (lazypair g n).
+Definition predDF {a : AA} {g : a} {n : nat} : DF (g, (S n)) (g, n).
 Admitted.
 
-Definition match_nat `{HasAA G, HasAA a} {g : G} (f : nat -> a) {n : nat}
-    (CASE : embedDF g n)
-    (ZERO : embedDF g (f O))
-    (SUCC : forall n', embedDF (g, n') (f (S n')))
-  : embedDF g (f n) :=
+Definition match_nat {G a : AA} {g : G} (f : nat -> a) {n : nat}
+    (CASE : DF g n)
+    (ZERO : DF g (f O))
+    (SUCC : forall n', DF (g, n') (f (S n')))
+  : DF g (f n) :=
   DF.bind CASE
   match n with
   | O => DF.proj1 >>> ZERO
   | S n' => predDF >>> SUCC n'
   end.
 
-Fixpoint dropDF `{HasAA a} (n : nat) (xs : list a) : embedDF (tt, n, xs) (drop n xs) :=
-  EmbedDF.tick
+Fixpoint dropDF {a : AA} (n : nat) (xs : list a) : DF (n, xs) (drop n xs) :=
+  DF.tick
   (match_nat (fun n => drop n xs) (var n)
     (* 0 => xs *)
     (var xs)
     (* S n => ... *)
-    (fun n => match_list (fun xs => drop (S n) xs) (var xs)
+    (fun n => match_list (P := fun xs => drop (S n) xs) (var xs)
       nilD
       (fun x xs => call (dropDF n xs))
     )).
 
+(*
 (* An account stores credits in a data structure.
 
    Typically, a value [p : account x] associates
@@ -921,7 +949,7 @@ Definition has_cost `{Accountable a, Accountable b} {x : a} {y : b}
     (f : embedDF x y) (n : nat) (p : account x) (q : account y)
   : Prop :=
   forall y', y' `less_defined` exact y ->
-    n + OTick_credits (credits p) (apply f y') <= credits q y'.
+    OTick_credits (credits p) (apply f y') <= n + credits q y'.
 
 Definition map_account_head `{HasAA a} (f : nat -> nat) {xs : list a} (cs : account xs)
   : account xs :=
@@ -983,20 +1011,33 @@ Theorem has_cost_match_list `{Accountable G, Accountable a, Accountable b}
 Proof.
 Admitted.
 
-Theorem has_cost_match_list_nil `{Accountable G, HasAA a, Accountable b}
+Theorem has_cost_match_list_nil `{Accountable G, Accountable a, Accountable b}
     {P : list a -> b} {g : G}
     {CASE : embedDF (b := list a) g []}
     {NIL : embedDF g (P [])}
     {CONS : forall x ys, embedDF (g, x, ys) (P (x :: ys))}
     {n : nat}
-    {ag ag' : account g} {anil : account []} {q : account (P [])}
-    (H_todo : TODO (* ag <= ag' + anil *))
-    (cost_match : has_cost NIL (n + anil) ag' q)
+    {ag : account g} {anil : account []} {q : account (P [])}
+    (cost_match : has_cost NIL (n + anil) ag q)
   : has_cost (match_list P CASE NIL CONS) n ag q.
 Proof.
 Admitted.
 
-Theorem append_cost `{HasAA a} {xs ys : list a} (cs : account xs) (ds : account ys)
+Theorem has_cost_match_list_cons `{Accountable G, Accountable a, Accountable b}
+    {P : list a -> b} {g : G} {x : a} {xs : list a}
+    {CASE : embedDF (b := list a) g (x :: xs)}
+    {NIL : embedDF g (P [])}
+    {CONS : forall y ys, embedDF (g, y, ys) (P (y :: ys))}
+    {n : nat}
+    {ag : account g} {m : nat} {axs : account xs} {q : account (P (x :: xs))}
+    {zero : forall x : a, account x}
+    (cost_match : has_cost (CONS x xs) (n + m) (ag, zero x, axs) q)
+  : has_cost (match_list P CASE NIL CONS) n ag q.
+Proof.
+Admitted.
+
+(*
+Theorem append_cost `{Accountable a} {xs ys : list a} (cs : account xs) (ds : account ys)
   : has_cost (appendDF xs ys)
              0
              (tt, cs, ds)
@@ -1006,11 +1047,9 @@ Proof.
   - replace (map_account_head (fun d : nat => S (cs + d)) ds)
     with (map_account_head S (map_account_head (fun d : nat => (cs + d)) ds)); [ | admit ].
     apply account_head_ticky.
-    unshelve eapply (has_cost_match_list_nil (P := fun xs => xs ++ ys) (g := (tt, [], ys)%embedDF_context) (ag' := ?[e]) (anil := cs)).
-    + exact (tt, 0, ds).
+    unshelve eapply (has_cost_match_list_nil (P := fun xs => xs ++ ys) (g := (tt, [], ys)%embedDF_context) (anil := cs)).
     + exact TODO.
-    + admit.
-  - admit.
+  - destruct cs; cbn.
 Admitted.
 
 (* TODO *)
@@ -1165,6 +1204,7 @@ Proof.
   - eapply has_cost_compose; [ | apply append_cost ].
     apply auto_has_cost.
 Qed.
+*)
 
 (*
 Definition lam {a b : AA} (x' : a) (y' : b)
@@ -1216,6 +1256,7 @@ Definition credit_cons {a : AA} (n : nat) (ft : Credits (AA_listA a)) : Credits 
     | NilA => 0
     | ConsA h t => n + ft t
     end).
+*)
 
 (*
 CoInductive credit_list : Type :=
