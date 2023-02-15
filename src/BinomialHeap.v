@@ -269,13 +269,23 @@ Proof.
   - intros [] []; cbn; try rewrite subadditive_sizeX'; lia.
 Qed.
 
-Lemma let_cost {A B C : AA} {a : A} {b : B} {c : C} (f : DF a b) (g : DF (a, b) c)
-    (pre : approx A -> nat) (mid : approx B -> nat) (post : approx C -> nat) (m0 m n : nat)
+#[global]
+Instance Subadditive_pot_heap : Subadditive (A := AA_Heap) pot_heap.
+Proof.
+  constructor.
+  - admit.
+  - admit.
+Admitted.
+
+Lemma let_cost {A B C : AA} {a : A} {b : B} {c : C} {f : DF a b} {g : DF (a, b) c}
+    {pre : approx A -> nat}
     `{!Subadditive pre}
+    (mid : approx B -> nat) (post : approx C -> nat) (m0 m n : nat)
     (_ : has_cost_ f m0 pre mid m)
     (_ : has_cost_ g m (pre +++ mid) post n)
   : has_cost_ (DF.let_ f g) m0 pre post n.
 Proof.
+  unfold DF.let_.
 Admitted.
 
 (*
@@ -309,7 +319,7 @@ Admitted.
 
 Definition measure_list_uncons {A  : AA} (x : A) (xs : list A) pot0 pot_hd pot_tl : Prop
   := forall (x' : approx A) (xs' : approx (AA_listA A)), x' `is_approx` x -> xs' `is_approx` xs ->
-      pot0 (Thunk (ConsA (Thunk x') xs')) <= pot_hd x' + pot_tl xs'.
+      pot0 (Thunk (ConsA (Thunk x') xs')) <= pot_hd + pot_tl xs'.
 
 Lemma match_list_cons_cost {G A B : AA} {P : list A -> B} {g : G} (x : A) (xs : list A)
     `{!AutoDF g (x :: xs)}
@@ -318,22 +328,21 @@ Lemma match_list_cons_cost {G A B : AA} {P : list A -> B} {g : G} (x : A) (xs : 
     m pre pot0 m' pot_hd pot_tl post n
   : has_cost_ (var (g := g) (x :: xs)) m pre pot0 m' ->
     measure_list_uncons x xs pot0 pot_hd pot_tl ->
-    has_cost_ (CONS x xs) m ((pre +++ pot_hd) +++ pot_tl) post n ->
+    has_cost_ (CONS x xs) (m + pot_hd) ((pre +++ zero) +++ pot_tl) post n ->
     has_cost_ (match_list (var (x :: xs)) NIL CONS) m pre post n.
 Admitted.
 
 Lemma pot_list_uncons {A : AA} (x : A) (xs : list A)
-  : measure_list_uncons x xs pot_list (fun _ => 3) pot_list.
+  : measure_list_uncons x xs pot_list 3 pot_list.
 Proof.
   red. intros x' xs' Ax Axs; inv Axs; cbn; lia.
 Qed.
 
 Lemma consD_cost {G A : AA} {g : G} {x : A} {xs : list A}
-    {xD : DF g x} {xsD : DF g xs} {m1 m2 m pre n}
+    {xD : DF g x} {xsD : DF g xs} {m pre n}
     `{!Subadditive pre}
-  : m1 + m2 <= m ->
-    has_cost_ xD m1 pre zero 3 ->
-    has_cost_ xsD m2 pre pot_list n ->
+  : has_cost_ xD 0 pre zero 0 ->
+    has_cost_ xsD (m - 3) pre pot_list n ->
     has_cost_ (consD xD xsD) m pre pot_list n.
 Admitted.
 
@@ -343,27 +352,156 @@ Lemma nilD_cost {G A : AA} {g : G} {pre n}
 Proof.
 Admitted.
 
+Lemma has_cost_id {A : AA} {x : A} p n : has_cost_ (DF.id x) n p p n.
+Proof.
+  unfold has_cost_, DF.id; cbn. lia.
+Qed.
+
+Lemma has_cost_compose {A B C : AA} {x : A} {y : B} {z : C}
+  (f : DF x y) (g : DF y z) nf ng n pf pg p
+  : has_cost_ f nf pf pg ng ->
+    has_cost_ g ng pg p n ->
+    has_cost_ (f >>> g) nf pf p n.
+Proof.
+  unfold has_cost_, DF.compose, DF.Raw_compose; cbn.
+  intros Hf Hg z' Az.
+Admitted.
+
+Existing Class has_cost_.
+#[global]
+Hint Mode has_cost_ ! ! ! ! ! - - - - : typeclass_instances.
+
+#[global]
+Instance has_cost_autoDF_id {A : AA} {x : A} p
+  : has_cost_ (autoDF (x := x) (y := x)) 0 p p 0.
+Proof.
+  unfold autoDF, AutoDF_id. apply has_cost_id.
+Qed.
+
+Lemma has_cost_proj1 {A B : AA} {x : A} {y : B} n p q
+  : has_cost_ (DF.proj1 (x := x) (y := y)) n (p +++ q) p n.
+Proof.
+Admitted.
+
+Lemma has_cost_proj2 {A B : AA} {x : A} {y : B} n p q
+  : has_cost_ (DF.proj2 (x := x) (y := y)) n (p +++ q) q n.
+Proof.
+Admitted.
+
+#[global]
+Instance has_cost_autoDF_proj1 {A B C : AA} {x : A} {y : B} {z : C} `{!AutoDF x z} {p q r}
+  : has_cost_ (autoDF (x := x) (y := z)) 0 p r 0 ->
+    has_cost_ (autoDF (x := (x, y)) (y := z)) 0 (p +++ q) r 0.
+Proof.
+  unfold autoDF at 2, AutoDF_fst.
+  intros H.
+  eapply has_cost_compose.
+  - apply has_cost_proj1.
+  - apply H.
+Qed.
+
+#[global]
+Instance has_cost_autoDF_proj2 {A B : AA} {x : A} {y : B} {p q}
+  : has_cost_ (autoDF (x := (x, y)) (y := y)) 0 (p +++ q) q 0.
+Proof.
+  apply has_cost_proj2.
+Qed.
+
+#[global]
+Instance has_cost_pair {A B C : AA} {x : A} {y : B} {z : C} {p q r}
+    (f : DF x y) (g : DF x z)
+  : has_cost_ f 0 p q 0 ->
+    has_cost_ g 0 p r 0 ->
+    has_cost_ (DF.pair f g) 0 p (q +++ r) 0.
+Proof.
+Admitted.
+
+#[global]
+Instance has_cost_autoDF_pair {A B C : AA} {x : A} {y : B} {z : C} {p q r}
+    `{!AutoDF x y, !AutoDF x z}
+  : has_cost_ (autoDF (x := x) (y := y)) 0 p q 0 ->
+    has_cost_ (autoDF (x := x) (y := z)) 0 p r 0 ->
+    has_cost_ (autoDF (x := x) (y := (y, z))) 0 p (q +++ r) 0.
+Proof.
+  apply has_cost_pair.
+Qed.
+
+Lemma var_cost {G A : AA} {g : G} {x : A} `{!AutoDF g x} {pre post}
+    {Hauto : has_cost_ (autoDF (x := g) (y := x)) 0 pre post 0}
+  : has_cost_ (var (g := g) x) 0 pre post 0.
+Proof.
+  exact Hauto.
+Qed.
+
+Lemma weaken_cost {G A : AA} (g : G) (x : A) (f : DF g x) m pre post n
+  : m <= n ->
+    has_cost_ f 0 pre post 0 ->
+    has_cost_ f m pre post n.
+Proof.
+Admitted.
+
+Lemma call_cost {G1 G2 A : AA} {g1 : G1} {g2 : G2} {x : A} `{!AutoDF g2 g1}
+    {f : DF g1 x} {pre1 pre2 post n m}
+    {Hauto : has_cost_ (autoDF (x := g2) (y := g1)) 0 pre2 pre1 0}
+  : has_cost_ f n pre1 post m ->
+    has_cost_ (call (g1 := g1) (g2 := g2) f) n pre2 post m.
+Proof.
+  unfold call.
+  intros H. eapply has_cost_compose.
+  - eapply weaken_cost; [ reflexivity | ].
+    exact Hauto.
+  - apply H.
+Qed.
+
+Lemma if_cost {G A : AA} {g : G} {b : bool} {P : bool -> A}
+    (CASE : DF g b)
+    (TRUE : DF g (P true))
+    (FALSE : DF g (P false))
+    m n p q
+  : has_cost_ CASE 0 p zero 0 ->
+    has_cost_ TRUE m p q n ->
+    has_cost_ FALSE m p q n ->
+    has_cost_ (DF.if_ CASE TRUE FALSE) m p q n.
+Proof.
+Admitted.
+
 Theorem insTree_cost (t : Tree) (ts : list Tree)
   : valid_Trees ts ->
     has_cost_ (insTreeDF t ts) 0 (zero +++ pot_list) pot_list insert_budget.
 Proof. (*
   revert t; induction ts; intros t Vts.
-  - unfold insTreeDF.
+  - cbn [insTreeDF].
     apply tick_cost.
     apply match_list_nil_cost.
-    apply (consD_cost (m1 := 1) (m2 := 0)).
-    + lia.
-    + admit.
-    + apply nilD_cost.
-  - unfold insTreeDF.
+    apply consD_cost.
+    + apply var_cost.
+    + eapply weaken_cost. { unfold insert_budget; lia. }
+      apply nilD_cost.
+  - cbn [insTreeDF].
     apply tick_cost.
-    apply match_list_cons_cost with (pot0 := pot_list) (pot_hd := fun _ => 3) (pot_tl := pot_list) (m' := 1).
-    + admit.
+    apply match_list_cons_cost with (pot0 := pot_list) (pot_hd := 3) (pot_tl := pot_list) (m' := 1).
+    + apply weaken_cost. { reflexivity. }
+      apply var_cost.
     + apply pot_list_uncons.
-    + apply let_cost with (mid := zero) (m := 0). *)
+    + apply let_cost with (mid := zero) (m := 4).
+      { apply call_cost. admit. }
+      apply let_cost with (mid := zero) (m := 5).
+      { apply call_cost. admit. }
+      apply let_cost with (mid := zero) (m := 6).
+      { apply call_cost. admit. }
+      refine (if_cost _ _ _ _ _ _ _ _ _ _).
+      * apply consD_cost.
+        { exact _. }
+        { apply consD_cost.
+          { exact _. }
+          { eapply weaken_cost. cbn. lia. apply var_cost. } }
+      * apply let_cost with (mid := zero) (m := 7).
+        { apply call_cost. admit. }
+        apply call_cost.
+Qed. *)
 Admitted.
 
-Lemma nodeD_cost_zero {r : AA} {s : r} (n x : nat) (ts : list Tree)
+Lemma nodeD_cost_zero {r : AA} {s : r} {n x : nat} {ts : list Tree}
     {pre : approx r -> nat}
     `{!Subadditive pre}
     (nD : DF s n) (xD : DF s x) (tsD : DF s ts)
@@ -377,12 +515,11 @@ Admitted.
 Theorem insert_cost (x : A) (h : Heap)
   : valid_Heap h ->
     has_cost_ (insertDF x h) 0 (zero +++ pot_heap) pot_heap insert_budget.
-Proof.
+Proof. (*
   intros Vh.
   change insert_budget with (0 + insert_budget).
   apply let_cost with (mid := zero) (m := 0); [ admit | |].
   { apply nodeD_cost_zero.
-    + admit.
     + admit.
     + admit.
     + admit. }
@@ -392,6 +529,7 @@ Proof.
   assert (HH : has_cost_ (insTreeDF (Node 0 x []) (trees h)) 0 (zero +++ pot_list) pot_list insert_budget).
   { apply insTree_cost. assumption. }
   admit.
+*)
 Admitted.
 
 (*
