@@ -46,14 +46,20 @@ Definition nodeD {r : AA} {s : r} {n : nat} {x : A} {ts : list Tree}
   : DF s (Node n x ts).
 Proof. refine TODO. Defined.
 
+(* Auxiliary definition for match_Tree *)
+Definition force_node {G : AA} {g : G} {n : nat} {x : A} {ts : list Tree}
+  : DF (g, Node n x ts) (g, n, x, ts).
+Admitted.
+
 (* Encoding of match on Tree *)
 Definition match_Tree {a c : AA}
     {g : c} {t : Tree} (f : Tree -> a)
     (CASE : DF g t)
     (NODE : forall n x ts, DF (g, n, x, ts) (f (Node n x ts)))
   : DF g (f t) :=
+  DF.bind CASE
   match t with
-  | Node n x ts => TODO >>> NODE n x ts
+  | Node n x ts => force_node >>> (NODE n x ts)
   end.
 
 (* Encoding of operators *)
@@ -122,11 +128,10 @@ Definition rank (t : Tree) : nat :=
   end.
 
 Definition rankDF t : DF t (rank t) :=
-  DF.tick (
   match_Tree (fun t => rank t)
     (var t)
     (fun r v c => var r)
-  ).
+  .
 
 Definition root (t : Tree) : A :=
   match t with
@@ -134,11 +139,9 @@ Definition root (t : Tree) : A :=
   end.
 
 Definition rootDF t : DF t (root t) :=
-  DF.tick (
   match_Tree (fun t => root t)
     (var t)
-    (fun r v c => var v)
-  ).
+    (fun r v c => var v).
 
 (*Assumes t has rank <= the rank of the first element of ts (if any).*)
 Fixpoint insTree (t : Tree) (ts : list Tree) : list Tree :=
@@ -151,7 +154,7 @@ Fixpoint insTree (t : Tree) (ts : list Tree) : list Tree :=
 
 Fixpoint insTreeDF (t : Tree) (ts : list Tree)
   : DF (t, ts) (insTree t ts) :=
-  DF.tick (
+   (
     match_list (P := fun ts => insTree t ts) (var ts)
       (consD (var t) nilD)
       (fun t' ts' =>
@@ -181,7 +184,7 @@ Definition insertDF x hp : DF (x, hp) (insert x hp) :=
    It would be 1 if we just counted calls to [link].  *)
 
 Definition pot_list {A : Type} (ts : T (listA A)) : nat :=
-  3 * sizeX 0 ts.
+  3 * sizeX 0 ts. (*TODO: why 3*)
 
 Definition measureT {a : Type} (f : a -> nat) (t : T a) : nat :=
   match t with
@@ -343,7 +346,7 @@ Admitted.
 Theorem insTree_cost (t : Tree) (ts : list Tree)
   : valid_Trees ts ->
     has_cost_ (insTreeDF t ts) 0 (zero +++ pot_list) pot_list insert_budget.
-Proof.
+Proof. (*
   revert t; induction ts; intros t Vts.
   - unfold insTreeDF.
     apply tick_cost.
@@ -357,7 +360,7 @@ Proof.
     apply match_list_cons_cost with (pot0 := pot_list) (pot_hd := fun _ => 3) (pot_tl := pot_list) (m' := 1).
     + admit.
     + apply pot_list_uncons.
-    + apply let_cost with (mid := zero) (m := 0).
+    + apply let_cost with (mid := zero) (m := 0). *)
 Admitted.
 
 Lemma nodeD_cost_zero {r : AA} {s : r} (n x : nat) (ts : list Tree)
@@ -410,6 +413,201 @@ Fixpoint mergeAux (trs1 trs2 : list Tree) : list Tree :=
     end in 
     merge_trs1 trs2
   end.
+
+Fixpoint mergeAuxDF (trs1 trs2 : list Tree) : DF (trs1, trs2) (mergeAux trs1 trs2).
+Admitted. (*:=
+  match_list (P := fun trs1 => mergeAux trs1 trs2) (var trs1)
+    (var trs2)
+    (fun t1 trs1' => let fix merge_trs1DF trsR :=
+      match_list (P := fun trsR => mergeAux trs1 trsR) (var trsR)
+      (var trs1)
+      (fun t2 trs2' =>
+        DF.let_ (call (rankDF t1)) 
+          (DF.let_ (call (rankDF t2)) 
+            (DF.let_ (call (lt_ (rank t1) (rank t2)))
+              (DF.if_ (P := fun b => if b then _ else _) (var (rank t1 <? rank t2))
+                (DF.let_ (call (mergeAuxDF trs1' trsR))
+                  (consD (var t1) (mergeAux trs1' trsR)))
+                (DF.let_ (call (lt (rank t2) (rank t1)))
+                  (DF.if_ (P := fun b => if b then _ else _) (var (rank t2 <? rank t1))
+                  (DF.let_ (call (linkDF t1 t2))
+                    (DF.let_ (call (mergeAuxDF trs1' trs2'))
+                      (DF.let_ (call (insTreeDF (link t1 t2) (mergeAux trs1' trs2')))
+                        (call insTree (link t1 t2) (mergeAux trs1' trs2')))))
+                  (t2 :: merge_trs1DF trs2')))))))
+      in
+      merge_trs1DF trs2).*)
+
+Definition merge (hp1 hp2 : Heap) : Heap :=
+  MkHeap (mergeAux (trees hp1) (trees hp2)).
+
+Definition mergeDF (hp1 hp2 : Heap) : DF (hp1, hp2) (merge hp1 hp2) :=
+  DF.let_ (treesD (var hp1)) 
+  (DF.let_ (treesD (var hp2))
+  (MkHeapD (call (mergeAuxDF _ _)))).
+
+Fixpoint removeMinAux (ts : list Tree) : option (Tree * list Tree) := 
+  match ts with
+  | [] => None
+  | t :: ts' => match removeMinAux ts' with
+    | None => Some (t, [])
+    | Some (t', ts'') => if leb (root t) (root t')
+      then Some (t, ts')
+      else Some (t', t :: ts'')
+    end
+  end.
+
+Canonical AA_optionA (a : AA) : AA :=
+  {| carrier := option a
+  ;  approx := T (option (approx a))
+  ; AA_IsAA := TODO
+  ; AA_IsAS := TODO
+  ; AA_Setoid := TODO
+  |}.
+
+Definition noneD {G a : AA} {g : G} : DF g (None (A := a)).
+Admitted.
+  
+Definition someD {G A : AA} {g : G} {x : A}
+  : DF g x -> DF g (Some x).
+Admitted.
+
+(* Auxiliary definition for match_option *)
+Definition force_some {G A : AA} {g : G} {x : A}
+  : DF (g, (Some x)) (g, x).
+Admitted.
+
+Definition match_option {G A B : AA} {P : option A -> B} {g : G} {xO : option A}
+    (CASE : DF g xO)
+    (NONE : DF g (P None))
+    (SOME : forall x, DF (g, x) (P (Some x)))
+  : DF g (P xO) :=
+  DF.bind CASE
+  match xO with
+  | None => DF.proj1 >>> NONE
+  | Some x => force_some >>> SOME x
+  end.
+
+Fixpoint removeMinAuxDF (ts : list Tree) : DF ts (removeMinAux ts).
+Admitted. (* match_list (P := fun ts => removeMinAux ts) (var ts)
+  noneD
+  (fun t ts' => 
+    DF.let_ (call (removeMinAuxDF ts'))
+    (match_option (P 
+      (someD (DF.pair (var t) nilD))
+      (fun p => 
+        DF.let_ (call (rootDF t))
+        (DF.let_ (DF.proj1 >>> call (rootDF _))
+        (DF.let_ (DF.proj1 >>> call (lt_ (root _) (root t)))
+          (DF.if_ (P := fun b => if b then _ else _)
+            (DF.proj1 >>> var (root _ <? root t))
+            (someD (DF.pair (DF.proj1) (DF.proj2 >>> consD (var t) _)))
+            (someD (DF.pair (var t) (var ts')))))))
+    )).*)
+
+Definition heapConvert (p : Tree * (list Tree)) : (Tree * Heap) :=
+  match p with
+  | (t, ts) => (t, MkHeap ts)
+  end.
+
+Definition heapConvertDF (p : Tree * (list Tree)) : DF p (heapConvert p).
+Admitted.
+
+Definition removeMinTree (hp : Heap) 
+  : option ((Tree) * (Heap)) :=
+  match removeMinAux (trees hp) with
+  | Some (t, ts) => Some (t, MkHeap ts)
+  | None => None
+  end.
+
+(*Definition mergeDF (hp1 hp2 : Heap) : DF (hp1, hp2) (merge hp1 hp2) :=
+  DF.let_ (treesD (var hp1)) 
+  (DF.let_ (treesD (var hp2))
+  (MkHeapD (call (mergeAuxDF _ _)))).*)
+  
+(*Definition bind `{x : a, y : b, z : c} `(f : DF x y) `(g : DF (x, y) z) : DF x z :=
+  pair (id x) f >>> g.*)
+
+(*Definition treesD {G : AA} {g : G} {h : Heap} (f : DF g h) : DF g (trees h).*)
+
+(*Definition match_option {G A B : AA} {P : option A -> B} {g : G} {xO : option A}
+    (CASE : DF g xO)
+    (NONE : DF g (P None))
+    (SOME : forall x, DF (g, x) (P (Some x)))
+  : DF g (P xO) :=*)
+
+(*
+Definition var {G A : AA} {g : G} (x : A) `{AutoDF _ _ g x} : DF g x := autoDF.
+Definition call {x : A} `{AutoDF _ _ g2 g1} (f : DF g1 x)
+  : DF g2 x := autoDF >>> f.*)
+
+
+(*Fixpoint removeMinAuxDF (ts : list Tree) : DF ts (removeMinAux ts).
+
+Definition someD {G A : AA} {g : G} {x : A}
+  : DF g x -> DF g (Some x).*)
+
+Definition removeMinTreeDF (hp : Heap) : DF hp (removeMinTree hp).
+Admitted.
+  (*DF.let_ 
+  (treesD (var hp))
+
+  (*(g: DF (hp, trees hp) (removeMinTree hp))*)
+
+  (DF.let_
+    (*(f : DF (hp, trees hp) (removeMinAux ts))*) (call (removeMinAuxDF _))
+    (*(g : DF ((hp, trees hp), (removeMinAux ts)) (removeMinTree hp))*)
+    (match_option {P := fun h => removeMinAux h}
+      (*(CASE : DF ((hp, trees hp), (removeMinAux ts)) (removeMinAux ts))*)
+      (var (removeMinAux (trees hp)))
+      (*(NONE: DF ((hp, trees hp), (removeMinAux ts)) (P None))*)
+      noneD
+      (*(SOME: forall x, DF (((hp, trees hp), (removeMinAux ts)), x) (P (Some x))))*)
+      (fun p => someD (call (heapConvertDF p)))
+    )).*)
+(*  (DF.let_ (call (removeMinAuxDF _))
+  (match_option (var (removeMinAux ts)) 
+  noneD
+  (fun p => someD (DF.pair (DF.proj1) (DF.proj2 >>> MkHeapD _)))).*)
+
+Definition findMin (hp : Heap)
+  : option A :=
+  match removeMinTree hp with
+  | None => None
+  | Some (t, _) => Some (root t)
+  end.
+
+Definition findMinDF (hp : Heap) : DF hp (findMin hp).
+Admitted. (* :=
+  DF.let_ (call (removeMinTreeDF hp))
+  (match_option (var _)
+    noneD
+    (fun p => DF.proj1 >>> 
+      DF.let_ (rootDF _)
+      (someD _))).*)
+
+Definition deleteMin (hp : Heap)
+  : Heap :=
+  match removeMinTree hp with
+  | None => MkHeap []
+  | Some (Node r v c, ts) =>
+    merge (MkHeap (rev c)) ts
+  end.
+
+Definition revDF {A : AA} (xs : list A) : DF xs (rev xs).
+Admitted.
+
+Definition deleteMinDF (hp : Heap) : DF hp (deleteMin hp).
+Admitted.
+(*removeMinTreeDF hp >>>
+  (match_option (var _)
+  (MkHeapD nilD)
+  (fun p => DF.proj1 >>>
+    match_Tree
+    _
+    (fun r1 v1 c1 => 
+      DF.let_ (revD c1) (DF.let_ (MkHeapD _) (mergeDF _ (DF.proj2)))))).*)
+  
 
 (*
 Canonical AABComparison : AA :=
@@ -563,7 +761,7 @@ Definition deleteMin (hp : Heap)
     merge (MkHeap (rev c)) ts
   end.
   
-Definition deleteMindDF {hp} : DF hp (deleteMin hp).
+Definition deleteMinDF {hp} : DF hp (deleteMin hp).
 Proof.
   refine (TODO >>> match_option 
     (f := fun pM => match pM with
@@ -576,5 +774,4 @@ Proof.
   _ (fun x => _)). 
   - refine TODO.
   - refine TODO. (*TODO*)
-Defined.
-*)
+Defined.*)
