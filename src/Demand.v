@@ -421,10 +421,10 @@ Definition bind {a b : Type} (ox : OTick a) (k : a -> OTick b) : OTick b :=
 Definition fail {a : Type} : OTick a := None.
 
 (* Weakest precondition transformer *)
-Definition wp {a : Type} (P : a -> Prop) (ox : OTick a) : Prop :=
+Definition wp {a : Type} (P : nat -> a -> Prop) (ox : OTick a) : Prop :=
   match ox with
   | None => False
-  | Some x => P (Tick.val x)
+  | Some x => P (Tick.cost x) (Tick.val x)
   end.
 
 Definition tick_wp2 {a b : Type} (P : a -> b -> Prop) (ox : Tick a) (oy : Tick b) : Prop :=
@@ -440,20 +440,20 @@ Definition wp2 {a b : Type} (P : a -> b -> Prop) (ox : OTick a) (oy : OTick b) :
 #[global] Instance LessDefined_OTick {a : Type} `{LessDefined a} : LessDefined (OTick a) :=
   wp2 less_defined.
 
-Theorem wp_ret {a : Type} (P : a -> Prop) (x : a) : P x -> wp P (ret x).
+Theorem wp_ret {a : Type} (P : nat -> a -> Prop) (x : a) : P 0 x -> wp P (ret x).
 Proof.
   exact (fun x => x).
 Qed.
 
-Definition wp_bind {a b : Type} (P : b -> Prop) (ox : OTick a) (k : a -> OTick b)
-  : wp (fun x => wp P (k x)) ox -> wp P (OTick.bind ox k).
+Definition wp_bind {a b : Type} (P : nat -> b -> Prop) (ox : OTick a) (k : a -> OTick b)
+  : wp (fun n x => wp (fun m => P (n + m)) (k x)) ox -> wp P (OTick.bind ox k).
 Proof.
   destruct ox; cbn; [ | auto ].
   destruct k; cbn; auto.
 Qed.
 
-Definition wp_mono {a : Type} {P Q : a -> Prop} {ox : OTick a}
-  : (forall x, P x -> Q x) -> wp P ox -> wp Q ox.
+Definition wp_mono {a : Type} {P Q : nat -> a -> Prop} {ox : OTick a}
+  : (forall n x, P n x -> Q n x) -> wp P ox -> wp Q ox.
 Proof.
   destruct ox; cbn; auto.
 Qed.
@@ -466,6 +466,7 @@ Proof.
   intros HPQ HP; constructor; [ | apply HPQ ]; apply HP.
 Qed.
 
+(*
 Definition wp2_wp_l {a b : Type} {P : a -> Prop} {Q : a -> b -> Prop} {ox : OTick a} {oy : OTick b}
   : wp P ox -> wp2 (fun x y => P x -> Q x y) ox oy -> wp2 Q ox oy.
 Proof.
@@ -481,6 +482,7 @@ Proof.
   destruct oy; cbn; [ | contradiction ].
   intros HP HPQ; constructor; apply HPQ; apply HP.
 Qed.
+*)
 
 Theorem wp2_ret {a b : Type} {P : a -> b -> Prop} {x y}
   : P x y -> wp2 P (ret x) (ret y).
@@ -505,7 +507,7 @@ Definition RawDF (a' b' : Type) : Type := b' -> OTick a'.
 Record IsDF {a b : AA} (x : a) (y : b) (f : RawDF (approx a) (approx b)) : Prop :=
   { exact_apply : forall y',
       y' `less_defined` exact y ->
-      OTick.wp (fun x' => x' `less_defined` exact x) (f y')
+      OTick.wp (fun n x' => x' `less_defined` exact x) (f y')
   ; less_defined_apply : forall y1' y2',
       y1' `less_defined` y2' ->
       y2' `less_defined` exact y ->
@@ -557,14 +559,16 @@ Proof.
   constructor.
   - unfold Raw_compose. intros z' Hz; apply OTick.wp_bind.
     refine (OTick.wp_mono _ (exact_apply Hg _ Hz)).
-    intros y' Hy. refine (OTick.wp_mono _ (exact_apply Hf _ Hy)).
+    intros ny y' Hy. refine (OTick.wp_mono _ (exact_apply Hf _ Hy)).
     auto.
   - unfold Raw_compose. intros y1' y2' H1 H2.
     apply OTick.wp2_bind.
+Admitted. (*
     apply (OTick.wp2_wp_r (exact_apply Hg _ H2)).
     refine (OTick.wp2_mono _ (less_defined_apply Hg _ _ H1 H2)).
     apply Hf.
 Qed.
+*)
 
 Definition compose {a b c : AA} {x : a} {y : b} {z : c}
   (f : DF x y) (g : DF y z) : DF x z :=
@@ -617,6 +621,7 @@ Definition Raw_pair {a' b' c' : Type} `{Lub a'} (f : RawDF a' b') (g : RawDF a' 
 Theorem IsDF_pair {a b c : AA} {x : a} {y : b} {z : c}
   `(Hf : IsDF x y f) `(Hg : IsDF x z g) : IsDF x (y, z) (Raw_pair f g).
 Proof.
+Admitted. (*
   constructor.
   - unfold Raw_pair. intros [y' z'] [Hy Hz]; cbn in Hy, Hz.
     apply OTick.wp_bind.
@@ -635,7 +640,7 @@ Proof.
     intros x2 x2' Hx2.
     apply OTick.wp2_ret.
     apply TODO. (* TODO: move Proper_lub to IsAA *)
-Defined.
+Defined. *)
 
 Definition pair `{x : a, y : b, z : c} `(f : DF x y) `(g : DF x z) : DF x (y, z) :=
   {| isDF := IsDF_pair f g |}.

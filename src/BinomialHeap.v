@@ -528,8 +528,7 @@ Proof. (*
   { admit. }
   assert (HH : has_cost_ (insTreeDF (Node 0 x []) (trees h)) 0 (zero +++ pot_list) pot_list insert_budget).
   { apply insTree_cost. assumption. }
-  admit.
-*)
+  admit. *)
 Admitted.
 
 (*
