@@ -694,17 +694,17 @@ Qed.
 
 (* Auxiliary definition for match_list *)
 Definition force_cons {G A : AA} {g : G} {x : A} {xs : list A}
-  : DF (g, (cons x xs)) (g, x, xs).
+  : DF (g, cons x xs) (g, cons x xs, x, xs).
 Admitted.
 
 Definition match_list {G A B : AA} {P : list A -> B} {g : G} {xs : list A}
     (CASE : DF g xs)
-    (NIL : DF g (P []))
-    (CONS : forall x ys, DF (g, x, ys) (P (x :: ys)))
+    (NIL : DF (g, []) (P []))
+    (CONS : forall x ys, DF (g, x :: ys, x, ys) (P (x :: ys)))
   : DF g (P xs) :=
   DF.bind CASE
   match xs with
-  | [] => DF.proj1 >>> NIL
+  | [] => NIL
   | x :: xs => force_cons >>> CONS x xs
   end.
 

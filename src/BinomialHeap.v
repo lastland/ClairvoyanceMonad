@@ -310,10 +310,10 @@ Admitted.
 
 Lemma match_list_nil_cost {G A B : AA} {P : list A -> B} {g : G}
     `{!AutoDF g []}
-    (NIL : DF g (P []))
-    (CONS : forall x ys, DF (g, x, ys) (P (x :: ys)))
+    (NIL : DF (g, []) (P []))
+    (CONS : forall x ys, DF (g, x :: ys, x, ys) (P (x :: ys)))
     m pre post n
-  : has_cost_ NIL m pre post n ->
+  : has_cost_ NIL m (pre +++ zero) post n ->
     has_cost_ (match_list (var []) NIL CONS) m pre post n.
 Admitted.
 
@@ -321,10 +321,11 @@ Definition measure_list_uncons {A  : AA} (x : A) (xs : list A) pot0 pot_hd pot_t
   := forall (x' : approx A) (xs' : approx (AA_listA A)), x' `is_approx` x -> xs' `is_approx` xs ->
       pot0 (Thunk (ConsA (Thunk x') xs')) <= pot_hd + pot_tl xs'.
 
+(*
 Lemma match_list_cons_cost {G A B : AA} {P : list A -> B} {g : G} (x : A) (xs : list A)
     `{!AutoDF g (x :: xs)}
-    (NIL : DF g (P []))
-    (CONS : forall x ys, DF (g, x, ys) (P (x :: ys)))
+    (NIL : DF (g, []) (P []))
+    (CONS : forall x ys, DF (g, x :: xs, x, ys) (P (x :: ys)))
     m pre pot0 m' pot_hd pot_tl post n
   : has_cost_ (var (g := g) (x :: xs)) m pre pot0 m' ->
     measure_list_uncons x xs pot0 pot_hd pot_tl ->
@@ -530,6 +531,7 @@ Proof. (*
   { apply insTree_cost. assumption. }
   admit. *)
 Admitted.
+*)
 
 (*
 Below: TODO
@@ -551,29 +553,43 @@ Fixpoint mergeAux (trs1 trs2 : list Tree) : list Tree :=
     merge_trs1 trs2
   end.
 
-Fixpoint mergeAuxDF (trs1 trs2 : list Tree) : DF (trs1, trs2) (mergeAux trs1 trs2).
-Admitted. (*:=
+Canonical AA_comparison : ApproxAlgebra := exact_AA comparison.
+
+Definition DF_compare {G A : ApproxAlgebra} {g : G} {b : comparison} {P : comparison -> A}
+  : DF g b -> DF g (P Lt) -> DF g (P Eq) -> DF g (P Gt) -> DF g (P b) :=
+  (* TODO: use first argument *)
+  match b with
+  | Lt => fun _ p _ _ => p
+  | Eq => fun _ _ p _ => p
+  | Gt => fun _ _ _ p => p
+  end.
+
+Parameter compare_ : forall x y : nat, DF (x, y) (Nat.compare x y).
+
+Fixpoint mergeAuxDF (trs1 trs2 : list Tree) : DF (trs1, trs2) (mergeAux trs1 trs2) :=
   match_list (P := fun trs1 => mergeAux trs1 trs2) (var trs1)
     (var trs2)
-    (fun t1 trs1' => let fix merge_trs1DF trsR :=
-      match_list (P := fun trsR => mergeAux trs1 trsR) (var trsR)
-      (var trs1)
-      (fun t2 trs2' =>
-        DF.let_ (call (rankDF t1)) 
+    (fun t1 trs1' =>
+      let trs1_ := t1 :: trs1' in
+      let fix merge_trs1DF trsR : DF (t1 :: trs1', t1, trs1', trsR) (mergeAux trs1_ trsR) :=
+        match_list (P := fun trsR => mergeAux trs1_ trsR) (var trsR)
+        (var trs1_)
+        (fun t2 trs2' =>
+          let trsR_ := t2 :: trs2' in
+          DF.let_ (call (rankDF t1))
           (DF.let_ (call (rankDF t2)) 
-            (DF.let_ (call (lt_ (rank t1) (rank t2)))
-              (DF.if_ (P := fun b => if b then _ else _) (var (rank t1 <? rank t2))
-                (DF.let_ (call (mergeAuxDF trs1' trsR))
-                  (consD (var t1) (mergeAux trs1' trsR)))
-                (DF.let_ (call (lt (rank t2) (rank t1)))
-                  (DF.if_ (P := fun b => if b then _ else _) (var (rank t2 <? rank t1))
-                  (DF.let_ (call (linkDF t1 t2))
-                    (DF.let_ (call (mergeAuxDF trs1' trs2'))
-                      (DF.let_ (call (insTreeDF (link t1 t2) (mergeAux trs1' trs2')))
-                        (call insTree (link t1 t2) (mergeAux trs1' trs2')))))
-                  (t2 :: merge_trs1DF trs2')))))))
+          (DF.let_ (call (compare_ (rank t1) (rank t2)))
+          (DF_compare (P := fun b => match b with Eq => _ | Lt => _ | Gt => _ end)
+             (var (Nat.compare (rank t1) (rank t2)))
+             (DF.let_ (call (mergeAuxDF trs1' trsR_))
+              (consD (var t1) (call (mergeAuxDF trs1' trsR_))))
+              (DF.let_ (call (linkDF t1 t2))
+                (DF.let_ (call (mergeAuxDF trs1' trs2'))
+                (DF.let_ (call (insTreeDF (link t1 t2) (mergeAux trs1' trs2')))
+                (call (insTreeDF (link t1 t2) (mergeAux trs1' trs2'))))))
+              (consD (var t2) (call (merge_trs1DF trs2')))))))
       in
-      merge_trs1DF trs2).*)
+      call (merge_trs1DF trs2)).
 
 Definition merge (hp1 hp2 : Heap) : Heap :=
   MkHeap (mergeAux (trees hp1) (trees hp2)).
