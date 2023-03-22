@@ -21,8 +21,8 @@ From Coq Require Import Arith List Lia Setoid Morphisms Orders Program.
 Import ListNotations.
 From Clairvoyance Require Import Core Approx ApproxM List ListA Misc Tick Demand.
 
-Import DF.Notations.
-#[local] Open Scope df.
+Import Tick.Notations.
+#[local] Open Scope tick_scope.
 
 Notation A := nat (only parsing).
 
@@ -40,60 +40,6 @@ Canonical AA_Tree :=
   ;  AA_IsAS := TODO
   |}.
 
-(* Encoding of Node *)
-Definition nodeD {r : AA} {s : r} {n : nat} {x : A} {ts : list Tree}
-    (nD : DF s n) (xD : DF s x) (tsD : DF s ts)
-  : DF s (Node n x ts).
-Proof. refine TODO. Defined.
-
-(* Auxiliary definition for match_Tree *)
-Definition force_node {G : AA} {g : G} {n : nat} {x : A} {ts : list Tree}
-  : DF (g, Node n x ts) (g, n, x, ts).
-Admitted.
-
-(* Encoding of match on Tree *)
-Definition match_Tree {a c : AA}
-    {g : c} {t : Tree} (f : Tree -> a)
-    (CASE : DF g t)
-    (NODE : forall n x ts, DF (g, n, x, ts) (f (Node n x ts)))
-  : DF g (f t) :=
-  DF.bind CASE
-  match t with
-  | Node n x ts => force_node >>> (NODE n x ts)
-  end.
-
-(* Encoding of operators *)
-
-Definition le_ (x y : nat) : DF (x, y) (x <=? y).
-Proof. refine TODO. Defined.
-
-Definition lt_ (x y : nat) : DF (x, y) (x <? y).
-Proof. refine TODO. Defined.
-
-Definition add1 (x : nat) : DF x (x + 1).
-Proof. refine TODO. Defined.
-
-Definition link (t1 t2 : Tree) : Tree :=
-  match (t1, t2) with
-  | (Node r1 v1 c1, Node r2 v2 c2) => if leb v1 v2
-    then Node (r1 + 1) v1 (t2 :: c1)
-    else Node (r2 + 1) v2 (t1 :: c2)
-  end.
-
-Definition linkDF t1 t2 : DF (t1, t2) (link t1 t2) :=
-  DF.tick (
-  match_Tree (fun t1 => link t1 t2)
-    (var t1)
-    (fun r1 v1 c1 =>
-      match_Tree (fun t2 => link (Node r1 v1 c1) t2)
-        (var t2)
-        (fun r2 v2 c2 =>
-          DF.if_ (P := fun b => if b then _ else _) (call (le_ v1 v2))
-              (nodeD (call (add1 r1)) (var v1) (consD (nodeD (var r2) (var v2) (var c2)) (var c1)))
-              (nodeD (call (add1 r2)) (var v2) (consD (nodeD (var r1) (var v1) (var c1)) (var c2))))
-    )
-  ).
-
 Record Heap : Type := MkHeap
   { trees : list Tree }.
 
@@ -108,40 +54,70 @@ Canonical AA_Heap : AA :=
   ;  AA_IsAS := TODO
   |}.
 
-Definition MkHeapD {G : AA} {ts : list Tree} {g : G} (f : DF g ts) : DF g (MkHeap ts).
-Proof. refine TODO. Defined.
-
-Definition treesD {G : AA} {g : G} {h : Heap} (f : DF g h) : DF g (trees h).
-Proof. refine TODO. Defined.
-
-Definition match_Heap {a c : AA}
-    {g : c} {t : Heap} {f : Heap -> a}
-    (MKHEAP : forall ts, DF (g, ts) (f (MkHeap ts)))
-  : DF (g, t) (f t) :=
-  match t with
-  | MkHeap ts => TODO >>> MKHEAP ts
+Definition link (t1 t2 : Tree) : Tree :=
+  match t1, t2 with
+  | Node r1 v1 c1, Node r2 v2 c2 => if leb v1 v2
+    then Node (r1 + 1) v1 (t2 :: c1)
+    else Node (r2 + 1) v2 (t1 :: c2)
   end.
+
+(* Encoding of Node *)
+(* Currently unused, just pattern-match on it instead *)
+Definition NodeD (t : TreeA) : Tick (T nat * T A * T (listA TreeA)) :=
+  Tick.ret
+  match t with
+  | NodeA n x ts => (n, x, ts)
+  end.
+
+Definition TNodeD (t : T TreeA) : Tick (T nat * T A * T (listA TreeA)) :=
+  Tick.ret
+  match t with
+  | Thunk (NodeA n x ts) => (n, x, ts)
+  | Undefined => (Undefined, Undefined, Undefined)
+  end.
+
+Definition ConsD {A} (xs : listA A) : T A * T (listA A) :=
+  match xs with
+  | ConsA x ys => (x, ys)
+  | _ => (Undefined, Undefined) (* should not happen *)
+  end.
+
+Definition TConsD {A} (xs : T (listA A)) : T A * T (listA A) :=
+  match xs with
+  | Thunk (ConsA x ys) => (x, ys)
+  | Undefined | _ => (Undefined, Undefined)
+  end.
+
+Definition linkD (t1 t2 : Tree) (d : TreeA) : Tick (T TreeA * T TreeA) :=
+  match t1, t2 with
+  | Node r1 v1 c1, Node r2 v2 c2 =>
+    if leb v1 v2 then
+      match d with
+      | NodeA rD v1D tsD =>
+        let '(t2D, c1D) := TConsD tsD in
+        Tick.ret (Thunk (NodeA (exact r1) v1D c1D), t2D)
+      end
+    else
+      match d with
+      | NodeA rD v2D tsD =>
+        let '(t1D, c2D) := TConsD tsD in
+        Tick.ret (t1D, Thunk (NodeA (exact r2) v2D c2D))
+      end
+  end.
+
+(* Currently unused, just pattern-match *)
+Definition MkHeapD (d : HeapA) : Tick (T (listA TreeA)) :=
+  Tick.ret (treesA d).
 
 Definition rank (t : Tree) : nat :=
   match t with
   | (Node r v c) => r
   end.
 
-Definition rankDF t : DF t (rank t) :=
-  match_Tree (fun t => rank t)
-    (var t)
-    (fun r v c => var r)
-  .
-
 Definition root (t : Tree) : A :=
   match t with
   | (Node r v c) => v
   end.
-
-Definition rootDF t : DF t (root t) :=
-  match_Tree (fun t => root t)
-    (var t)
-    (fun r v c => var v).
 
 (*Assumes t has rank <= the rank of the first element of ts (if any).*)
 Fixpoint insTree (t : Tree) (ts : list Tree) : list Tree :=
@@ -152,32 +128,52 @@ Fixpoint insTree (t : Tree) (ts : list Tree) : list Tree :=
     else insTree (link t t') ts' (*t and t' should have the same rank*)
   end.
 
-Fixpoint insTreeDF (t : Tree) (ts : list Tree)
-  : DF (t, ts) (insTree t ts) :=
-    DF.tick (
-    match_list (P := fun ts => insTree t ts) (var ts)
-      (consD (var t) nilD)
-      (fun t' ts' =>
-        DF.let_ (call (rankDF t)) (
-        DF.let_ (call (rankDF t')) (
-        DF.let_ (call (lt_ (rank t) (rank t'))) (
-        DF.if_ (P := fun b => if b then _ else _) (var (rank t <? rank t'))
-          (consD (var t) (consD (var t') (var ts')))
-          (DF.let_ (call (linkDF t t')) (
-           call (insTreeDF (link t t') ts')))))))
-  ).
+Definition strictD (t : Tree) (x' : T TreeA) : T TreeA := lub x' (Thunk (NodeA (exact (rank t)) Undefined Undefined)).
+Definition strictConsD {A} (xs' : T (listA A)) : T (listA A) := lub xs' (Thunk (ConsA Undefined Undefined)).
+
+(* [d] is an approximation of the output [insTree t ts] *)
+Fixpoint insTreeD (t : Tree) (ts : list Tree) (d : listA TreeA) : Tick (T TreeA * T (listA TreeA)) :=
+  match ts with
+  | [] =>
+    (* [d] is an approximation of [t :: nil] *)
+    (* ConsD inverts it and returns approximations of [t] and [nil] (which is ignored) *)
+    let '(tD, _) := ConsD d in
+    (* To find out what to return, we enumerate all of the uses of the arguments of [insTree]:
+       - [t] was only used in the output list, corresponding to the demand [tD]
+       - [ts] was used in [match], so its demand must at least be [Thunk NilA], which is fully defined.
+    *)
+    Tick.ret (tD, Thunk NilA)
+  | t' :: ts' => if rank t <? rank t'
+    then (* [d] is an approximation of [t :: ts] *)
+         let '(tD, tsD) := ConsD d in
+         (* [t] occurs in the result [t :: ts] (with demand [tD]), and also to compare its rank,
+            so we use [strictD] to give its demand a defined rank.
+            [ts] was also pattern-matched on, so we similarly require an annotation
+            to make its demand not [Undefined]. *)
+         Tick.ret (strictD t tD, strictConsD tsD)
+    else (* The result of [insTree] is a recursive call. So we recursively compute the
+            demand on its arguments: [lD] is the demand on [link t t'], and [ts'D] is the demand
+            on [ts]. *)
+         let+ (lD, ts'D) := insTreeD (link t t') ts' d in
+         (* [linkD] takes [lD] to compute a demand on [t] and [t'].
+
+            Demand functions return results wrapped in [T] (so that [Undefined]
+            may indicate an unused argument), but the input demand is not wrapped in [T]
+            (since there is no point in calling this if the argument is unused).
+            We use [thunkD] to apply a demand function on a demand wrapped in
+            [T] (here [lD]), usually coming from a pattern or another function. *)
+         let+ (tD, t'D) := thunkD (linkD t t') lD in
+         Tick.ret (strictD t tD, Thunk (ConsA t'D ts'D))
+  end.
 
 Definition insert (x : A) (hp : Heap)
   : Heap :=
   MkHeap (insTree (Node 0 x []) (trees hp)).
 
-Definition natD {G : AA} {g : G} (n : nat) : DF g n.
-Admitted.
-
-Definition insertDF x hp : DF (x, hp) (insert x hp) :=
-  DF.let_ (nodeD (natD 0) (var x) nilD) (
-  DF.let_ (treesD (var hp)) (
-  MkHeapD (call (insTreeDF _ _)))).
+Definition insertD (x : A) (hp : Heap) (d : HeapA) : Tick (T A * T HeapA) :=
+  let+ (tD, trees_hpD) := thunkD (insTreeD (Node 0 x []) (trees hp)) (treesA d) in
+  let+ (_, xD, _) := TNodeD tD in
+  Tick.ret (xD, Thunk (MkHeapA trees_hpD)).
 
 (* Potential: number of trees
    (times an implementation-dependent multiplicative factor)
