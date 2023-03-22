@@ -697,6 +697,14 @@ Definition force_cons {G A : AA} {g : G} {x : A} {xs : list A}
   : DF (g, cons x xs) (g, cons x xs, x, xs).
 Admitted.
 
+(*
+  Gamma |- A + B
+  Gamma, A |- C
+  Gamma, B |- C
+  -----
+  Gamma |- C
+*)
+
 Definition match_list {G A B : AA} {P : list A -> B} {g : G} {xs : list A}
     (CASE : DF g xs)
     (NIL : DF (g, []) (P []))

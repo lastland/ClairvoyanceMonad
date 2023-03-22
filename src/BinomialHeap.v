@@ -154,7 +154,7 @@ Fixpoint insTree (t : Tree) (ts : list Tree) : list Tree :=
 
 Fixpoint insTreeDF (t : Tree) (ts : list Tree)
   : DF (t, ts) (insTree t ts) :=
-   (
+    DF.tick (
     match_list (P := fun ts => insTree t ts) (var ts)
       (consD (var t) nilD)
       (fun t' ts' =>
@@ -183,22 +183,40 @@ Definition insertDF x hp : DF (x, hp) (insert x hp) :=
    (times an implementation-dependent multiplicative factor)
    It would be 1 if we just counted calls to [link].  *)
 
-Definition pot_list {A : Type} (ts : T (listA A)) : nat :=
-  3 * sizeX 0 ts. (*TODO: why 3*)
-
 Definition measureT {a : Type} (f : a -> nat) (t : T a) : nat :=
   match t with
   | Undefined => 0
   | Thunk x => f x
   end.
 
-Definition pot_heap : T HeapA -> nat :=
-  measureT (fun h => pot_list (treesA h)).
-
-Definition valid_Trees (ts : list Tree) : Prop.
+Definition max_rank (xs : list Tree) : nat.
 Admitted.
 
-Definition valid_Heap (h : Heap) : Prop := valid_Trees (trees h).
+Definition pot_trees (xs : list Tree) : nat :=
+  max_rank xs - length xs.
+
+Definition pot_heap (h : Heap) : T HeapA -> nat :=
+  measureT (fun _ => pot_trees (trees h)).
+
+Definition valid_Tree (t : Tree) : Prop.
+Admitted.
+
+Fixpoint valid_Trees (r : nat) (ts : list Tree) : Prop :=
+  match ts with
+  | nil => True
+  | t :: ts => valid_Tree t /\ r <= rank t /\ valid_Trees (S (rank t)) ts
+  end.
+
+Definition valid_Heap (h : Heap) : Prop := valid_Trees 0 (trees h).
+(*
+  F : A -> B
+  DF : A -> B -> A
+
+  pot1 : B -> nat
+  pot2 : A -> nat
+
+  COST[DF a b] + pot1(DF a b) <= pot2(b) + constant
+*)
 
 Definition OTick_has_cost {A' : Type} (m : nat) (u : OTick A') (pre : A' -> nat) (post : nat) :=
   match u with
@@ -260,15 +278,7 @@ Proof.
   revert ys; induction xs as [ | x | x xs IH ]; intros [| y [] ]; cbn; try rewrite IH; lia.
 Qed.
 
-#[global]
-Instance Subadditive_pot_list (A : AA)
-  : Subadditive (A := AA_listA A) pot_list.
-Proof.
-  constructor.
-  - reflexivity.
-  - intros [] []; cbn; try rewrite subadditive_sizeX'; lia.
-Qed.
-
+(*
 #[global]
 Instance Subadditive_pot_heap : Subadditive (A := AA_Heap) pot_heap.
 Proof.
@@ -276,6 +286,7 @@ Proof.
   - admit.
   - admit.
 Admitted.
+*)
 
 Lemma let_cost {A B C : AA} {a : A} {b : B} {c : C} {f : DF a b} {g : DF (a, b) c}
     {pre : approx A -> nat}
@@ -321,37 +332,42 @@ Definition measure_list_uncons {A  : AA} (x : A) (xs : list A) pot0 pot_hd pot_t
   := forall (x' : approx A) (xs' : approx (AA_listA A)), x' `is_approx` x -> xs' `is_approx` xs ->
       pot0 (Thunk (ConsA (Thunk x') xs')) <= pot_hd + pot_tl xs'.
 
-(*
 Lemma match_list_cons_cost {G A B : AA} {P : list A -> B} {g : G} (x : A) (xs : list A)
     `{!AutoDF g (x :: xs)}
     (NIL : DF (g, []) (P []))
-    (CONS : forall x ys, DF (g, x :: xs, x, ys) (P (x :: ys)))
+    (CONS : forall x ys, DF (g, x :: ys, x, ys) (P (x :: ys)))
     m pre pot0 m' pot_hd pot_tl post n
   : has_cost_ (var (g := g) (x :: xs)) m pre pot0 m' ->
     measure_list_uncons x xs pot0 pot_hd pot_tl ->
-    has_cost_ (CONS x xs) (m + pot_hd) ((pre +++ zero) +++ pot_tl) post n ->
+    has_cost_ (CONS x xs) (m + pot_hd) (((pre +++ pot0) +++ zero) +++ pot_tl) post n ->
     has_cost_ (match_list (var (x :: xs)) NIL CONS) m pre post n.
 Admitted.
 
-Lemma pot_list_uncons {A : AA} (x : A) (xs : list A)
-  : measure_list_uncons x xs pot_list 3 pot_list.
+(*
+Lemma pot_trees_uncons (r : nat) (t : Tree) (ts : list Tree)
+  : valid_Trees r (t :: ts) ->
+    measure_list_uncons t ts (pot_trees r (t :: ts)) (rank t - r) (pot_trees (S (rank t)) ts).
 Proof.
-  red. intros x' xs' Ax Axs; inv Axs; cbn; lia.
-Qed.
+Admitted.
+*)
 
-Lemma consD_cost {G A : AA} {g : G} {x : A} {xs : list A}
+Lemma consD_cost {G : AA} {g : G} {r : nat} {x : Tree} {xs : list Tree}
     {xD : DF g x} {xsD : DF g xs} {m pre n}
     `{!Subadditive pre}
-  : has_cost_ xD 0 pre zero 0 ->
-    has_cost_ xsD (m - 3) pre pot_list n ->
-    has_cost_ (consD xD xsD) m pre pot_list n.
+  : valid_Trees r (x :: xs) ->
+    m <= n + rank x - r ->
+    has_cost_ xD 0 pre zero 0 ->
+    has_cost_ xsD 0 pre zero (pot_trees xs - r) ->
+    has_cost_ (consD xD xsD) m pre zero (pot_trees (x :: xs) - r).
 Admitted.
 
-Lemma nilD_cost {G A : AA} {g : G} {pre n}
+(*
+Lemma nilD_cost {G : AA} {g : G} {pre n} {r}
     `{!Subadditive pre}
-  : has_cost_ (a := g) (nilD (a := A)) 0 pre pot_list n.
+  : has_cost_ (a := g) nilD 0 pre zero (pot_trees []).
 Proof.
 Admitted.
+*)
 
 Lemma has_cost_id {A : AA} {x : A} p n : has_cost_ (DF.id x) n p p n.
 Proof.
@@ -460,47 +476,63 @@ Lemma if_cost {G A : AA} {g : G} {b : bool} {P : bool -> A}
     (FALSE : DF g (P false))
     m n p q
   : has_cost_ CASE 0 p zero 0 ->
-    has_cost_ TRUE m p q n ->
-    has_cost_ FALSE m p q n ->
+    (b = true -> has_cost_ TRUE m p q n) ->
+    (b = false -> has_cost_ FALSE m p q n) ->
     has_cost_ (DF.if_ CASE TRUE FALSE) m p q n.
 Proof.
 Admitted.
 
 Theorem insTree_cost (t : Tree) (ts : list Tree)
-  : valid_Trees ts ->
-    has_cost_ (insTreeDF t ts) 0 (zero +++ pot_list) pot_list insert_budget.
-Proof. (*
-  revert t; induction ts; intros t Vts.
+  : valid_Tree t ->
+    valid_Trees (rank t) ts ->
+    has_cost_ (insTreeDF t ts) (pot_trees ts) (zero +++ zero) zero (pot_trees (insTree t ts)).
+Proof.
+Admitted. (*
+  revert t; induction ts as [ | u ts IH]; intros t Vt Vts.
   - cbn [insTreeDF].
     apply tick_cost.
     apply match_list_nil_cost.
     apply consD_cost.
+    + split; [ | split]; [ assumption | lia | exact I].
+    + admit.
     + apply var_cost.
     + eapply weaken_cost. { unfold insert_budget; lia. }
       apply nilD_cost.
   - cbn [insTreeDF].
     apply tick_cost.
-    apply match_list_cons_cost with (pot0 := pot_list) (pot_hd := 3) (pot_tl := pot_list) (m' := 1).
+    eapply match_list_cons_cost with (pot0 := pot_trees (rank t) (u :: ts)) (pot_tl := pot_trees (S (rank u)) ts) (m' := S (rank t)).
     + apply weaken_cost. { reflexivity. }
       apply var_cost.
-    + apply pot_list_uncons.
-    + apply let_cost with (mid := zero) (m := 4).
+    + apply pot_trees_uncons. assumption.
+    + apply let_cost with (mid := zero) (m := S (rank t) + (rank u - rank t)).
       { apply call_cost. admit. }
-      apply let_cost with (mid := zero) (m := 5).
+      apply let_cost with (mid := zero) (m := S (rank t) + (rank u - rank t)).
       { apply call_cost. admit. }
-      apply let_cost with (mid := zero) (m := 6).
+      apply let_cost with (mid := zero) (m := S (rank t) + (rank u - rank t)).
       { apply call_cost. admit. }
       refine (if_cost _ _ _ _ _ _ _ _ _ _).
-      * apply consD_cost.
-        { exact _. }
+      * intros Htrue.
+        cbn [insTree]. rewrite Htrue.
+        assert (Vts' : valid_Trees (S (rank t)) (u :: ts)).
+        { admit. }
+        assert (Vtts' : valid_Trees 0 (t :: u :: ts)).
+        { admit. }
+        apply consD_cost.
+        { assumption. }
+        { admit. }
+        { exact _.  }
         { apply consD_cost.
+          { assumption. }
+          { lia. }
           { exact _. }
           { eapply weaken_cost. cbn. lia. apply var_cost. } }
-      * apply let_cost with (mid := zero) (m := 7).
+      * intros Hfalse.
+        apply let_cost with (mid := zero) (m := 1 + (rank u - r)).
         { apply call_cost. admit. }
         apply call_cost.
-Qed. *)
-Admitted.
+        eapply weaken_cost.
+Qed.
+*)
 
 Lemma nodeD_cost_zero {r : AA} {s : r} {n x : nat} {ts : list Tree}
     {pre : approx r -> nat}
@@ -515,7 +547,7 @@ Admitted.
 
 Theorem insert_cost (x : A) (h : Heap)
   : valid_Heap h ->
-    has_cost_ (insertDF x h) 0 (zero +++ pot_heap) pot_heap insert_budget.
+    has_cost_ (insertDF x h) 0 (zero +++ zero) zero insert_budget.
 Proof. (*
   intros Vh.
   change insert_budget with (0 + insert_budget).
@@ -531,7 +563,6 @@ Proof. (*
   { apply insTree_cost. assumption. }
   admit. *)
 Admitted.
-*)
 
 (*
 Below: TODO
