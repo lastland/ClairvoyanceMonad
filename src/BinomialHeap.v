@@ -175,25 +175,103 @@ Definition insertD (x : A) (hp : Heap) (d : HeapA) : Tick (T A * T HeapA) :=
   let+ (_, xD, _) := TNodeD tD in
   Tick.ret (xD, Thunk (MkHeapA trees_hpD)).
 
-(*
-(* Potential: number of trees
-   (times an implementation-dependent multiplicative factor)
-   It would be 1 if we just counted calls to [link].  *)
 
-Definition measureT {a : Type} (f : a -> nat) (t : T a) : nat :=
-  match t with
-  | Undefined => 0
-  | Thunk x => f x
+Fixpoint mergeAux (trs1 trs2 : list Tree) : list Tree :=
+  match trs1 with
+  | [] => trs2
+  | t1 :: trs1' => let fix merge_trs1 trsR :=
+    match trsR with
+    | [] => trs1
+    | t2 :: trs2' =>
+      match Nat.compare (rank t1) (rank t2) with
+      | Lt => t1 :: (mergeAux trs1' trsR)
+      | Eq => insTree (link t1 t2) (mergeAux trs1' trs2')
+      | Gt => t2 :: merge_trs1 trs2'
+      end
+    end in
+    merge_trs1 trs2
   end.
 
-Definition max_rank (xs : list Tree) : nat.
-Admitted.
+Definition merge (hp1 hp2 : Heap) : Heap :=
+  MkHeap (mergeAux (trees hp1) (trees hp2)).
 
-Definition pot_trees (xs : list Tree) : nat :=
-  max_rank xs - length xs.
+Fixpoint mergeAuxD (trs1 trs2 : list Tree) (d : listA TreeA) : Tick (T (listA TreeA) * T (listA TreeA)) :=
+  match trs1 with
+  | [] => Tick.ret (Thunk NilA, Thunk d)
+  | t1 :: trs1' => let fix merge_trs1 trsR (dR : listA TreeA) : Tick (T (listA TreeA) * T (listA TreeA)) :=
+    (* here we compute the demand on [trs1] and [trsR] *)
+    match trsR with
+    | [] => Tick.ret (Thunk dR, Thunk NilA)
+    | t2 :: trs2' =>
+      match Nat.compare (rank t1) (rank t2) with
+      | Lt =>
+        let '(t1D, mD) := ConsD dR in
+        let+ (trs1'D, trsRD) := thunkD (mergeAuxD trs1' trsR) mD in
+        Tick.ret (Thunk (ConsA (strictD t1 t1D) trs1'D), strictConsD trsRD)
+      | Eq =>
+        let+ (lD, mD) := insTreeD (link t1 t2) (mergeAux trs1' trs2') dR in
+        let+ (t1D, t2D) := thunkD (linkD t1 t2) lD in
+        let+ (trs1'D, trs2'D) := thunkD (mergeAuxD trs1' trs2') mD in
+        Tick.ret (Thunk (ConsA (strictD t1 t1D) trs1'D), Thunk (ConsA (strictD t2 t2D) trs2'D))
+      | Gt =>
+        let '(t2D, mD) := ConsD dR in
+        let+ (trs1D, trs2'D) := thunkD (merge_trs1 trs2') mD in
+        Tick.ret (trs1D, Thunk (ConsA (strictD t2 t2D) trs2'D))
+      end
+    end in
+    let+ (trs1D, trs2D) := merge_trs1 trs2 d in
+    Tick.ret (strictConsD trs1D, trs2D)
+  end.
 
-Definition pot_heap (h : Heap) : T HeapA -> nat :=
-  measureT (fun _ => pot_trees (trees h)).
+Definition mergeD (hp1 hp2 : Heap) (d : HeapA) : Tick (T HeapA * T HeapA) :=
+  let+ (ts1D, ts2D) := thunkD (mergeAuxD (trees hp1) (trees hp2)) (treesA d) in
+  Tick.ret (Thunk (MkHeapA ts1D), Thunk (MkHeapA ts2D)).
+
+Fixpoint removeMinAux (ts : list Tree) : option (Tree * list Tree) :=
+  match ts with
+  | [] => None
+  | t :: ts' => match removeMinAux ts' with
+    | None => Some (t, [])
+    | Some (t', ts'') => if leb (root t) (root t')
+      then Some (t, ts')
+      else Some (t', t :: ts'')
+    end
+  end.
+
+Definition SomeD {A} `{Bottom A} (x : option A) : A :=
+  match x with
+  | Some y => y
+  | _ => bottom
+  end.
+
+Fixpoint removeMinAuxD (ts : list Tree) (d : option (T TreeA * T (listA TreeA)))
+  : Tick (T (listA TreeA)) :=
+  match ts with
+  | [] => Tick.ret (Thunk NilA)
+  | t :: ts' => match removeMinAux ts' with
+    | None =>
+      let (tD, _) := SomeD d in
+      let+ ts'D := removeMinAuxD ts' None in
+      Tick.ret (Thunk (ConsA tD ts'D))
+    | Some (t', ts'') => if leb (root t) (root t')
+      then
+        let '(tD, ts'D) := SomeD d in
+        let+ ts'D := removeMinAuxD ts' (Some (strictD t' Undefined, Undefined)) in
+        Tick.ret (Thunk (ConsA tD ts'D))
+      else
+        let '(t'D, tts''D) := SomeD d in
+        let '(tD, ts''D) := TConsD tts''D in
+        let+ ts'D := removeMinAuxD ts' (Some (strictD t' t'D, ts''D)) in
+        Tick.ret (Thunk (ConsA tD ts'D))
+    end
+  end.
+
+Definition removeMinTree (hp : Heap)
+  : option ((Tree) * (Heap)) :=
+  match removeMinAux (trees hp) with
+  | Some (t, ts) => Some (t, MkHeap ts)
+  | None => None
+  end.
 
 Definition valid_Tree (t : Tree) : Prop.
 Admitted.
@@ -205,6 +283,50 @@ Fixpoint valid_Trees (r : nat) (ts : list Tree) : Prop :=
   end.
 
 Definition valid_Heap (h : Heap) : Prop := valid_Trees 0 (trees h).
+
+Definition max_rank (xs : list Tree) : nat.
+Admitted.
+
+(* number of zeros in the binary representation of xs *)
+Definition zbitcount (xs : list Tree) : nat :=
+  max_rank xs - length xs.
+
+Definition pot_heap h := zbitcount (trees h).
+
+Definition pot_heapA (h : HeapA) : nat.
+Admitted.
+
+#[global] Instance LessDefinied_HeapA : LessDefined HeapA.
+Admitted.
+
+#[global] Instance Exact_HeapA : Exact Heap HeapA.
+Admitted.
+
+Definition measureT {a : Type} (f : a -> nat) (t : T a) : nat :=
+  match t with
+  | Undefined => 0
+  | Thunk x => f x
+  end.
+
+(*
+out = insert x inp
+cost (insertD x inp ..) <= zbitcount out - zbitcount inp
+*)
+
+Theorem cost_insert : forall x h d, d `is_approx` insert x h ->
+  forall xD hD, (xD, hD) = Tick.val (insertD x h d) ->
+  measureT pot_heapA hD + Tick.cost (insertD x h d) <= 1 + pot_heapA d.
+Proof.
+Admitted.
+
+(*
+(* Potential: number of trees
+   (times an implementation-dependent multiplicative factor)
+   It would be 1 if we just counted calls to [link].  *)
+
+Definition pot_heap (h : Heap) : T HeapA -> nat :=
+  measureT (fun _ => pot_trees (trees h)).
+
 (*
   F : A -> B
   DF : A -> B -> A
@@ -565,22 +687,6 @@ Admitted.
 Below: TODO
 *)
 
-Fixpoint mergeAux (trs1 trs2 : list Tree) : list Tree :=
-  match trs1 with
-  | [] => trs2
-  | t1 :: trs1' => let fix merge_trs1 trsR :=
-    match trsR with
-    | [] => trs1
-    | t2 :: trs2' =>
-      match Nat.compare (rank t1) (rank t2) with
-      | Lt => t1 :: (mergeAux trs1' trsR)
-      | Eq => insTree (link t1 t2) (mergeAux trs1' trs2')
-      | Gt => t2 :: merge_trs1 trs2'
-      end
-    end in 
-    merge_trs1 trs2
-  end.
-
 Canonical AA_comparison : ApproxAlgebra := exact_AA comparison.
 
 Definition DF_compare {G A : ApproxAlgebra} {g : G} {b : comparison} {P : comparison -> A}
@@ -618,9 +724,6 @@ Fixpoint mergeAuxDF (trs1 trs2 : list Tree) : DF (trs1, trs2) (mergeAux trs1 trs
               (consD (var t2) (call (merge_trs1DF trs2')))))))
       in
       call (merge_trs1DF trs2)).
-
-Definition merge (hp1 hp2 : Heap) : Heap :=
-  MkHeap (mergeAux (trees hp1) (trees hp2)).
 
 Definition mergeDF (hp1 hp2 : Heap) : DF (hp1, hp2) (merge hp1 hp2) :=
   DF.let_ (treesD (var hp1)) 
