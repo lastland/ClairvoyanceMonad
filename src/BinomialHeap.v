@@ -175,6 +175,7 @@ Definition insertD (x : A) (hp : Heap) (d : HeapA) : Tick (T A * T HeapA) :=
   let+ (_, xD, _) := TNodeD tD in
   Tick.ret (xD, Thunk (MkHeapA trees_hpD)).
 
+(*
 (* Potential: number of trees
    (times an implementation-dependent multiplicative factor)
    It would be 1 if we just counted calls to [link].  *)
@@ -955,3 +956,4 @@ Proof.
   - refine TODO.
   - refine TODO. (*TODO*)
 Defined.*)
+*)
