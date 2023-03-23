@@ -273,6 +273,17 @@ Definition removeMinTree (hp : Heap)
   | None => None
   end.
 
+Definition removeMinTreeD (hp : Heap) (d : option (TreeA * HeapA)) 
+  : Tick (T HeapA) :=
+  match d with
+  | Some (tD, hpD) =>
+    let+ trsD := removeMinAuxD (trees hp) (Some (Thunk tD, treesA hpD)) in
+      Tick.ret (Thunk (MkHeapA trsD))
+  | None =>
+    let+ trsD := removeMinAuxD (trees hp) None in
+      Tick.ret (Thunk (MkHeapA trsD))
+  end.
+
 Definition valid_Tree (t : Tree) : Prop.
 Admitted.
 
@@ -296,7 +307,7 @@ Definition pot_heap h := zbitcount (trees h).
 Definition pot_heapA (h : HeapA) : nat.
 Admitted.
 
-#[global] Instance LessDefinied_HeapA : LessDefined HeapA.
+#[global] Instance LessDefined_HeapA : LessDefined HeapA.
 Admitted.
 
 #[global] Instance Exact_HeapA : Exact Heap HeapA.
@@ -319,11 +330,46 @@ Theorem cost_insert : forall x h d, d `is_approx` insert x h ->
 Proof.
 Admitted.
 
+Definition findMin (hp : Heap)
+  : option A :=
+  match removeMinTree hp with
+  | None => None
+  | Some (t, _) => Some (root t)
+  end.
+
+Definition findMinD (hp : Heap) (d : option A) : Tick (T HeapA) :=
+  match d with
+  | Some n => 
+    let t := NodeA Undefined (Thunk n) Undefined in
+    let+ hpD := removeMinTreeD hp (Some (t, MkHeapA Undefined)) in
+    Tick.ret hpD
+  | None => Tick.ret (Undefined)
+  end.
+
+Definition deleteMin (hp : Heap)
+  : Heap :=
+  match removeMinTree hp with
+  | None => MkHeap []
+  | Some (Node r v c, ts) =>
+    merge (MkHeap (rev c)) ts
+  end.
+
+Definition deleteMinD (hp : Heap) (d : HeapA) : Tick (T HeapA) :=
+  match removeMinTree hp with
+  | None => removeMinTreeD hp None
+  | Some (Node r v c, ts) =>
+    let+ (hpM1, hpM2) := mergeD (MkHeap (rev c)) ts d in
+    (*TODO: rev is strict*)
+    let ts := thunkD treesA hpM1 in
+    let hpM1' := NodeA (Thunk r) (Thunk v) ts in
+    removeMinTreeD hp (thunkD (H := None) (fun y => Some (hpM1', y)) hpM2)
+  end. (*TODO: is None correct for H*)
+
 (*
 (* Potential: number of trees
    (times an implementation-dependent multiplicative factor)
    It would be 1 if we just counted calls to [link].  *)
-
+3 
 Definition pot_heap (h : Heap) : T HeapA -> nat :=
   measureT (fun _ => pot_trees (trees h)).
 
