@@ -33,6 +33,8 @@
 From Coq Require Import Arith List Lia Morphisms Relations.
 From Clairvoyance Require Import Core Relations.
 
+From Hammer Require Import Tactics.
+
 Import ListNotations.
 
 (* Type classes declared under this flag will have less confusing resolution.
@@ -82,18 +84,18 @@ Inductive LessDefined_T {a : Type} `{LessDefined a} : LessDefined (T a) :=
 (** An inversion lemma *)
 Lemma less_defined_Thunk_inv {a} `{LessDefined a}
   : forall x y : a, Thunk x `less_defined` Thunk y -> x `less_defined` y.
-Proof. inversion 1; auto. Qed.
+Proof. sauto lq: on. Qed.
 
 #[local]
 Instance Reflexive_LessDefined_T {a} `{LessDefined a} `{!Reflexive (less_defined (a := a))}
   : Reflexive (less_defined (a := T a)).
-Proof. intros []; constructor; auto. Qed.
+Proof. intros []; sauto. Qed.
 
 #[local]
 Instance Transitive_LessDefined_T {a} `{LessDefined a} `{!Transitive (less_defined (a := a))}
   : Transitive (less_defined (a := T a)).
 Proof.
-  intros ? ? ? []; [ constructor | inversion 1; subst; constructor; etransitivity; eassumption ].
+  intros ? ? ? []; sauto. 
 Qed.
 
 (** [PreOrder] instance for [less_defined] at [T]. *)
@@ -111,10 +113,10 @@ Instance PartialOrder_LessDefined_T {a : Type} `{LessDefined a}
   : PartialOrder eq (less_defined (a := T a)).
 Proof.
 constructor.
-- intros ->. autounfold. constructor; reflexivity.
+- fcrush.
 - inversion 1. induction H1.
-  + inversion H2; reflexivity.
-  + inversion H2; subst. f_equal. apply Ho. constructor; assumption.
+  + fcrush.
+  + inversion H2; subst. sfirstorder.
 Qed.
 
 (** * [exact]: embedding pure values as approximations *)
@@ -143,8 +145,8 @@ Instance Exact_T {a b} {r: Exact a b} : Exact a (T b)
 #[global]
 Instance ExactMaximal_T {a b} `{AA : ExactMaximal a b} : ExactMaximal (T a) b.
 Proof.
-  red. intros xA x H. inversion H; subst.
-  unfold exact, Exact_T. f_equal. apply exact_maximal. assumption.
+  red. intros xA x H. inversion H; subst. 
+  sfirstorder unfold: ExactMaximal, Exact_T, exact.
 Qed.
 
 (** * [is_approx]: relating approximations and pure values *)
@@ -227,14 +229,7 @@ Proof.
 Qed.
 
 #[global] Instance LubLaw_T {a} `{LubLaw a} `{!Reflexive (less_defined (a := a))} : LubLaw (T a).
-Proof.
-  constructor.
-  - intros ? ? ? []; inversion 1; subst; cbn; constructor; auto with lub.
-  - intros x y [z [ [? | Hx] Hy] ]; cbn; [ constructor | ].
-    inversion Hy; subst; constructor; eauto with lub.
-  - intros x y [z [ Hx Hy ] ]; destruct Hy as [ | Hy]; cbn; [ constructor | ].
-    inversion Hx; subst; constructor; eauto with lub.
-Qed.
+Proof. sauto. Qed.
 
 (** * [bottom] *)
 
@@ -257,7 +252,7 @@ Proof. constructor. Qed.
 Class BottomOf (a : Type) : Type :=
   bottom_of : a -> a.
 
-#[global] Hint Mode BottomOf !.
+#[global] Hint Mode BottomOf ! : core.
 
 #[global] Instance BottomOf_list {a} `{BottomOf a} : BottomOf (list a) :=
   fix _bottom_of (xs : list a) : list a :=
@@ -275,15 +270,11 @@ Class BottomIsLeast a `{BottomOf a, LessDefined a} : Prop :=
 
 Lemma bottom_is_less {a} `{BottomOf a, LessDefined a, PreOrder a less_defined, !BottomIsLeast a}
   : forall (x : a), bottom_of x `less_defined` x.
-Proof.
-  intros; apply bottom_is_least. reflexivity.
-Qed.
+Proof. sfirstorder. Qed.
 
 Lemma Proper_bottom {a} `{BottomOf a, LessDefined a, PreOrder a less_defined, !BottomIsLeast a}
   : Proper (less_defined ==> less_defined) (bottom_of (a := a)).
-Proof.
-  unfold Proper, respectful. intros x y xy; do 2 apply bottom_is_least; assumption.
-Qed.
+Proof. sfirstorder. Qed.
 
 #[global] Instance BottomIsLeast_T {a} `{LessDefined a} : BottomIsLeast (T a).
 Proof. constructor. Qed.
@@ -326,21 +317,14 @@ Qed.
   fun x y => (lub (fst x) (fst y), lub (snd x) (snd y)).
 
 #[global] Instance LubLaw_prod {a b} `{LubLaw a, LubLaw b} : LubLaw (a * b).
-Proof.
-  constructor.
-  - intros * [] []; constructor; cbn; apply lub_least_upper_bound; auto.
-  - intros * [? [ [] [] ] ]; constructor; cbn; apply lub_upper_bound_l; eauto.
-  - intros * [? [ [] [] ] ]; constructor; cbn; apply lub_upper_bound_r; eauto.
-Qed.
+Proof. sfirstorder. Qed.
 
 #[global] Instance BottomOf_prod {a b} `{BottomOf a, BottomOf b} : BottomOf (a * b) :=
   fun xy => (bottom_of (fst xy), bottom_of (snd xy)).
 
 #[global] Instance BottomIsLeast_prod {a b} `{BottomIsLeast a, BottomIsLeast b}
   : BottomIsLeast (a * b).
-Proof.
-  intros x y xy. constructor; apply bottom_is_least, xy.
-Qed.
+Proof. sfirstorder. Qed.
 
 #[global] Instance IsAA_prod {a' a b' b} {_ : IsAA a' a} {_ : IsAA b' b} : IsAA (a' * b') (a * b)
   := {}.
@@ -381,10 +365,7 @@ Inductive list_rel {a b} (r : a -> b -> Prop) : list a -> list b -> Prop :=
 
 Lemma cobounded_cons {a} `{LessDefined a} (x : a) xs y ys
   : cobounded x y -> cobounded xs ys -> cobounded (x :: xs) (y :: ys).
-Proof.
-  intros (z & Hx & Hy) (zs & Hxs & Hys). exists (z :: zs).
-  split; constructor; eauto.
-Qed.
+Proof. hauto b: on. Qed. 
 
 Lemma cobounded_list_ind a `(LessDefined a) (P : list a -> list a -> Prop)
   : P nil nil ->
@@ -393,9 +374,7 @@ Lemma cobounded_list_ind a `(LessDefined a) (P : list a -> list a -> Prop)
     forall xs ys, cobounded xs ys -> P xs ys.
 Proof.
   intros Hnil Hcons xs ys (zs & Hxs & Hys).
-  revert ys Hys; induction Hxs as [ | ? ? ? ? ? ? IH ]; intros.
-  - inversion Hys; apply Hnil.
-  - inversion Hys; clear Hys; subst. apply Hcons; eauto.
+  revert ys Hys; induction Hxs as [ | ? ? ? ? ? ? IH ]; intros; sauto q:on.
 Qed.
 
 #[global] Instance PreOrder_list {a} `{LessDefined a} `{!PreOrder (less_defined (a := a))}
@@ -428,18 +407,14 @@ Fixpoint zip_with {a b c} (f : a -> b -> c) (xs : list a) (ys : list b) : list c
 #[global] Instance LubLaw_list {a} `{LubLaw a} : LubLaw (list a).
 Proof.
   constructor.
-  - intros x y z Hxz; revert y; induction Hxz as [ | ? ? ? ? ? ? IH ]; cbn.
-    + constructor.
-    + intros ? Hy; inversion Hy; clear Hy; subst.
-      constructor; [ apply lub_least_upper_bound; auto | ].
-      apply IH; auto.
+  - intros x y z Hxz; revert y; induction Hxz as [ | ? ? ? ? ? ? IH ]; sauto.
   - intros x y (z & Hx & Hy). revert y Hy; induction Hx as [ | ? ? ? ? ? ? IH ]; cbn.
     + constructor.
-    + intros ? Hy; inversion Hy; clear Hy; subst.
+    + intros ? Hy; inversion Hy; clear Hy; subst. 
       constructor; [ apply lub_upper_bound_l; eauto | ].
       apply IH; auto.
   - intros x y (z & Hx & Hy). revert x Hx; induction Hy as [ | ? ? ? ? ? ? IH ]; cbn.
-    + destruct x; constructor.
+    + sauto.
     + intros ? Hx; inversion Hx; clear Hx; subst.
       constructor; [ apply lub_upper_bound_r; eauto | ].
       apply IH; auto.
@@ -447,14 +422,14 @@ Qed.
 
 #[global] Instance BottomIsLeast_list {a} `{BottomIsLeast a} : BottomIsLeast (list a).
 Proof.
-  intros xs ys Hxsys. induction Hxsys; [ constructor | constructor; [ apply bottom_is_least; auto | auto ] ].
+  intros xs ys Hxsys. induction Hxsys; sauto. 
 Qed.
 
 Lemma less_defined_app {a} {LD : LessDefined a} (xs1 xs2 ys1 ys2 : list a)
   : xs1 `less_defined` ys1 -> xs2 `less_defined` ys2 ->
     (xs1 ++ xs2) `less_defined` (ys1 ++ ys2).
 Proof.
-  intros H J; induction H; cbn; [ auto | constructor; auto ].
+  intros H J; induction H; sauto. 
 Qed.
 
 Lemma less_defined_app_inv {a} {LD : LessDefined a} (xs0 xs1 xs2 : list a)
@@ -463,12 +438,10 @@ Lemma less_defined_app_inv {a} {LD : LessDefined a} (xs0 xs1 xs2 : list a)
       xs01 `less_defined` xs1 /\ xs02 `less_defined` xs2.
 Proof.
   revert xs0. induction xs1 as [ | x xs1 IH]; intros xs0 Hxs0; cbn.
-  - exists [], xs0. split; [reflexivity | split; [ constructor | assumption ] ].
+  - exists [], xs0. sfirstorder.
   - cbn in Hxs0. inversion Hxs0; clear Hxs0; subst.
     specialize (IH _ H3). destruct IH as (xs01 & xs02 & Hxs0 & Hxs1 & Hxs2).
-    exists (x0 :: xs01), xs02.
-    split; [ cbn; f_equal; auto | ].
-    split; [ constructor; auto | auto ].
+    exists (x0 :: xs01), xs02. sauto.
 Qed.
 
 Lemma exact_list_app {a aA} {EE : Exact a aA} (xs1 xs2 : list a)
@@ -509,9 +482,7 @@ Proof. cbv; easy. Qed.
 
 #[local] Instance Lub_id {a} : Lub a := fun n _ => n.
 #[local] Instance LubLaw_id {a} : LubLaw a.
-Proof.
-  constructor;cbv;firstorder (subst; auto).
-Qed.
+Proof. sauto. Qed.
 
 #[global] Hint Unfold Exact_id : core.
 #[global] Hint Unfold LessDefined_id : core.
@@ -549,9 +520,7 @@ Class LessDefinedRep a b `{REP : Rep a b, LessDefined a, LessDefined b} : Prop :
 
 Lemma Reflexive_Rep {a b} `{LessDefinedRep a b} `{!Reflexive (less_defined (a := b))}
   : Reflexive (less_defined (a := a)).
-Proof.
-  unfold Reflexive. intros ?. apply to_rep_less_defined. reflexivity.
-Qed.
+Proof. sfirstorder. Qed.
 
 Lemma Transitive_Rep {a b} `{LessDefinedRep a b} `{!Transitive (less_defined (a := b))}
   : Transitive (less_defined (a := a)).
@@ -562,7 +531,7 @@ Qed.
 Lemma PreOrder_Rep {a b} `{LessDefinedRep a b} `{!PreOrder (less_defined (a := b))}
   : PreOrder (less_defined (a := a)).
 Proof.
-  constructor; auto using Reflexive_Rep, Transitive_Rep.
+  sauto use:Reflexive_Rep, Transitive_Rep.
 Qed.
 
 Class LubRep a b `{Rep a b,Lub a,Lub b} : Prop :=

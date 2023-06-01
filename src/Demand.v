@@ -10,6 +10,8 @@ From Coq Require Import Setoid SetoidClass Morphisms Lia Arith List.
 From Equations Require Import Equations.
 From Clairvoyance Require Import Core Approx List ApproxM Relations Setoid Tick Misc ListA.
 
+From Hammer Require Import Tactics.
+
 Set Warnings "-redundant-canonical-projection".
 
 Import ListNotations.
@@ -493,8 +495,7 @@ Theorem wp2_bind {a b : Type}
     (ox ox' : OTick a) (k k' : a -> OTick b)
   : wp2 (fun x x' => wp2 P (k x) (k' x')) ox ox' ->
     wp2 P (bind ox k) (bind ox' k').
-Proof.
-Admitted.
+Proof. sauto. Qed.
 
 End OTick.
 

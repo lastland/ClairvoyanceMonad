@@ -5,6 +5,8 @@ Set Contextual Implicit.
 From Coq Require Import Arith List Psatz.
 From Coq Require Import Relations.Relation_Definitions Classes.RelationClasses.
 
+From Hammer Require Import Tactics.
+
 (* ---------------------- Section 3: The Clairvoyance Monad ---------------------- *)
 
 Section ClairvoyanceMonad.
@@ -96,13 +98,13 @@ Lemma pessimistic_mon {a} (u : M a) (r r' : a -> nat -> Prop)
     (forall x n, r x n -> r' x n) ->
     u {{ r' }}.
 Proof.
-  intros X F x m H; apply F, X, H.
+  sfirstorder.
 Qed.
 
 Lemma pessimistic_ret {a} (x : a) (r : a -> nat -> Prop)
   : r x 0 -> (ret x) {{ r }}.
 Proof.
-  unfold ret. intros H y m. inversion 1. congruence.
+  fcrush.
 Qed.
 
 Lemma pessimistic_bind {a b} (u : M a) (k : a -> M b) (r : b -> nat -> Prop)
@@ -110,13 +112,13 @@ Lemma pessimistic_bind {a b} (u : M a) (k : a -> M b) (r : b -> nat -> Prop)
     (bind u k) {{ r }}.
 Proof.
   intros H y m0. intros (x & n & m & H1 & H2 & H3).
-  specialize (H x _ H1 y _ H2). rewrite H3; apply H.
+  sfirstorder.
 Qed.
 
 Lemma pessimistic_tick (r : unit -> nat -> Prop)
   : r tt 1 -> tick {{ r }}.
 Proof.
-  intros H [] n. unfold tick. intros ->; auto.
+  intros H [] n. sauto.
 Qed.
 
 Lemma pessimistic_thunk a (u : M a) r
@@ -124,18 +126,14 @@ Lemma pessimistic_thunk a (u : M a) r
     r Undefined 0 ->
     (thunk u) {{ r }}.
 Proof.
-  intros. intros x m. destruct x; simpl.
-  - apply H.
-  - intros ->. assumption.
+  intros. intros x m. sauto.
 Qed.
 
 Lemma pessimistic_forcing {a b} (t : T a) (k : a -> M b) (r : b -> nat -> Prop)
   : (forall x, t = Thunk x -> (k x) {{ r }}) ->
     (k $! t) {{ r }}.
 Proof.
-  intros. destruct t eqn:Ht.
-  - cbn. auto.
-  - inversion 1.
+  intros. destruct t eqn:Ht; sfirstorder.
 Qed.
 
 Lemma pessimistic_conj {a} (u : M a) (r p : a -> nat -> Prop)
@@ -143,9 +141,7 @@ Lemma pessimistic_conj {a} (u : M a) (r p : a -> nat -> Prop)
     u {{ p }} ->
     u {{ fun x n => r x n /\ p x n }}.
 Proof.
-  intros ? ? ? ? Hu. split.
-  - apply H; auto.
-  - apply H0; auto.
+  sfirstorder.
 Qed.
 
 (** This rule is not in Fig. 13. Recall that [force t] is defined as [forcing t
@@ -155,8 +151,7 @@ Lemma pessimistic_force {a} (t : T a) (r : a -> nat -> Prop)
   : (forall x, t = Thunk x -> r x 0) ->
     (force t) {{ r }}.
 Proof.
-  intros. eapply pessimistic_forcing.
-  intros. eapply pessimistic_ret. auto.
+  intros. eapply pessimistic_forcing. fcrush.
 Qed.
 
 (** * Figure 14. *)
@@ -166,30 +161,26 @@ Lemma optimistic_mon {a} (u : M a) (r r' : a -> nat -> Prop)
     (forall x n, r x n -> r' x n) ->
     u [[ r' ]].
 Proof.
-  intros X F. destruct X as (x & n & X).
-  exists x, n. intuition.
+  sfirstorder.
 Qed.
 
 Lemma optimistic_ret {a} (x : a) (r : a -> nat -> Prop)
   : r x 0 -> (ret x) [[ r ]].
 Proof.
-  intros H. exists x, 0. intuition. constructor; reflexivity.
+  sauto lq: on.
 Qed.
 
 Lemma optimistic_bind {a b} (u : M a) (k : a -> M b) (r : b -> nat -> Prop)
   : u [[ fun x n => (k x) [[ fun y m => r y (n + m) ]] ]] ->
     (bind u k) [[ r ]].
 Proof.
-  intros Hu. destruct Hu as (x & n & ? & Hk).
-  destruct Hk as (y & m & ? & ?).
-  exists y, (n + m). intuition.
-  exists x, n, m. intuition.
+  hauto.
 Qed.
 
 Lemma optimistic_tick (r : unit -> nat -> Prop)
   : r tt 1 -> tick [[ r ]].
 Proof.
-  intros H. exists tt, 1. intuition. constructor.
+  hauto lq: on.
 Qed.
 
 (** For proof engineering purposes, we divide the [thunk] rule of Fig. 14 to two
@@ -198,16 +189,14 @@ Lemma optimistic_thunk_go {a} (u : M a) (r : T a -> nat -> Prop)
   : u [[ fun x => r (Thunk x) ]] ->
     (thunk u) [[ r ]].
 Proof.
-  intros (x & n & ? & ?).
-  exists (Thunk x), n; cbn; auto.
+  sfirstorder.
 Qed.
 
 Lemma optimistic_skip {a} (u : M a) (r : T a -> nat -> Prop)
   : r Undefined 0 ->
     (thunk u) [[ r ]].
 Proof.
-  intros H.
-  exists Undefined, 0. split; [|assumption]. cbn. reflexivity.
+  sfirstorder.
 Qed.
 
 Lemma optimistic_forcing {a b} (t : T a) (k : a -> M b) (r : b -> nat -> Prop) x
@@ -215,9 +204,7 @@ Lemma optimistic_forcing {a b} (t : T a) (k : a -> M b) (r : b -> nat -> Prop) x
     k x [[ r ]] ->
     (k $! t) [[ r ]].
 Proof.
-  intros. destruct t eqn:Ht.
-  - cbn. inversion H. auto.
-  - congruence.
+  sauto lq: on.
 Qed.
 
 Lemma optimistic_conj {a} (u : M a) (r p : a -> nat -> Prop)
@@ -225,8 +212,7 @@ Lemma optimistic_conj {a} (u : M a) (r p : a -> nat -> Prop)
     u [[ p ]] ->
     u [[ fun x n => r x n /\ p x n ]].
 Proof.
-  intros ? ?. destruct H0 as (? & ? & ? & ?).
-  exists x, x0. auto.
+  sfirstorder.
 Qed.
 
 (** Same as [pessimistic_force], this is a consequence of [optimistic_forcing] +
@@ -236,9 +222,7 @@ Lemma optimistic_force {a} (t : T a) (r : a -> nat -> Prop) x
     r x 0 ->
     (force t) [[ r ]].
 Proof.
-  intros. unfold force. eapply optimistic_forcing.
-  - eassumption.
-  - eapply optimistic_ret; auto.
+  hauto.
 Qed.
 
 End InferenceRules.

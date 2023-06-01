@@ -13,5 +13,4 @@ clean: clean_coq
 	$(RM) Makefile.coq.conf
 
 Makefile.coq: _CoqProject
-	coq_makefile -f $< -o $@
-
+	$(COQBIN)coq_makefile -f $< -o $@

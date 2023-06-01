@@ -21,6 +21,8 @@ From Coq Require Import Arith List Lia Setoid Morphisms.
 Import ListNotations.
 From Clairvoyance Require Import Core Approx ApproxM List ListA Misc Tick .
 
+From Hammer Require Import Tactics.
+
 Import Tick.Notations.
 
 Set Primitive Projections.
@@ -134,16 +136,10 @@ Instance Rep_QueueA {a} : Rep (QueueA a) (nat * T (listA a) * nat * T (listA a))
   |}.
 
 #[global] Instance RepLaw_QueueA {a} : RepLaw (QueueA a) _.
-Proof.
-  constructor.
-  - intros [ [ [nf f] nb] b]; reflexivity.
-  - intros []; reflexivity.
-Qed.
+Proof. sauto lq:on. Qed.
 
 #[global] Instance LessDefinedRep_QueueA {a} : LessDefinedRep (QueueA a) _.
-Proof.
-  intros [] []; cbn; firstorder.
-Qed.
+Proof. sfirstorder. Qed.
 
 #[global] Instance PreOrder_QueueA {a} : PreOrder (less_defined (a := QueueA a)).
 Proof. exact PreOrder_Rep. Qed.
@@ -246,7 +242,7 @@ Lemma well_formed_mkQueue {a} nf (f : list a) nb b
 Proof.
   unfold mkQueue; destruct (Nat.ltb_spec nf nb); intros; subst; constructor; cbn; auto.
   - lia.
-  - rewrite length_append,rev_length; reflexivity.
+  - rewrite length_append, rev_length; reflexivity.
 Qed.
 
 Lemma well_formed_push {a} (q : Queue a) (x : a) : well_formed q -> well_formed (push q x).
@@ -343,10 +339,10 @@ Lemma mkQueueD_approx {a} nf (f : list a) nb b (outD : QueueA a)
   : outD `is_approx` mkQueue nf f nb b ->
     Tick.val (mkQueueD nf f nb b outD) `is_approx` (f, b).
 Proof.
-  unfold mkQueue, mkQueueD.
+  unfold mkQueue, mkQueueD. 
   destruct (Nat.ltb_spec nf nb).
   - destruct (frontA outD) eqn:Ef; cbn.
-    + destruct appendD eqn:Eapp. intros []; cbn in *.
+    + destruct appendD eqn:Eapp.  intros []; cbn in *.
       rewrite Ef in ld_front0; inversion ld_front0; subst.
       apply appendD_approx in H2. rewrite Eapp in H2. destruct H2, val; cbn in *.
       constructor; cbn; auto.
@@ -392,14 +388,7 @@ Lemma appendD_Thunk_r {a} (xs ys : list a) (outD : _)
     forall xsA ysA, (xsA, Thunk ysA) = Tick.val (appendD xs ys outD) ->
     sizeX 0 xsA = length xs.
 Proof.
-  revert outD; induction xs; cbn; intros outD Hout xsA ysA H.
-  - inversion H; reflexivity.
-  - inversion Hout; subst.
-    inversion H4; subst; cbn in H.
-    + inversion H.
-    + destruct appendD as [ ? [] ] eqn:ED in H; inversion H; subst; cbn.
-      erewrite <- IHxs by (try rewrite ED; cbn; eauto).
-      destruct t as [ xs' | ]; reflexivity.
+  revert outD; induction xs; fcrush.
 Qed.
 
 (** *** Soundness of demand functions with respect to clairvoyant functions. *)

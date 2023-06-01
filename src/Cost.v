@@ -1,6 +1,8 @@
 From Coq Require Import Arith List Lia Morphisms Relations Classical.
 From Clairvoyance Require Import Core Approx.
 
+From Hammer Require Import Tactics.
+
 (** * Cost specifications *)
 
 Definition at_most {a} `{LessDefined a} (u : M a) '((x, n) : a * nat) : Prop :=
@@ -64,26 +66,20 @@ Definition cost_of {a} (u : M a) : NAT.t :=
 
 Theorem cost_of_bound {a} (u : M a) (bound : nat)
   : (cost_of u <= bound)%NAT -> u [[ fun x n => n <= bound ]].
-Proof.
-  intros [ n [ ny [ [ [y [m H0] ] H1] [H2 H3] ] ] ].
-  exists y, m. split; [ apply H0 | ].
-  etransitivity; [ apply H0 | ].
-  red in H2. subst. apply H3.
-Qed.
+Proof. sauto. Qed.
 
 Lemma mini' (P : nat -> Prop) (n : nat) : ~~ ((forall m, m <= n -> ~ P m) \/ exists m, P m /\ (forall m', P m' -> m <= m')).
 Proof.
-  induction n as [ | n IH ].
-  - intro contra. apply contra. left. intros m Hm HP; inversion Hm; subst.
-    apply contra; right. exists 0. split; auto using Nat.le_0_l.
+    induction n as [ | n IH ].
+  - sfirstorder.
   - intros contra. apply IH; intros [ H | H].
     + apply contra; left. intros m Hm HP.
       inversion Hm; subst.
       * apply contra; right. exists (S n). split; auto.
-        intros m' HP'. apply not_gt. intros contra''. apply gt_S_le in contra''.
-        apply (H _ contra'' HP').
-      * red in H; eauto.
-    + apply contra; right. auto.
+        intros m' HP'. apply not_gt. intros contra''.
+        apply Nat.succ_le_mono in contra''. apply (H _ contra'' HP').
+      * sfirstorder.
+    + sfirstorder.
 Qed.
 
 Lemma not_impl (P Q : Prop) : (Q -> P) -> ~ P -> ~ Q.
@@ -91,10 +87,7 @@ Proof. exact (fun f g x => g (f x)). Qed.
 
 Lemma mini (P : nat -> Prop) (n : nat) : P n -> ~~ exists m, P m /\ (forall m', P m' -> m <= m').
 Proof.
-  intros HP. generalize (mini' P n). do 2 apply not_impl.
-  intros [H | H].
-  - exfalso; eapply H; eauto.
-  - apply H.
+  intros HP. generalize (mini' P n). sfirstorder.
 Qed.
 
 Theorem cost_of_bound' {a} (u : M a) (bound : nat)
