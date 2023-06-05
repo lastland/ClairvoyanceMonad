@@ -222,6 +222,34 @@ Fixpoint appendD {a} (xs ys : list a) (outD : listA a) : Tick (T (listA a) * T (
                       so the demand cannot be of the form [] *)
   end.
 
+(* Example:
+  append [1,2] [3] = 1 :: 2 :: 3 :: []
+  head (append [1,2] [3])
+   head : list a -> a
+   head (x :: _) = x
+   headD : list a -> T a -> Tick (listA a)
+   headD (_ :: _) out = tick >> ret (out :: Undefined)
+  appendD [1,2] [3] (1 :: Undefined) = (1, (Thunk (1 :: Undefined), Undefined))
+  appendD [1,2] [3] (1 :: 2 :: 3 :: Undefined) = (3, (Thunk (1 :: 2 :: []), Thunk (3 :: Undefined)))
+  appendD [1,2] [3] (1 :: 2 :: 3 :: []) = (4, (Thunk (1 :: 2 :: []), Thunk (3 :: [])))
+ *)
+
+(* Exercise:
+  What is the cost of sum (take 5 xs) ?
+   - define sumD, takeD
+   - compose them to define the "demand" of (sum (take 5 xs))
+     out : nat
+     sumOfTakeD xs out : Tick _
+   - show that it is less than 5 + 5 ticks (approx)
+     cost = fst : Tick a -> nat
+
+   forall xs,
+     cost (sumOfTakeD xs (sum (take n xs))) <= 2n
+ *)
+
+(* Long-term goal:
+   show that   head (selection_sort xs)   in O(n)
+   (also could be merge_sort) *)
 
 (* Demand function for [revA].
    [revA] has to traverse the list: the input demand is the whole list.
