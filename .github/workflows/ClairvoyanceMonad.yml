@@ -17,28 +17,34 @@ jobs:
           - coq: 8.16.1
             equations: 1.3+8.16
     steps:
+      - name: Checkout the repository
+        uses: actions/checkout@v3
       - name: Caching OPAM
         id: caching-opam
         uses: actions/cache@v2
         with:
           path: ~/.opam
           key: opam-${{ runner.os }}-coq${{ matrix.coq }}
+      - name: Caching Local OPAM
+        id: caching-local-opam
+        uses: actions/cache@v2
+        with:
+          path: _opam
+          key: coq-opam-${{ runner.os }}-coq${{ matrix.coq }}
       - name: Set up OCaml
         uses: ocaml/setup-ocaml@v2
         with:
           ocaml-compiler: ${{ matrix.ocaml }}
-      - name: Initialize OPAM
-        if: steps.caching-opam.outputs.cache-hit != 'true'
-        run: |
-          opam init -j 2 -n -y
+          opam-disable-sandboxing: true
       - name: Set up Coq
         run: |
+          opam init -j 2 -n -y || true
           opam repo add coq-released http://coq.inria.fr/opam/released || true
           opam update
           opam install -v -y -j 1 --unlock-base coq.${{ matrix.coq }}
           opam pin coq ${{ matrix.coq }}
           opam install -y coq-equations.${{ matrix.equations }}
-      - name: Checkout the repository
-        uses: actions/checkout@v2
       - name: Compiling Coq files
-        run: opam exec make
+        run: |
+          eval $(opam env)
+          make
