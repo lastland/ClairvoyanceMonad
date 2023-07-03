@@ -222,6 +222,118 @@ Fixpoint appendD {a} (xs ys : list a) (outD : listA a) : Tick (T (listA a) * T (
                       so the demand cannot be of the form [] *)
   end.
 
+Fixpoint lsum (xs : list nat) : nat :=
+  match xs with
+  | nil => 0
+  | x :: xs' => x + lsum xs'
+  end.
+
+(* Entire list must be forced *)
+Definition lsumD (xs : list nat) (outD : nat) : Tick (T (listA nat)) :=
+  Tick.MkTick (1 + length xs) (exact xs).
+
+(* We force the list until n = 0 or we run out of list *)
+Fixpoint takeD {a} (n : nat) (xs : list a) (outD : listA a) : Tick (T (listA a)) :=
+  Tick.tick >>
+  match n, xs, outD with
+  | 0, _, _ => Tick.ret (Undefined)
+  | _, nil, _ => Tick.ret (Thunk NilA)
+  | n, y :: ys, ConsA zD zsD =>
+    let+ ysD := thunkD (takeD (n - 1) ys) zsD in
+    Tick.ret (Thunk (ConsA (Thunk y) ysD))
+  | _, _, _ => bottom (* does not occur *)
+  end.
+
+Definition sumOfTakeD (n : nat) (xs : list nat) (outD : nat) : Tick (T (listA nat)) :=
+  let+ take_xsD := lsumD (take n xs) outD in  
+  let+ xsD := thunkD (takeD n xs) take_xsD in
+  Tick.ret xsD.
+
+Lemma lsumD_cost (xs : list nat) outD :
+  Tick.cost (lsumD xs outD) = 1 + length xs.
+Proof.
+  reflexivity. Qed.
+
+Lemma takeD_cost (n : nat) (xs : list nat) outD :
+  Tick.cost (takeD n xs outD) <= 1 + n.
+Proof. induction n.
+  - destruct xs.
+    + reflexivity.
+    + reflexivity.
+  - destruct xs.
+    + destruct n.
+      * intuition.
+      * intuition.
+    + destruct n.
+      * destruct outD.
+        -- intuition.
+        -- simpl. admit.
+      * destruct outD.
+        -- intuition.
+        -- simpl. admit.
+  Admitted.
+
+Lemma length_take_n_leq_n (n : nat) (xs : list nat) : 
+  length (take n xs) <= 1 + n.
+Proof.
+  assert (H : n <= length xs \/ n > length xs) by lia.
+  destruct H.
+  - induction n.
+    + intuition.
+    + apply Le.le_Sn_le_stt in H. apply IHn in H.
+      destruct take eqn : H'.
+      * assert (xs = []).
+        {
+          destruct n. simpl in H'.
+          admit. admit.
+        }
+        subst. simpl. intuition.
+      * simpl. destruct xs.
+        -- admit.
+        -- simpl. admit.
+  - induction n.
+    + intuition.
+    + Search (S _ > _). admit.
+Admitted.
+
+Lemma sum_of_take_cost (n : nat) (xs : list nat) outD
+  : outD `is_approx` (lsum (take n xs)) ->
+    forall xsA, xsA = Tick.val (sumOfTakeD n xs outD) ->
+    Tick.cost (sumOfTakeD n xs outD) <= 2 * n + 2.
+Proof.
+  intros. rewrite H. simpl.
+  destruct n.
+  - destruct xs; simpl; lia.
+  - destruct xs.
+    + simpl. lia.
+    + simpl. assert (H1 : S n - 1 = n). { lia. } rewrite H1.
+      remember (length (take n xs)) as l.
+      remember (Tick.cost (takeD n xs (Exact_list (take n xs)))) as l'.
+      assert (H2 : S l = 1 + l). { lia. } rewrite H2.
+      assert (H3 : (1 + (1 + l) + (1 + (l' + 0) + 0))
+                 = (3 + l + l')).
+                 { lia. }
+      rewrite H3.
+      rewrite Heql.
+      rewrite Heql'.
+      rewrite length_take_n_leq_n.
+      rewrite takeD_cost.
+      lia.
+Qed.
+
+(* Fixpoint takeD_ {a : Type} (n : nat) (xs' : list a) (outD : listA a) : Tick (T (listA a) * T (listA a)) :=
+  match n, xs', outD with
+  | O, _, _ => Tick.ret (Thunk NilA, Thunk outD)
+  | S _, nil, _ => Tick.ret (Thunk NilA, Thunk outD)
+  | S n1, x :: xs1, (*?*) ConsA nD zsD =>
+    Tick.tick >> Tick.tick >>
+    let+ xsD := thunkD (takeD_ (n - 1) xs1) zsD in
+    Tick.ret (Thunk (ConsA (Thunk n1) xsD))
+  | _, _, _ => bottom
+end. *)
+
+(* Definition takeD {a} (n : nat) (xs : list a) (outD : listA a) : Tick (T nat * T (listA a)) :=*)
+
 (* Example:
   append [1,2] [3] = 1 :: 2 :: 3 :: []
   head (append [1,2] [3])
