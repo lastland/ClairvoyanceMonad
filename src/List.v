@@ -264,13 +264,32 @@ Proof. induction n.
     + destruct n.
       * intuition.
       * intuition.
-    + destruct n.
+    + induction n.
       * destruct outD.
+        (* xs = something, n = 0, outD = nothing *)
         -- intuition.
-        -- simpl. admit.
+        (* xs = something, n = 0, outD = something *)
+        -- simpl. 
+           assert ((takeD (1 - 1) xs) = (takeD (0) xs)) by intuition.
+           rewrite H.
+           destruct thunkD. simpl.
+           induction cost.
+           ++ lia.
+           ++ simpl in IHn.
+              (** And then we're stuck :(
+
+                  You can't prove that any non-zero cost is 0!
+                  What did I miss? **) admit.
       * destruct outD.
+        (* xs = something, n = something, outD = nothing *)
         -- intuition.
-        -- simpl. admit.
+        (* xs = something, n = something, outD = something *)
+        -- simpl. destruct thunkD. simpl.
+           induction cost.
+           ++ lia.
+           ++ simpl. simpl in IHn. simpl in IHcost.
+              (** This branch actually looks provable, but
+                  I'll get there when I get there. **) admit.
   Admitted.
 
 Lemma length_take_n_leq_n (n : nat) (xs : list nat) : 
@@ -299,20 +318,19 @@ Admitted.
 Lemma sum_of_take_cost (n : nat) (xs : list nat) outD
   : outD `is_approx` (lsum (take n xs)) ->
     forall xsA, xsA = Tick.val (sumOfTakeD n xs outD) ->
-    Tick.cost (sumOfTakeD n xs outD) <= 2 * n + 3.
+    Tick.cost (sumOfTakeD n xs outD) <= (2 * n) + 3.
 Proof.
   intros. rewrite H. simpl.
   destruct n.
   - destruct xs; simpl; lia.
   - destruct xs.
     + simpl. lia.
-    + simpl. assert (H1 : S n - 1 = n). { lia. } rewrite H1.
+    + simpl. assert (H1 : S n - 1 = n) by lia. rewrite H1.
       remember (length (take n xs)) as l.
       remember (Tick.cost (takeD n xs (Exact_list (take n xs)))) as l'.
-      assert (H2 : S l = 1 + l). { lia. } rewrite H2.
+      assert (H2 : S l = 1 + l) by lia. rewrite H2.
       assert (H3 : (1 + (1 + l) + (1 + (l' + 0) + 0))
-                 = (3 + l + l')).
-                 { lia. }
+                 = (3 + l + l')) by lia.
       rewrite H3.
       rewrite Heql.
       rewrite Heql'.
@@ -390,6 +408,8 @@ Proof.
     assert (H1 : length (n :: xs) = S (length xs)). auto. rewrite H1.
     rewrite sort_produces_element. simpl. lia.
 Qed.
+
+
 
 (* Fixpoint takeD_ {a : Type} (n : nat) (xs' : list a) (outD : listA a) : Tick (T (listA a) * T (listA a)) :=
   match n, xs', outD with
