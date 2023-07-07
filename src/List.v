@@ -320,7 +320,6 @@ Proof.
   - destruct xs.
     + simpl. lia.
     + simpl.
-      rewrite Nat.sub_0_r.
       rewrite length_take_n_leq_n.
       rewrite takeD_cost.
       lia.
