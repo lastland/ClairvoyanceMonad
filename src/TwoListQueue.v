@@ -367,8 +367,6 @@ Arguments Debitable_QueueA {a} qA /.
    We then generalize them by monotonicity into [pushA_cost'] and [popA_cost'],
    where the input doesn't have to be exactly equal to the input demand. *)
 
-Opaque Nat.mul Nat.add Nat.sub.
-
 (** ** Cost specs for auxiliary functions *)
 
 (* Auxiliary *)

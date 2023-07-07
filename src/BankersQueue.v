@@ -1060,3 +1060,5 @@ Proof.
 Qed.
 
 (* Print Assumptions good_queue. *)
+
+Transparent Nat.mul Nat.add Nat.sub.

@@ -17,7 +17,10 @@ Set Contextual Implicit.
 Import ListNotations.
 Import Tick.Notations.
 
-Opaque Nat.mul Nat.add Nat.sub.
+Global Instance Proper_S_le : Proper (le ==> le) S.
+Proof.
+  unfold Proper, respectful. lia.
+Qed.
 
 (* ---------------------- List operations ---------------------- *)
 
@@ -270,8 +273,6 @@ Proof. induction n.
         -- intuition.
         (* xs = something, n = 0, outD = something *)
         -- simpl. 
-           assert ((takeD (1 - 1) xs) = (takeD (0) xs)) by intuition.
-           rewrite H.
            destruct thunkD. simpl.
            induction cost.
            ++ lia.
@@ -325,15 +326,8 @@ Proof.
   - destruct xs; simpl; lia.
   - destruct xs.
     + simpl. lia.
-    + simpl. assert (H1 : S n - 1 = n) by lia. rewrite H1.
-      remember (length (take n xs)) as l.
-      remember (Tick.cost (takeD n xs (Exact_list (take n xs)))) as l'.
-      assert (H2 : S l = 1 + l) by lia. rewrite H2.
-      assert (H3 : (1 + (1 + l) + (1 + (l' + 0) + 0))
-                 = (3 + l + l')) by lia.
-      rewrite H3.
-      rewrite Heql.
-      rewrite Heql'.
+    + simpl.
+      rewrite Nat.sub_0_r.
       rewrite length_take_n_leq_n.
       rewrite takeD_cost.
       lia.
