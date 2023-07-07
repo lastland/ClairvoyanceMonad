@@ -241,8 +241,8 @@ Fixpoint takeD {a} (n : nat) (xs : list a) (outD : listA a) : Tick (T (listA a))
   match n, xs, outD with
   | 0, _, _ => Tick.ret (Undefined)
   | _, nil, _ => Tick.ret (Thunk NilA)
-  | n, y :: ys, ConsA zD zsD =>
-    let+ ysD := thunkD (takeD (n - 1) ys) zsD in
+  | S m, y :: ys, ConsA zD zsD =>
+    let+ ysD := thunkD (takeD m ys) zsD in
     Tick.ret (Thunk (ConsA (Thunk y) ysD))
   | _, _, _ => bottom (* does not occur *)
   end.
@@ -259,39 +259,32 @@ Proof.
 
 Lemma takeD_cost (n : nat) (xs : list nat) outD :
   Tick.cost (takeD n xs outD) <= 1 + n.
-Proof. induction n.
-  - destruct xs.
-    + reflexivity.
-    + reflexivity.
-  - destruct xs.
-    + destruct n.
-      * intuition.
-      * intuition.
-    + induction n.
-      * destruct outD.
-        (* xs = something, n = 0, outD = nothing *)
-        -- intuition.
-        (* xs = something, n = 0, outD = something *)
-        -- simpl. 
-           destruct thunkD. simpl.
-           induction cost.
-           ++ lia.
-           ++ simpl in IHn.
-              (** And then we're stuck :(
-
-                  You can't prove that any non-zero cost is 0!
-                  What did I miss? **) admit.
-      * destruct outD.
-        (* xs = something, n = something, outD = nothing *)
-        -- intuition.
-        (* xs = something, n = something, outD = something *)
-        -- simpl. destruct thunkD. simpl.
-           induction cost.
-           ++ lia.
-           ++ simpl. simpl in IHn. simpl in IHcost.
-              (** This branch actually looks provable, but
-                  I'll get there when I get there. **) admit.
-  Admitted.
+Proof.
+  (* The proof follows the structure of [takeD]. It is a match on three variables [n, xs, outD],
+     which is sugar for nested matches each on one variable:
+<<
+    match n with
+    | O => Tick.ret ...
+    | S m => match xs with
+             | nil => ...
+             | y :: ys => match outD with ...
+>>
+     This nesting is reflected in the proof below, each [match] corresponding to [induction]
+     or [destruct]. (The first match works with the [Fixpoint] to ensure termination, which
+     is a hint that [induction] should be used instead of [destruct].) *)
+  (* All 3 arguments of takeD change in the recursive call, so we should
+     generalize the induction hypothesis with [revert xs outD]
+     so we can then specialize it with different arguments (in [rewrite Ihn]). *)
+  revert xs outD; induction n; intros xs outD; simpl.
+  - reflexivity.
+  - destruct xs; simpl.
+    + lia.
+    + destruct outD.
+      * simpl. lia.
+      * destruct x2; simpl.
+        -- rewrite IHn. lia.
+        -- lia.
+Qed.
 
 Lemma length_take_n_leq_n (n : nat) (xs : list nat) : 
   length (take n xs) <= 1 + n.
