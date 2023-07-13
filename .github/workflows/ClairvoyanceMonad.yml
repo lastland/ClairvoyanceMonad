@@ -25,12 +25,6 @@ jobs:
         with:
           path: ~/.opam
           key: opam-${{ runner.os }}-ocaml${{ matrix.ocaml }}-coq${{ matrix.coq }}
-      - name: Caching Local OPAM
-        id: caching-local-opam
-        uses: actions/cache@v2
-        with:
-          path: _opam
-          key: coq-opam-${{ runner.os }}-ocaml${{ matrix.ocaml }}-coq${{ matrix.coq }}
       - name: Set up OCaml
         uses: ocaml/setup-ocaml@v2
         with:
