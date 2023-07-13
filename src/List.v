@@ -286,28 +286,30 @@ Proof.
         -- lia.
 Qed.
 
+Lemma length_take_Sn_leq_1Sn (n n0 : nat) (xs : list nat) :
+  length (take n (n0 :: xs)) <= S n -> length (take (S n) (n0 :: xs)) <= 1 + S n.
+Proof.
+  revert xs n0.
+  induction n.
+  - simpl. lia.
+  - simpl. destruct xs.
+    + simpl. lia.
+    + simpl. intros. simpl in IHn. apply le_n_S.
+      eapply IHn. apply le_S_n. apply H.
+Qed.
+
 Lemma length_take_n_leq_n (n : nat) (xs : list nat) : 
   length (take n xs) <= 1 + n.
 Proof.
-  assert (H : n <= length xs \/ n > length xs) by lia.
-  destruct H.
-  - induction n.
-    + intuition.
-    + apply Le.le_Sn_le_stt in H. apply IHn in H.
-      destruct take eqn : H'.
-      * assert (xs = []).
-        {
-          destruct n. simpl in H'.
-          admit. admit.
-        }
-        subst. simpl. intuition.
-      * simpl. destruct xs.
-        -- admit.
-        -- simpl. admit.
-  - induction n.
-    + intuition.
-    + Search (S _ > _). admit.
-Admitted.
+  induction n.
+  - simpl. lia.
+  - destruct xs.
+    + simpl. lia.
+    + simpl in IHn.
+      rewrite length_take_Sn_leq_1Sn.
+      * lia.
+      * apply IHn.
+Qed.
 
 Lemma sum_of_take_cost (n : nat) (xs : list nat) outD
   : outD `is_approx` (lsum (take n xs)) ->
@@ -395,46 +397,6 @@ Proof.
     rewrite sort_produces_element. simpl. lia.
 Qed.
 
-
-
-(* Fixpoint takeD_ {a : Type} (n : nat) (xs' : list a) (outD : listA a) : Tick (T (listA a) * T (listA a)) :=
-  match n, xs', outD with
-  | O, _, _ => Tick.ret (Thunk NilA, Thunk outD)
-  | S _, nil, _ => Tick.ret (Thunk NilA, Thunk outD)
-  | S n1, x :: xs1, (*?*) ConsA nD zsD =>
-    Tick.tick >> Tick.tick >>
-    let+ xsD := thunkD (takeD_ (n - 1) xs1) zsD in
-    Tick.ret (Thunk (ConsA (Thunk n1) xsD))
-  | _, _, _ => bottom
-end. *)
-
-(* Definition takeD {a} (n : nat) (xs : list a) (outD : listA a) : Tick (T nat * T (listA a)) :=*)
-
-(* Example:
-  append [1,2] [3] = 1 :: 2 :: 3 :: []
-  head (append [1,2] [3])
-   head : list a -> a
-   head (x :: _) = x
-   headD : list a -> T a -> Tick (listA a)
-   headD (_ :: _) out = tick >> ret (out :: Undefined)
-  appendD [1,2] [3] (1 :: Undefined) = (1, (Thunk (1 :: Undefined), Undefined))
-  appendD [1,2] [3] (1 :: 2 :: 3 :: Undefined) = (3, (Thunk (1 :: 2 :: []), Thunk (3 :: Undefined)))
-  appendD [1,2] [3] (1 :: 2 :: 3 :: []) = (4, (Thunk (1 :: 2 :: []), Thunk (3 :: [])))
- *)
-
-(* Exercise:
-  What is the cost of sum (take 5 xs) ?
-   - define sumD, takeD
-   - compose them to define the "demand" of (sum (take 5 xs))
-     out : nat
-     sumOfTakeD xs out : Tick _
-   - show that it is less than 5 + 5 ticks (approx)
-     cost = fst : Tick a -> nat
-
-   forall xs,
-     cost (sumOfTakeD xs (sum (take n xs))) <= 2n
- *)
-
 (* Long-term goal:
    show that   head (selection_sort xs)   in O(n)
    (also could be merge_sort) *)
@@ -448,8 +410,7 @@ Definition revD {a} (xs : list a) (outD : listA a) : Tick (T (listA a)) :=
 
 (* Demand function for [insertA]. 
    The input list needs to be forced only as long as its elements are <= x. 
-   
-   *)
+*)
 Fixpoint insertD_ (x:nat) (xs: list nat)  (outD : listA nat) : Tick (T (listA nat)) :=
   match xs, outD with 
   | nil, _ => Tick.ret (Thunk NilA)
