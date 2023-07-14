@@ -1,9 +1,11 @@
-.PHONY: all coq clean clean_coq
+.PHONY: all install coq clean clean_coq
 
 all: coq
 
 coq: Makefile.coq
 	$(MAKE) -f Makefile.coq
+
+install: coq
 
 clean_coq: Makefile.coq
 	$(MAKE) -f Makefile.coq cleanall
@@ -14,4 +16,3 @@ clean: clean_coq
 
 Makefile.coq: _CoqProject
 	$(COQBIN)coq_makefile -f $< -o $@
-

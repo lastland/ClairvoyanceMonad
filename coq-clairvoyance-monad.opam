@@ -1,0 +1,56 @@
+# This file was generated from `meta.yml`, please do not edit manually.
+# Follow the instructions on https://github.com/coq-community/templates to regenerate.
+
+opam-version: "2.0"
+maintainer: "liyao@pdx.edu"
+version: "dev"
+
+homepage: "https://github.com/lastland/ClairvoyanceMonad"
+dev-repo: "git+https://github.com/lastland/ClairvoyanceMonad.git"
+bug-reports: "https://github.com/lastland/ClairvoyanceMonad/issues"
+license: "MIT"
+
+synopsis: "The Coq formalization of the paper Reasoning about the garden of forking paths"
+description: """
+This artifact contains the Coq formalization of the paper Reasoning about the
+Garden of Forking Paths.
+
+The paper presents a novel and simple framework for formally reasoning about
+lazy computation costs based on a recent model of lazy evaluation: clairvoyant
+call-by-value. The key feature of our framework is its simplicity, as
+expressed by our definition of the clairvoyance monad. This monad is both
+simple to define (around 20 lines of Coq) and simple to reason about. We show
+that this monad can be effectively used to mechanically reason about the
+computational cost of lazy functional programs written in Coq.
+
+The artifact supports the claims in the paper in two ways:
+
+- The artifact contains the definitions, reference implementations, the
+  specifications, and proofs that programs satisfy the specifications in Coq.
+  This part is contained in file Clairvoyance.v.
+
+- The artifact contains the formalization of our translation (presented in
+  Section 4 of the paper), and a proof of equivalence between our translation
+  and the operational semantics of Hackett & Hutton (2019). This part is
+  contained in file Translation.v."""
+
+build: [make "-j%{jobs}%"]
+install: [make "install"]
+depends: [
+  "coq" {>= "8.16"}
+  "coq-equations" {>= "1.3"}
+]
+
+tags: [
+  "category:Computer Science/Data Types and Data Structures"
+  "keyword:formal verification"
+  "keyword:computation cost"
+  "keyword:lazy evaluation"
+  "keyword:monad"
+  "logpath:ClairvoyanceMonad"
+]
+authors: [
+  "Yao Li"
+  "Li-yao Xia"
+  "Stephanie Weirich"
+]

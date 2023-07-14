@@ -3,42 +3,23 @@ name: ClairvoyanceMonad
 on: [push, pull_request]
 
 jobs:
-  checking-coq:
-    name: Building ClairvoyanceMonad
-    runs-on: ${{ matrix.os }}
+  build:
+    # the OS must be GNU/Linux to be able to use the docker-coq-action
+    runs-on: ubuntu-latest
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
-        ocaml: [4.14.1]
-        coq: [8.16.1, 8.17.1]
-        include:
-          - coq: 8.16.1
-            equations: 1.3+8.16
-          - coq: 8.17.1
-            equations: 1.3+8.17
+        image:
+          - 'coqorg/coq:8.17'
+          - 'coqorg/coq:8.16'
+      fail-fast: false
     steps:
-      - name: Checkout the repository
-        uses: actions/checkout@v3
-      - name: Caching OPAM
-        id: caching-opam
-        uses: actions/cache@v2
+      - uses: actions/checkout@v3
+      - uses: coq-community/docker-coq-action@v1
         with:
-          path: ~/.opam
-          key: opam-${{ runner.os }}-ocaml${{ matrix.ocaml }}-coq${{ matrix.coq }}
-      - name: Set up OCaml
-        uses: ocaml/setup-ocaml@v2
-        with:
-          ocaml-compiler: ${{ matrix.ocaml }}
-          opam-disable-sandboxing: true
-      - name: Set up Coq
-        run: |
-          opam init -j 2 -n -y || true
-          opam repo add coq-released http://coq.inria.fr/opam/released || true
-          opam update
-          opam install -v -y -j 1 --unlock-base coq.${{ matrix.coq }}
-          opam pin coq ${{ matrix.coq }}
-          opam install -y coq-equations.${{ matrix.equations }}
-      - name: Compiling Coq files
-        run: |
-          eval $(opam env)
-          make
+          opam_file: 'coq-clairvoyance-monad.opam'
+          custom_image: ${{ matrix.image }}
+
+
+# See also:
+# https://github.com/coq-community/docker-coq-action#readme
+# https://github.com/erikmd/docker-coq-github-action-demo

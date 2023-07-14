@@ -13,3 +13,4 @@ Makefile.coq.conf
 DOT_Makefile.coq.d
 DOT_coqdeps.d
 _opam
+_build
