@@ -397,6 +397,56 @@ Proof.
     rewrite sort_produces_element. simpl. lia.
 Qed.
 
+Definition take_selection_sortD (n : nat) (xs : list nat) (outD : listA nat) :
+  Tick (T (listA nat)) :=
+  let+ list_takeD := takeD n (selection_sort xs (length xs)) outD in
+  let+ xsD := thunkD (selection_sortD xs) list_takeD in
+  Tick.ret xsD.
+
+Lemma selection_sortD_cost (xs : list nat) (outD : listA nat) :
+  Tick.cost (selection_sortD xs outD) <= (sizeX' 1 outD) * (length xs + 2).
+Proof.
+  intros. generalize dependent xs. induction outD;
+  intro; destruct xs; simpl; try rewrite IHoutD; lia.
+Qed.
+
+Lemma headD_demand {a} (xs : list a) (d : a) (outD : a) : 
+  sizeX 1 (Tick.val (headD xs d outD)) = 1.
+Proof.
+  destruct xs; reflexivity.
+Qed.
+
+Theorem head_selection_sortD_cost' (xs : list nat) (outD : nat) :
+  Tick.cost (head_selection_sortD xs outD) <= length xs + 3.
+Proof.
+  unfold head_selection_sortD. unfold Tick.bind. simpl.
+  unfold thunkD. destruct (selection_sort xs (length xs)); simpl;
+  rewrite selection_sortD_cost; simpl; lia.
+Qed.
+
+Lemma takeD_demand {a} (n : nat) (xs : list a) (outD : listA a) :
+  sizeX 1 (Tick.val (takeD n xs outD)) <= sizeX' 1 outD.
+Proof.
+  generalize dependent n. generalize dependent xs.
+  induction outD; intros;
+  destruct n; destruct xs; simpl; try lia.
+  destruct (Tick.val (takeD n xs outD)) eqn : E; try lia.
+  apply le_n_S. assert (H' : sizeX' 1 x = sizeX 1 (Thunk x)). { auto. }
+  rewrite H'. symmetry in E. rewrite E. apply IHoutD.
+Qed.
+
+Theorem take_selection_sortD_cost (n : nat) (xs : list nat) (outD : listA nat) :
+  Tick.cost (take_selection_sortD n xs outD) <= (sizeX' 1 outD) * (length xs + 2) + n + 1.
+Proof.
+  unfold take_selection_sortD. unfold Tick.bind. 
+  simpl. rewrite takeD_cost. unfold thunkD. 
+  destruct (Tick.val (takeD n (selection_sort xs (length xs)) outD)) eqn:  E.
+  - assert (H : sizeX' 1 x = sizeX 1 (Thunk x)). { reflexivity. }
+    symmetry in E. rewrite E in H.
+    rewrite selection_sortD_cost. rewrite H. rewrite takeD_demand. lia.
+  - simpl. lia.
+Qed.
+
 (* Long-term goal:
    show that   head (selection_sort xs)   in O(n)
    (also could be merge_sort) *)
