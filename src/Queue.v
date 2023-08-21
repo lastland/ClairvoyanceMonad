@@ -50,6 +50,7 @@ Definition Push_TwoListQueue (a : Type) (queue : two_list_queue a) (appending : 
 Definition Push_TwoListQueueD (a : Type) (queue : two_list_queue a) (appending : a) (outD : two_list_queueA a) :
   Tick (T (two_list_queueA a) * T a) :=
   Tick.tick >>
+  (*Match on outD, use headX of QueueBackA of outD instead of Thunk appending*)
   Tick.ret ((Thunk (TwoListQueueA (QueueFrontA outD) (tailX (QueueBackA outD)))), Thunk appending).
 
 Definition SwapBack (a : Type) (queue : two_list_queue a) : (two_list_queue a) :=
@@ -72,35 +73,62 @@ Definition Pop_TwoListQueue (a : Type) (queue : two_list_queue a) : ((option a) 
 (* "[mkQueue] uses [rev] and [append], in this order ([append front (rev back)]),
    so we compute the demand in reverse." *)
 
-Definition SwapBackD {a} (queue : two_list_queue a) (outD : (option (T a) * T (two_list_queueA a))) :
-  Tick (T (two_list_queueA a)) :=
+(* 
+
+Output should be the inputs needed to arrive at outD
+
+Close read 1989 paper to get a better idea of the mechanical translation
+- Projections vs. pattern matching
+
+ *)
+
+Definition SwapBackD {a} (queue : two_list_queue a) (outD : (option a * (two_list_queueA a))) :
+  Tick ((T (listA a) * T (listA a))) :=
   Tick.tick >>
   match QueueFront queue with
   | nil => match QueueBack queue with
-    | nil => Tick.ret (exact queue)
-    (*Non-empty case - undo the swap*)
-    | h :: t => match outD with
-      | (Some (xA, queueA)) =>
+    (*Back has not been swapped.*)
+    | h :: t => Tick.ret (QueueFrontA (exact queue), QueueBackA (exact queue))
+    (*Back has been reversed and swapped, undo it!*)
+    | nil => match outD with
+      | (Some xA, queueA) =>
         let+ (frontD, rbackD) := thunkD (appendD (QueueFront queue) (rev (QueueBack queue))) (QueueFrontA queueA) in
         let+ backD := thunkD (revD (QueueBack queue)) rbackD in
-        Tick.ret (Thunk (TwoListQueueA frontD backD))
+        Tick.ret (frontD, backD)
       | _ => bottom
       end
     end
-  | _ => Tick.ret (exact queue)
+  | h :: t => Tick.ret (QueueFrontA (exact queue), QueueBackA (exact queue))
   end.
 
-Definition Pop_TwoListQueueD (a : Type) (queue : two_list_queue a) (outD : ((option (T a)) * (T (two_list_queueA a)))) :
-  Tick (T (two_list_queueA a)) :=
+Open Scope tick_scope.
+
+Definition Pop_TwoListQueueD (a : Type) (queue : two_list_queue a) (outD : ((option a) * (two_list_queueA a))) :
+  Tick (T (two_list_queueA a)).
+  refine (Tick.tick >> _).
+  refine (let+ (front_list, back_list) := (SwapBackD queue outD) in _).
+  refine (let new_queueA := TwoListQueueA front_list back_list in _).
+  destruct (QueueFrontA new_queueA) eqn:front; destruct outD as [ [] [] ] eqn:outd.
+  - destruct x.
+    + exact (Tick.ret (Thunk (new_queueA))).
+    + exact bottom.
+  - exact bottom.
+  - Check appendD. exact (Tick.ret (Thunk (TwoListQueueA (Thunk (ConsA (Thunk (a0)) (QueueFrontA new_queueA))) (QueueBackA new_queueA)))).
+  - exact bottom.
+Defined.
+
+Print Pop_TwoListQueueD.
+
   Tick.tick >>
-  let+ new_queueA := (SwapBackD queue outD) in
+  let+ (front_list, back_list) := (unSwapBackD queue outD) in
+  let new_queueA := TwoListQueueA front_list back_list in
   match QueueFrontA new_queueA, outD with
   (*Queue was empty - return the empty queue*)
-  | [], _ => Tick.ret new_queueA
+  | Thunk nilA, _ => Tick.ret (Thunk new_queueA)
   (*Queue was non-empty - push the value back on the queue*)
-  | _, Some (xA, queueA) => Tick.ret (Thunk (appendD xA (QueueBackA new_queueA)))
+  | _, (Some xA, queueA) => Tick.ret (Thunk (appendD xA (QueueBackA new_queueA)))
   (*Can't happen - will never have a non-empty list and an empty demand*)
-  | h1 :: t1, _ => bottom
+  | _, _ => bottom
   end.
 
 (** Tests! **)
