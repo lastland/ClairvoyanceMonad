@@ -167,10 +167,6 @@ Theorem approx_exact {a b} `{Exact b a} `{LessDefined a} :
     xA `is_approx` x <-> xA `less_defined` (exact x).
 Proof. reflexivity. Qed.
 
-Definition list_example : list nat := [1; 2; 3].
-
-Print list_example.
-
 (** This corresponds to the proposition [approx_down] in Section 5.3.
 
   Again, because of the particular definition of [is_approx] we use here, this

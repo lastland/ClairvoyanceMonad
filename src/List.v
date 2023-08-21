@@ -24,22 +24,6 @@ Qed.
 
 (* ---------------------- List operations ---------------------- *)
 
-(* Definition list_example : list nat := [1; 2; 3].
-
-Print list_example.
-
-Compute (exact list_example : listA nat).
-
-Goal ConsA (Thunk 1) Undefined `less_defined` exact list_example.
-Proof.
-  unfold less_defined. unfold exact. unfold Exact_list.
-  unfold list_example. Transparent exact_listA.
-  unfold exact_listA. Print LessDefined_list.
-  constructor.
-  - constructor. reflexivity.
-  - Print LessDefined_T. constructor.
-Qed. *)
-
 Fixpoint append {a} (xs ys : list a) : list a :=
   match xs with
   | nil => ys
@@ -251,10 +235,6 @@ Fixpoint lsum (xs : list nat) : nat :=
 Definition lsumD (xs : list nat) (outD : nat) : Tick (T (listA nat)) :=
   Tick.MkTick (1 + length xs) (exact xs).
 
-Locate "let+".
-
-Check thunkD.
-
 (* We force the list until n = 0 or we run out of list *)
 Fixpoint takeD {a} (n : nat) (xs : list a) (outD : listA a) : Tick (T (listA a)) :=
   Tick.tick >>
@@ -311,24 +291,20 @@ Lemma length_take_Sn_leq_1Sn (n n0 : nat) (xs : list nat) :
 Proof.
   revert xs n0.
   induction n.
-  - simpl; lia.
+  - simpl. lia.
   - simpl. destruct xs.
-    + simpl; lia.
-    + simpl. intros.
-      simpl in IHn.
-      apply le_n_S.
-      eapply IHn.
-      apply le_S_n.
-      apply H.
+    + simpl. lia.
+    + simpl. intros. simpl in IHn. apply le_n_S.
+      eapply IHn. apply le_S_n. apply H.
 Qed.
 
-Lemma length_take_n_leq_n (n : nat) (xs : list nat) :
+Lemma length_take_n_leq_n (n : nat) (xs : list nat) : 
   length (take n xs) <= 1 + n.
 Proof.
   induction n.
-  - simpl; lia.
+  - simpl. lia.
   - destruct xs.
-    + simpl; lia.
+    + simpl. lia.
     + simpl in IHn.
       rewrite length_take_Sn_leq_1Sn.
       * lia.
@@ -337,6 +313,7 @@ Qed.
 
 Lemma sum_of_take_cost (n : nat) (xs : list nat) outD
   : outD `is_approx` (lsum (take n xs)) ->
+    forall xsA, xsA = Tick.val (sumOfTakeD n xs outD) ->
     Tick.cost (sumOfTakeD n xs outD) <= (2 * n) + 3.
 Proof.
   intros. rewrite H. simpl.
@@ -414,12 +391,10 @@ Lemma head_selection_sortD_cost (xs : list nat) (outD : nat) :
   Tick.cost (head_selection_sortD xs outD) <= length xs + 2.
 Proof.
   intros. rewrite H. destruct xs.
-  - simpl; lia.
+  - simpl. lia.
   - unfold head_selection_sortD.
-    assert (H1 : length (n :: xs) = S (length xs)) by auto.
-    rewrite H1.
-    rewrite sort_produces_element.
-    simpl; lia.
+    assert (H1 : length (n :: xs) = S (length xs)). auto. rewrite H1.
+    rewrite sort_produces_element. simpl. lia.
 Qed.
 
 Definition take_selection_sortD (n : nat) (xs : list nat) (outD : listA nat) :

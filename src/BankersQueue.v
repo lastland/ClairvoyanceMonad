@@ -58,20 +58,8 @@ Record Queue (a : Type) : Type := MkQueue
   }.
 
 Definition mkQueue {a} (fn : nat) (f : list a) (bn : nat) (b : list a) : Queue a :=
-  if fn <? bn then 
-  {|
-     nfront := fn + bn ;
-     front := append f (rev b) ;
-     nback := 0 ;
-     back := []
-  |}
-  else
-  {|
-     nfront := fn ;
-     front := f ;
-     nback := bn ;
-     back := b
-  |}.
+  if fn <? bn then {| nfront := fn + bn ; front := append f (rev b) ; nback := 0 ; back := [] |}
+  else {| nfront := fn ; front := f ; nback := bn ; back := b |}.
 
 Definition empty {a} : Queue a := MkQueue 0 [] 0 [].
 
@@ -110,8 +98,6 @@ Definition pushA {a} (q : T (QueueA a)) (x : T a) : M (QueueA a) :=
   tick >>
   let! q := force q in
   mkQueueA (nfrontA q) (frontA q) (S (nbackA q)) (Thunk (ConsA x (backA q))).
-
-Print forcing.
 
 Definition popA {a} (q : T (QueueA a)) : M (option (T a * T (QueueA a))) :=
   tick >>
