@@ -307,11 +307,48 @@ Definition pot_heap h := zbitcount (trees h).
 Definition pot_heapA (h : HeapA) : nat.
 Admitted.
 
-#[global] Instance LessDefined_HeapA : LessDefined HeapA.
+Inductive less_defined_TreeA : TreeA -> TreeA -> Prop :=
+| ld_node : forall n1 n2 x1 x2 ts1 ts2,
+    less_defined n1 n2 ->
+    less_defined x1 x1 ->
+    less_defined ts1 ts2 ->
+    less_defined_TreeA (NodeA n1 x1 ts1) (NodeA n2 x2 ts2).
+#[global] Instance LessDefined_TreeA : LessDefined TreeA := less_defined_TreeA.
+
+#[global] Instance Exact_Tree : Exact Tree TreeA :=
+  fun t => match t with
+           | Node n x t => NodeA (exact n) (exact x) (exact t)
+           end.
+
+Lemma link_approx (t1 t2 : Tree) (outD : TreeA)
+  : outD `is_approx` link t1 t2 ->
+    Tick.val (linkD t1 t2 outD) `is_approx` (t1, t2).
+Proof.
+  remember (link t1 t2) as tlink. remember (exact tlink) as Texact.
+  destruct 1 as [n1 n2 x1 x2 ts1 ts2 Hn Hx Hts].
+  unfold exact. unfold AO_Exact. simpl. unfold Exact_Tree; constructor; simpl.
+  destruct t1, t2, ts1; simpl; destruct (Nat.leb_spec n0 n4).
+  destruct x. simpl. constructor. unfold less_defined.
+  unfold exact. unfold AO_Exact.
 Admitted.
 
-#[global] Instance Exact_HeapA : Exact Heap HeapA.
-Admitted.
+  (* destruct t1, t2. simpl. destruct (Nat.leb_spec n0 n4). t1; simpl. destruct x. simpl. *)
+
+
+  (* destruct t1, t2, 1. simpl. destruct (Nat.leb_spec n0 n2), ts1; constructor; simpl; try (destruct x); simpl; auto. *)
+  (* constructor. *)
+
+  (* intros. unfold less_defined in *. destruct H. *)
+  (* destruct t1 as [n1 x1 ts1], t2 as [n2 x2 ts2]. *)
+  (* destruct 1 as [na1 na2 xa1 xa2 ta1 ta2 Hna Hxa Htas]. *)
+  (* unfold linkD. destruct (Nat.leb_spec x1 x2); split. unfold TConsD. destruct ta1. destruct x. simpl. *)
+
+
+
+Definition less_defined_HeapA (h1 h2 : HeapA) : Prop := less_defined (treesA h1) (treesA h2).
+#[global] Instance LessDefined_HeapA : LessDefined HeapA := less_defined_HeapA.
+
+#[global] Instance Exact_HeapA : Exact Heap HeapA := fun h => MkHeapA (exact (trees h)).
 
 Definition measureT {a : Type} (f : a -> nat) (t : T a) : nat :=
   match t with
@@ -364,6 +401,7 @@ Definition deleteMinD (hp : Heap) (d : HeapA) : Tick (T HeapA) :=
     let hpM1' := NodeA (Thunk r) (Thunk v) ts in
     removeMinTreeD hp (thunkD (H := None) (fun y => Some (hpM1', y)) hpM2)
   end. (*TODO: is None correct for H*)
+
 
 (*
 (* Potential: number of trees
