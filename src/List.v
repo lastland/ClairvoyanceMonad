@@ -225,6 +225,18 @@ Fixpoint appendD {a} (xs ys : list a) (outD : listA a) : Tick (T (listA a) * T (
                       so the demand cannot be of the form [] *)
   end.
 
+Definition ConsD {A} (xs : listA A) : T A * T (listA A) :=
+  match xs with
+  | ConsA x ys => (x, ys)
+  | _ => (Undefined, Undefined) (* should not happen *)
+  end.
+
+Definition TConsD {A} (xs : T (listA A)) : T A * T (listA A) :=
+  match xs with
+  | Thunk (ConsA x ys) => (x, ys)
+  | Undefined | _ => (Undefined, Undefined)
+  end.
+
 Fixpoint lsum (xs : list nat) : nat :=
   match xs with
   | nil => 0

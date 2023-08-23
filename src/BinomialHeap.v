@@ -76,18 +76,6 @@ Definition TNodeD (t : T TreeA) : Tick (T nat * T A * T (listA TreeA)) :=
   | Undefined => (Undefined, Undefined, Undefined)
   end.
 
-Definition ConsD {A} (xs : listA A) : T A * T (listA A) :=
-  match xs with
-  | ConsA x ys => (x, ys)
-  | _ => (Undefined, Undefined) (* should not happen *)
-  end.
-
-Definition TConsD {A} (xs : T (listA A)) : T A * T (listA A) :=
-  match xs with
-  | Thunk (ConsA x ys) => (x, ys)
-  | Undefined | _ => (Undefined, Undefined)
-  end.
-
 Definition linkD (t1 t2 : Tree) (d : TreeA) : Tick (T TreeA * T TreeA) :=
   match t1, t2 with
   | Node r1 v1 c1, Node r2 v2 c2 =>
