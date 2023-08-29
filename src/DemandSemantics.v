@@ -183,11 +183,17 @@ Record semantics {G A} (t : term G A) : Type :=
   }.
 Arguments Build_semantics {G A} t &.
 
-Definition lift2_option {A B C} (f : A -> B -> C) : option A -> option B -> option C.
-Admitted.
+Definition lift2_option {A B C} (f : A -> B -> C) (a : option A) (b : option B) : option C :=
+  match a, b with
+  | Some a', Some b' => Some (f a' b')
+  | _, _ => None
+  end.
 
-Definition join_T_option {A} : Core.T (option A) -> Core.T A.
-Admitted.
+Definition join_T_option {A} (a : Core.T (option A)) : Core.T A :=
+  match a with
+  | Thunk (Some a') => Thunk a'
+  | _ => Undefined
+  end.
 
 Fixpoint eval_fwd {G : context} {A : type} (t : term G A) : closure_alg t -> semantics t :=
   match t return closure_alg t -> semantics t with
@@ -343,6 +349,7 @@ Fail Definition VC_alg_ {sigs : list (type * type * type)} (sigs0 : list (type *
 
 Definition VC_alg (sigs : list (type * type * type)) : forall (A B : Type),
   Closure (eval_sigs (VClosure sigs) sigs) A B -> VClosure sigs A B.
+Admitted.
 
 Fixpoint cv (A : type) : Type :=
   match A with
