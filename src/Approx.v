@@ -245,6 +245,7 @@ Class Bottom (a : Type) : Type :=
 
 #[global] Hint Mode Bottom ! : typeclass_instances.
 
+#[global] Instance Bottom_unit : Bottom unit := tt.
 #[global] Instance Bottom_T {a} : Bottom (T a) := Undefined.
 #[global] Instance Bottom_prod {a b} `{Bottom a, Bottom b} : Bottom (a * b) := (bottom, bottom).
 
@@ -257,7 +258,7 @@ Proof. constructor. Qed.
 Class BottomOf (a : Type) : Type :=
   bottom_of : a -> a.
 
-#[global] Hint Mode BottomOf !.
+#[global] Hint Mode BottomOf ! : core.
 
 #[global] Instance BottomOf_list {a} `{BottomOf a} : BottomOf (list a) :=
   fix _bottom_of (xs : list a) : list a :=

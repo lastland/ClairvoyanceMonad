@@ -80,8 +80,8 @@ Proof.
     + apply contra; left. intros m Hm HP.
       inversion Hm; subst.
       * apply contra; right. exists (S n). split; auto.
-        intros m' HP'. apply not_gt. intros contra''. apply gt_S_le in contra''.
-        apply (H _ contra'' HP').
+        intros m' HP'. apply not_gt. intros contra''.
+        apply Nat.succ_le_mono in contra''. apply (H _ contra'' HP').
       * red in H; eauto.
     + apply contra; right. auto.
 Qed.
