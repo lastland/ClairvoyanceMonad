@@ -1,0 +1,5 @@
+* text=auto
+
+*.v text eol=lf whitespace=blank-at-eol,tab-in-indent
+
+Makefile* whitespace=blank-at-eol
