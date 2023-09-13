@@ -1608,4 +1608,3 @@ Admitted.
 (*   - refine TODO. (*TODO*) *)
 (* Defined.*) *)
 (* *) *)
->>>>>>> 414ef5e (Work on binomial heap functional correctness)
