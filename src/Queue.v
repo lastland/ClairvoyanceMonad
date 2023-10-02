@@ -60,98 +60,20 @@ Definition SwapBack (a : Type) (queue : two_list_queue a) : (two_list_queue a) :
 end.
 
 
-(*
-
-0:
-
-type queue a = (list a * list a)
-
-pop q = pop_aux (swapback q)
-
-swapback ([], back) = (rev back, [])
-swapback q@(_ :: _, _) = q
-
-pop_aux (x :: front, back) = (Some x, (front, back))
-pop_aux q@([], _) = (None, q)
-
-Find the demand translation of pop_aux...
-
-1:
-
-pop_auxD q outD = ?
-
-2:
-
-(<=* = approximates, either `less_defined` or `is_approx` in Coq
-
-outD <=* pop_aux_q -> pop_aux q outD <= q
-
-outD <=* pop q -> popD q outD <= q
-
-outD <=* swapback q -> swapbackD q outD <= q
-
-3:
-
-pop_auxD q outD = ? <=* q
-  assuming outD <=* pop_aux q
-
-Simplify the assumption until we can fill ? to satisfy ? <=* q
-- Do this by pattern matching on q
-
-4:
-
-pop_auxD (x :: (front, back)) outD = ? <=* (x :: (front, back))
-  assuming outD <=* pop_aux (x (front, back))
-
-pop_auxD ([], back) outD = ? <=* (x :: (front, back))
-  assuming outD <=* pop_aux ([], back)
-
-5:
-
-outD <=* pop_aux (x :: (front, back))
-     <=* (Some x, (front, back))
-
-outD <=* pop_aux q@([], back)
-     <=* (None, q)
-
-6:
-
-pop_auxD (x :: (front, back)) (Some xD, (frontD, backD)) = ? <=* (x :: (front, back))
-  assuming (Some xD, (frontD, backD)) <=* (Some x, (front, back))
-
-pop_auxD ([], back) (None, qD) = ? <=* q@([], back)
-  assuming (None, qD) <=* (None, q)
-
-7:
-
-pop_auxD (x :: (front, back) (Some xD, (frontD, backD))) = ? <=* (x :: (front, back))
-  assuming
-    xD <=* x
-    frontD <=* front
-    backD <=* back
-
-pop_auxD ([], back) (None, qD) = ? <=* q@([], back)
-  assuming
-    qD <=* q
-
-8:
-
-pop_auxD (x :: (front, back)) (Some xD, (frontD, backD)) = (xD :: (frontD, backD)) <=* (x :: (front, back))
-  assuming
-    xD <=* x
-    frontD <=* front
-    backD <=* back
-
-pop_auxD ([], back) (None, qD) = qD <=* q
-  assuming
-    qD <=* q
-
-*)
-
-Definition SwapBackD {a} (queue : two_list_queue a) (outD : (option a * two_list_queueA a)) :
-  Tick (T (listA a) * T (listA a)) :=
+Definition SwapBackD {a} (queue : two_list_queue a) (outD : (two_list_queueA a)) :
+  Tick (T (two_list_queueA a)) :=
   Tick.tick >>
   match QueueFront queue with
+  | nil => match outD with 
+    (* Here, queue = TLQ Nil (QueueBack queue) *)
+    | TwoListQueueA rev_queuebackA_queue (Thunk NilA) => let+ queuebackA_queue := thunkD (revD (QueueBack queue)) rev_queuebackA_queue in
+      Tick.ret (Thunk(TwoListQueueA (Thunk NilA) queuebackA_queue))
+    | _ => bottom
+  end
+  | _ => Tick.ret (Thunk (outD)) (* queue *)
+end.
+
+(*   match QueueFront queue with
   | h :: t => match QueueBack queue with
     (*Back has not been swapped.*)
     | h :: t => Tick.ret (QueueFrontA (exact queue), QueueBackA (exact queue))
@@ -165,7 +87,7 @@ Definition SwapBackD {a} (queue : two_list_queue a) (outD : (option a * two_list
       end
     end
   | nil => Tick.ret (QueueFrontA (exact queue), QueueBackA (exact queue))
-  end.
+  end. *)
 
 Open Scope tick_scope.
 
@@ -234,8 +156,7 @@ Tick (T (two_list_queueA a)) :=
   Tick.tick >>
   let new_queue := (SwapBack queue) in
     let+ queueD := pop_auxD new_queue outD in
-      (*Need to put an optionA there for type signature*)
-      SwapBackD queue queueD.
+      thunkD (SwapBackD queue) queueD.
   (*
   Why no SwapBackD, again? Don't we need a Tick if it happens?
   Don't we need to show that SwapBack doesn't make this linear time?
@@ -349,5 +270,93 @@ Done! Push is constant time; state and prove it.
     - Prove that the pure version is also correct by showing that it's equal to a *lesser* queue using just one list
   - Input demand leq the input of the pure version + (fun xs = zs, fun xs zsD = xsD, zs `is_approx` zsD) -> (xsD `is_approx` xs)
   - At some point, define the approx function PushTLQA and prove equivalence with PushTLQD.
+
+*)
+
+(*
+
+0:
+
+type queue a = (list a * list a)
+
+pop q = pop_aux (swapback q)
+
+swapback ([], back) = (rev back, [])
+swapback q@(_ :: _, _) = q
+
+pop_aux (x :: front, back) = (Some x, (front, back))
+pop_aux q@([], _) = (None, q)
+
+Find the demand translation of pop_aux...
+
+1:
+
+pop_auxD q outD = ?
+
+2:
+
+(<=* = approximates, either `less_defined` or `is_approx` in Coq
+
+outD <=* pop_aux_q -> pop_aux q outD <= q
+
+outD <=* pop q -> popD q outD <= q
+
+outD <=* swapback q -> swapbackD q outD <= q
+
+3:
+
+pop_auxD q outD = ? <=* q
+  assuming outD <=* pop_aux q
+
+Simplify the assumption until we can fill ? to satisfy ? <=* q
+- Do this by pattern matching on q
+
+4:
+
+pop_auxD (x :: (front, back)) outD = ? <=* (x :: (front, back))
+  assuming outD <=* pop_aux (x (front, back))
+
+pop_auxD ([], back) outD = ? <=* (x :: (front, back))
+  assuming outD <=* pop_aux ([], back)
+
+5:
+
+outD <=* pop_aux (x :: (front, back))
+     <=* (Some x, (front, back))
+
+outD <=* pop_aux q@([], back)
+     <=* (None, q)
+
+6:
+
+pop_auxD (x :: (front, back)) (Some xD, (frontD, backD)) = ? <=* (x :: (front, back))
+  assuming (Some xD, (frontD, backD)) <=* (Some x, (front, back))
+
+pop_auxD ([], back) (None, qD) = ? <=* q@([], back)
+  assuming (None, qD) <=* (None, q)
+
+7:
+
+pop_auxD (x :: (front, back) (Some xD, (frontD, backD))) = ? <=* (x :: (front, back))
+  assuming
+    xD <=* x
+    frontD <=* front
+    backD <=* back
+
+pop_auxD ([], back) (None, qD) = ? <=* q@([], back)
+  assuming
+    qD <=* q
+
+8:
+
+pop_auxD (x :: (front, back)) (Some xD, (frontD, backD)) = (xD :: (frontD, backD)) <=* (x :: (front, back))
+  assuming
+    xD <=* x
+    frontD <=* front
+    backD <=* back
+
+pop_auxD ([], back) (None, qD) = qD <=* q
+  assuming
+    qD <=* q
 
 *)
