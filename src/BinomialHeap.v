@@ -209,7 +209,8 @@ Qed.
 #[global] Hint Resolve -> ForallA_ForallA2_diag : core.
 #[global] Hint Resolve <- ForallA_ForallA2_diag : core.
 
-Lemma ForallA2_less_defined A `{LessDefined A} (xs ys : listA A) : ForallA2 less_defined xs ys <-> xs `less_defined` ys.
+Lemma ForallA2_less_defined A `{LessDefined A} (xs ys : listA A) :
+  ForallA2 less_defined xs ys <-> xs `less_defined` ys.
 Proof.
   split.
   - revert ys. induction xs; repeat invert_constructor; auto.
@@ -345,9 +346,8 @@ Proof.
   invert_clear Hts12D as [ | ts1 ts2 Hts12 ];
     invert_clear Hts21D as [ | ? ? Hts21 ]. 1: auto.
   f_equal. invert_clear IHt1.
-  revert dependent ts2. induction ts1 using listA_ind_alt.
-  - inversion_clear 2. auto.
-  - repeat (invert_constructor + invert_LiftT); repeat f_equal; auto.
+  revert dependent ts2. induction ts1;
+    repeat (invert_constructor + invert_LiftT); repeat f_equal; auto.
 Qed.
 #[global] Hint Resolve LessDefined_TreeA_antisym : core.
 
@@ -489,7 +489,7 @@ Proof.
   invert_clear Ht13 as [ ? n3D ? x3D ? ts3D HnD13 HxD13 HtsD13 ].
   invert_clear Ht23 as [ n2D ? x2D ? ts2D ? HnD23 HxD23 HtsD23 ].
   invert_clear Hts1D as [ | ts1 Hts1 ].
-  1: { unfold lub. simpl. f_equal. 3: invert_clear HtsD23. all: eauto. }.
+  1: { unfold lub. simpl. f_equal. 3: invert_clear HtsD23. all: eauto. }
   invert_clear HtsD13 as [ | ? ts3 Hts13 ].
   invert_clear HtsD23 as [ | ts2 ? Hts23 ]; unfold lub; simpl; f_equal. 1, 2, 3, 4: eauto.
   f_equal.
@@ -534,7 +534,7 @@ Proof.
     - invert_clear Hts1D as [ | ts1 Hts1 ]. 1: auto.
       invert_clear Hts23D. 1: simpl; auto.
       invert_clear IH as [ | ? IH ]. repeat invert_constructor. eapply IH; eauto.
-  }.
+  }
   constructor.
   - intros t1 t2 t3 Ht13 Ht23. revert t2 t3 Ht13 Ht23.
     induction t1 as [ n1D x1D ts1D IHts1D ]. intros.
@@ -551,34 +551,6 @@ Proof.
   - assumption.
   - intros. rewrite Lub_TreeA_comm; auto.
 Qed.
-
-
-    (* intros. invert_clear Ht12. invert_clear Ht23. *)
-    (* constructor; try (apply lub_least_upper_bound); auto. *)
-    (* invert_clear H. 1: auto. *)
-    (* destruct ts1D. 2: auto. *)
-    (* repeat invert_constructor. constructor. *)
-    (* induction x. *)
-    (* + invert_clear H; auto. *)
-    (* + invert_clear H. 1: auto. *)
-    (*   repeat invert_constructor. invert_clear H5. *)
-    (*   * repeat invert_constructor. auto. *)
-    (*   * repeat invert_constructor. repeat constructor; repeat constructor. 1, 2: auto. *)
-    (*     repeat constructor; eauto. *)
-    (* + destruct x0. 1: auto. *)
-    (*   repeat invert_constructor. *)
-
-(* repeat invert_constructor. *)
-(*       * repeat constructor. 2: auto. *)
-(*         invert_clear H. 1: auto. *)
-(*         repeat invert_constructor; repeat constructor; auto. *)
-(*       * constructor. *)
-(*         -- admit. *)
-(*         -- repeat constructor. invert_clear H8; repeat invert_constructor. *)
-(*            ++  *)
-
-
-
 
 Definition strictD (t : Tree) (x' : T TreeA) : T TreeA := lub x' (Thunk (NodeA (exact (rank t)) Undefined Undefined)).
 
@@ -641,20 +613,16 @@ Proof.
   (* - *)
   (* unfold exact, Exact_T. *)
 
-  revert t. induction ts; intros t Hless_defined.
-  - admit.
-  - simpl in *. destruct (rank t <? rank a).
-    + invert_clear Hless_defined.
-      * constructor. simpl. autounfold in *. simpl in *. simpl.
-(* destruct x1; unfold lub, exact, Exact_T, exact; simpl; unfold constructor. *)
-    + apply IHts in Hless_defined
+(*   revert t. induction ts; intros t Hless_defined. *)
+(*   - admit. *)
+(*   - simpl in *. destruct (rank t <? rank a). *)
+(*     + invert_clear Hless_defined. *)
+(*       * constructor. simpl. autounfold in *. simpl in *. simpl. *)
+(* (* destruct x1; unfold lub, exact, Exact_T, exact; simpl; unfold constructor. *) *)
 
-
-
-(* linkD_approx : outD `is_approx` link t1 t2 -> Tick.val (linkD t1 t2 outD) `is_approx` (t1, t2). *)
-    + repeat constructor.
-    +
-intros. repeat constructor. repeat invert_constructor; repeat (unfold exact in *; unfold less_defined in *); auto.
+(* (* linkD_approx : outD `is_approx` link t1 t2 -> Tick.val (linkD t1 t2 outD) `is_approx` (t1, t2). *) *)
+(*     + repeat constructor. *)
+(* intros. repeat constructor. repeat invert_constructor; repeat (unfold exact in *; unfold less_defined in *)
 
   (* induction ts, outD. *)
   (* - split; constructor; auto. *)
