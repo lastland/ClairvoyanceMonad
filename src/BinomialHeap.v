@@ -316,7 +316,41 @@ Add Relation TreeA LessDefined_TreeA
     reflexivity proved by LessDefined_TreeA_reflexive
     transitivity proved by LessDefined_TreeA_transitive
     as LessDefined_TreeA_Relation.
-Print TreeA.
+
+Lemma LessDefined_nat_antisym
+  (n1 n2 : nat) : n1 `less_defined` n2 -> n2 `less_defined` n1 -> n1 = n2.
+Proof.
+  auto.
+Qed.
+#[global] Hint Resolve LessDefined_nat_antisym : core.
+
+Lemma LessDefined_T_antisym A `(LessDefined A) :
+  (forall (x y : A), x `less_defined` y -> y `less_defined` x -> x = y) ->
+  forall (xD yD : T A), xD `less_defined` yD -> yD `less_defined` xD -> xD = yD.
+Proof.
+  intro Hantisym. invert_clear 1; invert_clear 1. 1: auto.
+  f_equal. apply Hantisym; auto.
+Qed.
+#[global] Hint Resolve LessDefined_T_antisym : core.
+
+Lemma LessDefined_TreeA_antisym (t1 t2 : TreeA) :
+  t1 `less_defined` t2 -> t2 `less_defined` t1 -> t1 = t2.
+Proof.
+  pose LessDefined_nat_antisym.
+  intros Ht12 Ht21. revert t2 Ht12 Ht21.
+  induction t1 as [ n1D x1D ts1D IHt1 ]. intros.
+  invert_clear Ht12 as [ ? n2D ? x2D ? ts2D Hn12D Hx12D Hts12D ].
+  invert_clear Ht21 as [ ? ? ? ? ? ? Hn21D Hx21D Hts21D ]. f_equal.
+  1, 2: eapply LessDefined_T_antisym; auto.
+  invert_clear Hts12D as [ | ts1 ts2 Hts12 ];
+    invert_clear Hts21D as [ | ? ? Hts21 ]. 1: auto.
+  f_equal. invert_clear IHt1.
+  revert dependent ts2. induction ts1 using listA_ind_alt.
+  - inversion_clear 2. auto.
+  - repeat (invert_constructor + invert_LiftT); repeat f_equal; auto.
+Qed.
+#[global] Hint Resolve LessDefined_TreeA_antisym : core.
+
 (* Exact_list depends on an Exact instance for the element type, but the
    element type here is Tree. We can't hand out Exact_Tree while it's being
    constructed, because that won't pass the termination checker. So we have to
