@@ -474,6 +474,78 @@ Proof.
 Qed.
 #[global] Hint Resolve Lub_TreeA_comm : core.
 
+#[global] Instance LubLaw_TreeA : LubLaw TreeA.
+Proof.
+  assert (forall x y : TreeA, cobounded x y -> x `less_defined` lub x y).
+  1: {
+    intros t1 t2 Ht12. revert t2 Ht12.
+    induction t1 as [ n1D x1D ts1D IHts1D ]. destruct 1 as [ t3 [ Ht13 Ht23 ] ].
+    invert_clear Ht13 as [ ? n3D ? x3D ? ts3D Hn13D Hx13D Hts13D ].
+    invert_clear Ht23 as [ n2D ? x2D ? ts2D ? Hn23D Hx23D Hts23D ].
+    constructor. 1, 2: apply lub_upper_bound_l; eauto.
+    invert_clear Hts13D as [ | ts1 ts3 Hts13 ]. 1: auto.
+    invert_clear Hts23D as [ | ts2 ? Hts23 ]. 1: simpl; auto.
+    invert_clear IHts1D as [ | ? IHts1 ].
+    revert ts2 ts3 Hts13 Hts23.
+    induction ts1 as [ | t1D ts1D IH ] using listA_ind_alt; intros.
+    1: invert_clear Hts23; simpl; auto.
+    constructor.
+    invert_clear Hts23 as [ | t2D t3D ts2D ts3D Ht23D Hts23D ]. 1: auto.
+    invert_clear IHts1 as [ | ? ? Ht1D Hts1D ].
+    constructor.
+    - invert_clear Ht1D as [ | t1 Ht1 ]. 1: auto.
+      invert_clear Ht23D. simpl; auto.
+      constructor. apply Ht1. invert_clear Hts13 as [ | ? ? ? ? Ht13 Hts13D ].
+      invert_clear Ht13. eauto.
+    - invert_clear Hts1D as [ | ts1 Hts1 ]. 1: auto.
+      invert_clear Hts23D. 1: simpl; auto.
+      invert_clear IH as [ | ? IH ]. repeat invert_constructor. eapply IH; eauto.
+  }.
+  constructor.
+  - intros t1 t2 t3 Ht13 Ht23. revert t2 t3 Ht13 Ht23.
+    induction t1 as [ n1D x1D ts1D IHts1D ]. intros.
+    invert_clear Ht13 as [ ? n3D ? x3D ? ts3D Hn13D Hx13D Hts13D ].
+    invert_clear Ht23 as [ n2D ? x2D ? ts2D ? Hn23D Hx23D Hts23D ].
+    constructor. 1, 2: apply lub_least_upper_bound; auto.
+    invert_clear Hts13D as [ | ts1 ts3 Hts13 ]. 1: auto.
+    invert_clear Hts23D as [ | ts2 ? Hts23 ]. 1: simpl; auto.
+    constructor.
+    revert ts2 ts3 Hts13 Hts23.
+    induction ts1 as [ | t1D ts1D IH ] using listA_ind_alt; intros;
+      invert_clear Hts23 as [ | t2D t3D ts2D ts3D Ht23D Hts23D ]. 1, 2, 3: auto.
+    invert_clear IH; repeat (invert_constructor + invert_LiftT); simpl; auto.
+  - assumption.
+  - intros. rewrite Lub_TreeA_comm; auto.
+Qed.
+
+
+    (* intros. invert_clear Ht12. invert_clear Ht23. *)
+    (* constructor; try (apply lub_least_upper_bound); auto. *)
+    (* invert_clear H. 1: auto. *)
+    (* destruct ts1D. 2: auto. *)
+    (* repeat invert_constructor. constructor. *)
+    (* induction x. *)
+    (* + invert_clear H; auto. *)
+    (* + invert_clear H. 1: auto. *)
+    (*   repeat invert_constructor. invert_clear H5. *)
+    (*   * repeat invert_constructor. auto. *)
+    (*   * repeat invert_constructor. repeat constructor; repeat constructor. 1, 2: auto. *)
+    (*     repeat constructor; eauto. *)
+    (* + destruct x0. 1: auto. *)
+    (*   repeat invert_constructor. *)
+
+(* repeat invert_constructor. *)
+(*       * repeat constructor. 2: auto. *)
+(*         invert_clear H. 1: auto. *)
+(*         repeat invert_constructor; repeat constructor; auto. *)
+(*       * constructor. *)
+(*         -- admit. *)
+(*         -- repeat constructor. invert_clear H8; repeat invert_constructor. *)
+(*            ++  *)
+
+
+
+
 Definition strictD (t : Tree) (x' : T TreeA) : T TreeA := lub x' (Thunk (NodeA (exact (rank t)) Undefined Undefined)).
 
 Definition strictConsD {A} (xs' : T (listA A)) : T (listA A) := lub xs' (Thunk (ConsA Undefined Undefined)).
