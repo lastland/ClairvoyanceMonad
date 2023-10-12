@@ -91,7 +91,7 @@ Section InferenceRules.
 
 (** * Figure 13. *)
 
-Lemma pessimistic_mon {a} (u : M a) (r r' : a -> nat -> Prop)
+Lemma pessimistic_mon {a} {u : M a} {r r' : a -> nat -> Prop}
   : u {{ r }} ->
     (forall x n, r x n -> r' x n) ->
     u {{ r' }}.
@@ -161,7 +161,7 @@ Qed.
 
 (** * Figure 14. *)
 
-Lemma optimistic_mon {a} (u : M a) (r r' : a -> nat -> Prop)
+Lemma optimistic_mon {a} {u : M a} {r r' : a -> nat -> Prop}
   : u [[ r ]] ->
     (forall x n, r x n -> r' x n) ->
     u [[ r' ]].
@@ -242,3 +242,6 @@ Proof.
 Qed.
 
 End InferenceRules.
+
+Arguments pessimistic_conj : clear implicits.
+Arguments pessimistic_conj {a u r p}.

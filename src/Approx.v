@@ -30,8 +30,9 @@
   the [exact] function (and the [is_approx] and [less_defined] relations) for
   other types. One way of doing that is using type classes, as we show here. *)
 
-From Coq Require Import Arith List Lia Morphisms Relations.
+From Coq Require Import Arith List Lia Morphisms Relations SetoidClass Setoid.
 From Clairvoyance Require Import Core Relations.
+From Clairvoyance Require Setoid.
 
 Import ListNotations.
 
@@ -487,6 +488,11 @@ Notation resp r1 r2 f f' := (forall x x', r1 x x' -> r2 (f x) (f' x')) (only par
 
 #[global] Instance Bottom_fun {a b} `{Bottom b} : Bottom (a -> b) := fun _ => bottom.
 
+#[global] Instance IsAA_T {a' a} {_ : IsAA a' a} : IsAA a' (T a).
+Proof.
+  econstructor; try typeclasses eauto.
+Defined.
+
 (** In this part, we prove that any type [a] is also an [exact] of itself. We
     define this instance so that [listA a] would be an approximation of [list
     a]---so that we do not need to consider the approximation of [a]. A useful
@@ -682,3 +688,93 @@ Definition thunkD {a b} `{Bottom b} (f : a -> b) (x : T a) : b :=
   | Undefined => bottom
   | Thunk x => f x
  end.
+
+(** * Approximation algebras *)
+
+Module Export AA.
+
+Import SetoidClass.
+
+Class IsApproxSetoid (a' a : Type) `{Setoid a', IsApproxAlgebra a' a} : Prop :=
+  { Proper_exact : Proper (equiv ==> less_defined) (exact (a := a') (b := a))
+    (* TODO: Remove this hack/simplification.
+       This is a fishy law; lub is meant only to be defined on cobounded elements.
+       But this lets us break down the definition of AAMorphism cleanly
+       into a setoid morphism and a DFun, with a simple monotonicity property for the latter.
+       Otherwise, we only have a restricted form of monotonicity. *)
+  ; Proper_lub : Proper (less_defined ==> less_defined ==> less_defined) (lub (a := a))
+  }.
+
+Notation IsAS := IsApproxSetoid.
+
+Record ApproxAlgebra : Type :=
+  { carrier :> Type
+    (* ; AA_Setoid :> Setoid carrier *)
+  ; approx : Type
+  ; AA_IsAA :> IsApproxAlgebra carrier approx
+  (* ; AA_IsAS :> IsApproxSetoid carrier approx *)
+  }.
+
+End AA.
+
+Notation AA := ApproxAlgebra (only parsing).
+
+(* #[global] Existing Instance AA_Setoid. *)
+#[global] Existing Instance AA_IsAA.
+(* #[global] Existing Instance AA_IsAS. *)
+
+#[local]
+Instance IsAS_prod {a' a b' b : Type} `{IsApproxSetoid a' a} `{IsApproxSetoid b' b}
+  : IsApproxSetoid (a' * b') (a * b).
+Proof.
+  constructor.
+  { unfold Proper, respectful. intros x y xy.
+    constructor; apply Proper_exact; apply xy. }
+  { unfold Proper, respectful. intros x y xy u v uv. constructor; cbn; eapply Proper_lub;
+      apply xy + apply uv. }
+Qed.
+
+Canonical AA_prod (a1 a2 : AA) : AA :=
+  {| carrier := a1 * a2
+  ;  approx := approx a1 * approx a2
+  |}.
+
+Infix "**" := AA_prod (at level 40).
+
+(* Values that are always total (no partial approximations). *)
+Definition eq_Setoid (a : Type) : Setoid a :=
+  {| SetoidClass.equiv := eq |}.
+
+Parameter TODO : forall {P : Type}, P.
+
+Definition exact_IsAA (a : Type) : IsAA a a.
+Proof.
+  refine
+  {| AO_Exact := Exact_id
+  ;  AO_LessDefined := eq
+  ;  AO_Lub := Lub_id
+  ;  AO_BottomOf := fun x => x
+  |}.
+  cbv. auto.
+Defined.
+
+Definition exact_IsAS (a : Type) : @IsAS a a (eq_Setoid a) (exact_IsAA a).
+Proof. apply TODO. Qed.
+
+Definition exact_AA (a : Type) : AA :=
+  {| carrier := a
+  ;  approx := a
+  (* ;  AA_Setoid := eq_Setoid a *)
+  ;  AA_IsAA := exact_IsAA a
+  (* ;  AA_IsAS := exact_IsAS a *)
+  |}.
+
+Canonical AA_nat : AA := exact_AA nat.
+Canonical AA_bool : AA := exact_AA bool.
+
+Definition AA_T (a : AA) : AA.
+Proof.
+  unshelve refine
+  {| carrier := a
+  ;  approx := T (approx a) |}.
+Defined.

@@ -19,56 +19,6 @@ Import Tick.Notations.
 
 Parameter TODO : forall {P : Type}, P.
 
-(** * Approximation algebras *)
-
-Module Export AA.
-
-Class IsApproxSetoid (a' a : Type) `{Setoid a', IsApproxAlgebra a' a} : Prop :=
-  { Proper_exact : Proper (equiv ==> less_defined) (exact (a := a') (b := a))
-    (* TODO: Remove this hack/simplification.
-       This is a fishy law; lub is meant only to be defined on cobounded elements.
-       But this lets us break down the definition of AAMorphism cleanly
-       into a setoid morphism and a DFun, with a simple monotonicity property for the latter.
-       Otherwise, we only have a restricted form of monotonicity. *)
-  ; Proper_lub : Proper (less_defined ==> less_defined ==> less_defined) (lub (a := a))
-  }.
-
-Notation IsAS := IsApproxSetoid.
-
-Record ApproxAlgebra : Type :=
-  { carrier :> Type
-  ; AA_Setoid :> Setoid carrier
-  ; approx : Type
-  ; AA_IsAA :> IsApproxAlgebra carrier approx
-  ; AA_IsAS :> IsApproxSetoid carrier approx
-  }.
-
-End AA.
-
-Notation AA := ApproxAlgebra (only parsing).
-
-#[global] Existing Instance AA_Setoid.
-#[global] Existing Instance AA_IsAA.
-#[global] Existing Instance AA_IsAS.
-
-#[local]
-Instance IsAS_prod {a' a b' b : Type} `{IsApproxSetoid a' a} `{IsApproxSetoid b' b}
-  : IsApproxSetoid (a' * b') (a * b).
-Proof.
-  constructor.
-  { unfold Proper, respectful. intros x y xy.
-    constructor; apply Proper_exact; apply xy. }
-  { unfold Proper, respectful. intros x y xy u v uv. constructor; cbn; apply Proper_lub;
-      apply xy + apply uv. }
-Qed.
-
-Canonical AAProd (a1 a2 : AA) : AA :=
-  {| carrier := a1 * a2
-  ;  approx := approx a1 * approx a2
-  |}.
-
-Infix "**" := AAProd (at level 40).
-
 (** * Demand functions *)
 
 Module Export DFun.
@@ -296,7 +246,9 @@ Proof.
   - intros x y xy. apply Tick.less_defined_bind.
     + apply Proper_g; [ apply xy' | apply pq ].
     + intros x2 y2 xy2. apply Tick.less_defined_ret.
-      apply Proper_lub; assumption.
+      refine (Proper_lub x y _ _ _ _).
+      * refine (Proper_lub _ _ _ _ _ _). unfold AO_Lub. cbv. apply xy.
+
 Qed.
 
 Definition DFun_pair (f : DFun a b) (g : DFun a c) : DFun a (b ** c) :=
@@ -319,89 +271,6 @@ Definition AA_pair (f : a ~>> b) (g : a ~>> c) : a ~>> b ** c :=
 
 End Monoidal.
 
-#[global] Instance Setoid_list {a} {_ : Setoid a} : Setoid (list a).
-Admitted.
-
-(* Partial function: we assume that both arguments approximate the same list *)
-Fixpoint lub_listA {a} {_ : Lub a} (xs ys : listA a) : listA a :=
-  match xs, ys with
-  | NilA, NilA => NilA
-  | ConsA x xs, ConsA y ys => ConsA (lub_T lub x y) (lub_T lub_listA xs ys)
-  | _, _ => NilA  (* silly case *)
-  end.
-
-#[global] Instance Lub_listA {a} {_ : Lub a} : Lub (listA a) := lub_listA.
-
-#[global] Instance LubLaw_listA {a} `{LubLaw a} : LubLaw (listA a).
-Admitted.
-
-#[global] Instance BottomOf_listA {a : Type} {H : BottomOf a} : BottomOf (listA a) :=
-  fun xs => match xs with NilA => NilA | ConsA x xs => ConsA Undefined Undefined end.
-
-#[global] Instance BottomIsLeast_listA {a : Type} {H : BottomOf a} {H0 : LessDefined a}
-  : BottomIsLeast a -> BottomIsLeast (listA a).
-Proof.
-  intros ? ? ? HH; inv HH; repeat constructor.
-Qed.
-
-(*
-#[global] Instance IsAA_listA' {a' a} {_ : IsAA a' a} : IsAA (list a') (listA a).
-Proof.
-  econstructor; try typeclasses eauto.
-Defined.
-*)
-
-#[global] Instance IsAA_T {a' a} {_ : IsAA a' a} : IsAA a' (T a).
-Proof.
-  econstructor; try typeclasses eauto.
-Defined.
-
-#[global] Instance IsAA_listA {a' a} {_ : IsAA a' a} : IsAA (list a') (T (listA a)).
-Proof.
-  econstructor; try typeclasses eauto.
-Defined.
-
-#[global] Instance IsAS_listA {a' a} {_ : Setoid a'} {_ : IsAA a' a} {_ : IsAS a' a} : IsAS (list a') (T (listA a)).
-Proof.
-  constructor.
-  - apply TODO.
-  - apply TODO.
-Qed.
-
-Canonical AA_listA (a : AA) : AA :=
-  {| carrier := list a
-  ;  approx := T (listA (approx a))
-  |}.
-
-(* Values that are always total (no partial approximations). *)
-Definition eq_Setoid (a : Type) : Setoid a :=
-  {| equiv := eq |}.
-
-Definition exact_IsAA (a : Type) : IsAA a a.
-Proof.
-  refine
-  {| AO_Exact := Exact_id
-  ;  AO_LessDefined := eq
-  ;  AO_Lub := Lub_id
-  ;  AO_BottomOf := fun x => x
-  |}.
-  apply TODO.
-  apply TODO.
-Defined.
-
-Definition exact_IsAS (a : Type) : @IsAS a a (eq_Setoid a) (exact_IsAA a).
-Proof. apply TODO. Qed.
-
-Definition exact_AA (a : Type) : AA :=
-  {| carrier := a
-  ;  approx := a
-  ;  AA_Setoid := eq_Setoid a
-  ;  AA_IsAA := exact_IsAA a
-  ;  AA_IsAS := exact_IsAS a
-  |}.
-
-Canonical AA_nat : AA := exact_AA nat.
-Canonical AA_bool : AA := exact_AA bool.
 
 Module OTick.
 Definition OTick (a : Type) : Type := option (Tick a).

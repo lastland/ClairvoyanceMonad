@@ -2,9 +2,9 @@ Set Implicit Arguments.
 Set Maximal Implicit Insertion.
 Set Contextual Implicit.
 
-From Coq Require Import Arith List Psatz Morphisms Relations.
+From Coq Require Import Arith List Psatz Morphisms Relations SetoidClass.
 From Equations Require Import Equations.
-From Clairvoyance Require Import Core Approx ApproxM Tick.
+From Clairvoyance Require Import Core Approx ApproxM Tick Misc.
 
 Unset Elimination Schemes.
 
@@ -226,40 +226,88 @@ Proof.
   - cbn; lia.
 Qed.
 
-
 (* Partial function: we assume that both arguments approximate the same list *)
-Fixpoint lub_listA {a} (xs ys : listA a) : listA a :=
+Fixpoint lub_listA {a} {_ : Lub a} (xs ys : listA a) : listA a :=
   match xs, ys with
   | NilA, NilA => NilA
-  | ConsA x xs, ConsA y ys => ConsA (lub_T (fun r _ => r) x y) (lub_T lub_listA xs ys)
+  | ConsA x xs, ConsA y ys => ConsA (lub x y) (lub_T lub_listA xs ys)
   | _, _ => NilA  (* silly case *)
   end.
 
-#[global] Instance Lub_listA {a} : Lub (listA a) := lub_listA.
+#[global] Instance Lub_listA {a} `{Lub a} : Lub (listA a) := lub_listA.
 
-#[global] Instance LubLaw_listA {a} : LubLaw (listA a).
+#[global] Instance Reflexive_less_defined_listA {a} `{LessDefined a, !Reflexive (less_defined (a := a))}
+  : Reflexive (less_defined (a := listA a)).
+Proof.
+  intros x; induction x; repeat constructor.
+  - apply Reflexive_LessDefined_T.
+  - apply Reflexive_LessDefined_T.
+  - auto.
+Qed.
+
+#[global] Instance LubLaw_listA {a} `{LubLaw a, !Reflexive (less_defined (a := a))} : LubLaw (listA a).
 Proof.
   constructor.
   - intros x y z Hx; revert y; induction Hx; intros ?; inversion 1; subst; cbn; constructor; auto.
-    1: inversion H; subst; inversion H4; subst; try constructor; auto.
-    1: inversion H; subst; inversion H5; subst; try constructor; auto.
-    inversion H6; constructor; auto.
+    + inversion H3; apply lub_least_upper_bound; auto.
+    + inversion H3; apply lub_least_upper_bound; auto.
+    + inversion H9; constructor; auto.
   - intros x y [z [ Hx Hy] ]; revert y Hy; induction Hx; intros ?; inversion 1; subst; cbn;
       constructor; auto.
-    1: inversion H; inversion H3; constructor; reflexivity + auto.
-    1: inversion H; inversion H4; constructor; reflexivity.
-    inversion H5; subst; constructor; [ reflexivity | auto ].
+    + inversion Hy; subst. apply lub_upper_bound_l. econstructor; eauto.
+    + inversion Hy; subst. apply lub_upper_bound_l. econstructor; eauto.
+    + inversion Hy; subst. inversion H11; constructor; eauto. reflexivity.
   - intros x y [z [Hx Hy] ]; revert x Hx; induction Hy; intros ?; inversion 1; subst; cbn;
       constructor; auto.
-    1: inversion H; inversion H3; subst; invert_approx; constructor; reflexivity + auto; inversion H7; invert_approx; reflexivity.
-    1: inversion H; inversion H4; subst; invert_approx; constructor; reflexivity + auto; inversion H8; invert_approx; reflexivity.
-    inversion H5; subst; constructor; [ reflexivity | auto ].
+    + inversion Hx; inversion H2; subst; invert_approx; [ constructor | ].
+      inversion H6; subst; invert_approx; constructor; auto.
+      apply lub_upper_bound_r; econstructor; eauto.
+    + inversion Hx; inversion H2; subst; invert_approx; [ constructor | ].
+      inversion H9; subst; invert_approx; constructor; auto.
+      apply lub_upper_bound_r; econstructor; eauto.
+    + inversion H8; subst; constructor; [ reflexivity | ]. auto.
 Qed.
-
 
 Lemma sizeX1_length {a} (x : T (listA a)) (y : list a)
   : x `is_approx` y -> sizeX 1 x <= 1 + length y.
 Proof.
 Admitted.
 
+#[global] Instance BottomOf_listA {a : Type} {H : BottomOf a} : BottomOf (listA a) :=
+  fun xs => match xs with NilA => NilA | ConsA x xs => ConsA Undefined Undefined end.
 
+#[global] Instance BottomIsLeast_listA {a : Type} {H : BottomOf a} {H0 : LessDefined a}
+  : BottomIsLeast a -> BottomIsLeast (listA a).
+Proof.
+  intros ? ? ? HH; inv HH; repeat constructor.
+Qed.
+
+(*
+#[global] Instance IsAA_listA' {a' a} {_ : IsAA a' a} : IsAA (list a') (listA a).
+Proof.
+  econstructor; try typeclasses eauto.
+Defined.
+*)
+
+#[global] Instance IsAA_listA {a' a} {_ : IsAA a' a} : IsAA (list a') (listA a).
+Proof.
+  econstructor; try typeclasses eauto.
+Defined.
+
+#[global] Instance Setoid_list {a} {_ : Setoid a} : Setoid (list a).
+Admitted.
+
+Parameter TODO : forall {P : Type}, P.
+
+#[global] Instance IsAS_listA {a' a} {_ : Setoid a'} {_ : IsAA a' a} {_ : IsAS a' a}
+  : IsAS (list a') (listA a).
+Proof.
+  constructor.
+  - apply TODO.
+  - apply TODO.
+Qed.
+
+Canonical AA_listA (a : AA) : AA :=
+  {| carrier := list a
+  ;  approx := listA (approx a)
+  |}.

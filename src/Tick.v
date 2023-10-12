@@ -38,6 +38,12 @@ End Notations.
 #[global] Instance LessDefined_Tick {a} `{LessDefined a} : LessDefined (Tick a) :=
   fun x y => cost x <= cost y /\ val x `less_defined` val y.
 
+#[global] Instance Reflexive_LessDefined_Tick {a} `{LessDefined a, !Reflexive (less_defined (a := a))}
+  : Reflexive (less_defined (a := Tick a)).
+Proof.
+  constructor; reflexivity.
+Qed.
+
 #[global] Instance Transitive_LessDefined_Tick {a} `{LessDefined a}
   `{!Transitive (less_defined (a := a))} : Transitive (less_defined (a := Tick a)).
 Proof.

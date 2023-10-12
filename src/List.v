@@ -740,7 +740,7 @@ Qed.
 
 (** [appendA_full_cost] as described in the paper. This is the case when the
     execution of [appendA] does reach the end of [xsA]. *)
-Theorem appendA_full_cost {a} : forall (xs : list a) (xsA := exact xs) ysA,
+Theorem appendA_full_cost {a} : forall (xs : list a) (xsA := exact xs) (ysA : T (listA a)),
     is_defined ysA ->
     (appendA xsA ysA) [[ fun zsA cost =>
       length xs + sizeX 1 ysA = sizeX 1 (Thunk zsA) /\ cost <= length xs + 1 ]].
@@ -931,7 +931,7 @@ Proof.
 Qed.
 
 Lemma revA_cost {a} (xs : list a)
-  : revA (exact xs) [[ fun out cost =>
+  : revA (a := a) (exact xs) [[ fun out cost =>
       out = exact (rev xs) /\ cost = 1 + length xs ]].
 Proof.
   unfold revA; mgo'. apply optimistic_thunk_go; mgo'. relax_apply (revA__cost xs nil).

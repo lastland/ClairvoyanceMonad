@@ -25,7 +25,7 @@ src/Tick.v
 src/TwoListQueue.v
 src/Relations.v
 src/Setoid.v
-src/Demand.v
 src/DemandLogic.v
 src/BinomialHeap.v
-src/DemandSemantics.v
+src/Demand2.v
+# src/DemandSemantics.v

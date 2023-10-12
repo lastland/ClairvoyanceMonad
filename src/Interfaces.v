@@ -644,7 +644,9 @@ Lemma physicist's_method_aux
     forall output, output `is_approx` eval_trace_from os vs ->
     exists input, input `is_approx` vs /\
       exec_trace_from os input [[ fun r c =>
-        output `less_defined` r /\ sumof potential input + c <= budget_trace_from os vs + sumof potential output ]].
+        output `less_defined` r /\
+  sumof potential input + c
+  <= budget_trace_from os vs + sumof potential output ]].
 Proof.
   induction os as [ | [o ns] os IH ]; intros vs Hwf output Hout; cbn.
   - exists output. split; [apply Hout | ].
@@ -739,3 +741,69 @@ Definition ImplRealTimeCost
     <= cost_of (exec_trace (j := j') os []) + cost_op o ns (eval_trace (j := j) os [])
     )%NAT.
 *)
+
+(*
+
+                     Demand semantics     Clairvoyant sem
+
+cost theorem for one operation  x -------->   y
+                                              |
+cost theorem for whole trace                  z
+
+
+q1 = push 1 []
+
+ push 1 : Q -> Q      Theorem pushD_cost
+                      Theorem pushA_cost
+      potential inq + cost <= budget + potential outq
+
+ exec_event[push 1] : List Q -> List Q
+                      Theorem exec_event_pushA_cost
+
+  [1:[]]                             [1:_|_]
+
+q2 = push 2 q1
+
+  [1:[], 1:2:[]]                     [_|_, 1:_|_]
+
+q3 = push 3 q2
+
+  [1:[], 1:2:[], 1:2:3:[]]           [_|_, _|_, 1:_|_]
+
+q4 = pop q3
+
+  [1:[], 1:2:[], 1:2:3:[], 2:3:[]]   [_|_, _|_, 1:_|_, _|_]
+
+q5 = pop q3
+
+  [1:[], 1:2:[], 1:2:3:[], 2:3:[], 2:3:[]]
+                                [_|_, _|_, _|_, _|_, _|_]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ *)
