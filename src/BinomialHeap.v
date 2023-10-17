@@ -573,6 +573,18 @@ Qed.
 
 Definition strictD (t : Tree) (x' : T TreeA) : T TreeA := lub x' (Thunk (NodeA (exact (rank t)) Undefined Undefined)).
 
+Lemma strictD_bounded (t : Tree) (tD : T TreeA) :
+  tD `less_defined` exact t -> strictD t tD `less_defined` exact t.
+Proof.
+  destruct t as [ n x ts ]. invert_clear 1 as [ | tA ? HtA ]. 1: repeat constructor.
+  invert_clear HtA as [ nD ? xD ? tsD ? HnD HxD HtsD ]. constructor. constructor.
+  - apply lub_least_upper_bound.
+    + auto.
+    + reflexivity.
+  - apply lub_least_upper_bound; auto.
+  - invert_clear HtsD; try constructor; auto.
+Qed.
+
 Definition strictConsD {A} (xs' : T (listA A)) : T (listA A) := lub xs' (Thunk (ConsA Undefined Undefined)).
 
 (* [d] is an approximation of the output [insTree t ts] *)
