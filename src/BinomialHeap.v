@@ -380,6 +380,25 @@ Proof.
 Qed.
 #[global] Hint Resolve Exact_Tree_Exact_list : core.
 
+#[global] Instance ExactMaximal_Tree : ExactMaximal TreeA Tree.
+Proof.
+  intros tA t. revert tA. induction t as [ n x ts IHt ].
+  invert_clear 1 as [ ? nD ? xD ? tsD HnD HxD HtsD ].
+  unfold exact. simpl. f_equal.
+  - invert_clear HnD as [ | ? n' Hn' ]. invert_clear Hn'. auto.
+  - invert_clear HxD as [ | ? x' Hx' ]. invert_clear Hx'. auto.
+  - invert_clear HtsD as [ | ? tsD' HtsD' ].
+    f_equal.
+    revert dependent tsD'. induction ts.
+    + invert_clear 1. auto.
+    + intros.
+      invert_clear IHt as [ | ? ? HtA Hts ].
+      invert_clear HtsD' as [ | ? tD ? tsD HtD HtsD ].
+      f_equal.
+      * invert_clear HtD as [ | ? tD' HtD' ]. f_equal. apply HtA. auto.
+      * invert_clear HtsD. f_equal. apply IHts; auto.
+Qed.
+
 Definition link (t1 t2 : Tree) : Tree :=
   match t1, t2 with
   | Node r1 v1 c1, Node r2 v2 c2 => if leb v1 v2
