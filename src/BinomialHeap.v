@@ -639,7 +639,25 @@ Lemma insTreeD_approx (t : Tree) (ts : list Tree) (outD : listA TreeA) :
   outD `is_approx` insTree t ts ->
   Tick.val (insTreeD t ts outD) `is_approx` (t, ts).
 Proof.
-  (* induction ts, outD;  unfold less_defined; simpl; try (destruct (rank t <? rank a)). constructor. auto. simpl. invert_constructors; repeat constructor; auto. *)
+  intro Happrox. revert t outD Happrox. induction ts; intros.
+  1: destruct outD; repeat constructor; inversion Happrox; auto.
+  simpl in *. destruct (rank t <? rank a).
+  (* - invert_clear Happrox. constructor; simpl. *)
+
+  (*   + admit. *)
+  (*   + constructor. simpl. *)
+
+
+
+
+  (*   destruct outD; invert_clear Happrox; repeat constructor; simpl. *)
+  (*   inversion_clear H; constructor. unfold exact. *)
+
+  (*   unfold exact, Exact_T. *)
+
+
+
+
   (* - unfold strictD. simpl. *)
   (* - *)
   (* unfold exact, Exact_T. *)
