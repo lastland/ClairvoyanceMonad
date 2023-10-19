@@ -351,52 +351,34 @@ Proof.
 Qed.
 #[global] Hint Resolve LessDefined_TreeA_antisym : core.
 
-(* Exact_list depends on an Exact instance for the element type, but the
-   element type here is Tree. We can't hand out Exact_Tree while it's being
-   constructed, because that won't pass the termination checker. So we have to
-   roll our own Exact_list here. *)
-#[global] Instance Exact_Tree : Exact Tree TreeA := fix Exact_Tree t :=
-  let fix Exact_trees (ts : list Tree) : listA TreeA :=
-    match ts with
-    | [] => NilA
-    | t :: ts' => ConsA (Thunk (Exact_Tree t)) (Thunk (Exact_trees ts'))
-    end in
+Fixpoint exact_Tree (t : Tree) : TreeA :=
   match t with
-  | Node n x ts => NodeA (exact n) (exact x) (Thunk (Exact_trees ts))
+  | Node n x ts =>
+      NodeA
+        (exact n)
+        (exact x)
+        (@exact _ _ (@Exact_T _ _ (@Exact_list _ _ Exact_id)) (map exact_Tree ts))
   end.
 
-(* However, once we have defined Exact_Tree, we can show that it behaves the
-   same as if it had been defined using Exact_list. (Of course, this depends
-   recursively on the definition of Exact_Tree. There's no way around that.) *)
-Lemma Exact_Tree_Exact_list (t : Tree) :
-  exact t = match t with
-            | Node n x ts => NodeA (exact n) (exact x) (exact ts)
-            end.
-Proof.
-  induction t as [ ? ? ? IH ]. induction IH as [ | ? ? ? ? IHIH ].
-  - reflexivity.
-  - cbv. simp exact_listA. repeat f_equal.
-    cbv in IHIH. injection IHIH. trivial.
-Qed.
-#[global] Hint Resolve Exact_Tree_Exact_list : core.
+#[global] Instance Exact_Tree : Exact Tree TreeA := exact_Tree.
 
 #[global] Instance ExactMaximal_Tree : ExactMaximal TreeA Tree.
 Proof.
   intros tA t. revert tA. induction t as [ n x ts IHt ].
-  invert_clear 1 as [ ? nD ? xD ? tsD HnD HxD HtsD ].
-  unfold exact. simpl. f_equal.
-  - invert_clear HnD as [ | ? n' Hn' ]. invert_clear Hn'. auto.
-  - invert_clear HxD as [ | ? x' Hx' ]. invert_clear Hx'. auto.
-  - invert_clear HtsD as [ | ? tsD' HtsD' ].
-    f_equal.
-    revert dependent tsD'. induction ts.
+  invert_clear 1 as [ ? nD ? xD ? tsAD HnD HxD HtsAD ].
+  unfold exact, Exact_Tree. simpl. f_equal.
+  - invert_clear HnD. auto.
+  - invert_clear HxD. auto.
+  - invert_clear HtsAD as [ | ? tsD HtsD ].
+    unfold exact, Exact_T. f_equal.
+    revert dependent tsD. induction ts.
     + invert_clear 1. auto.
     + intros.
       invert_clear IHt as [ | ? ? HtA Hts ].
-      invert_clear HtsD' as [ | ? tD ? tsD HtD HtsD ].
-      f_equal.
-      * invert_clear HtD as [ | ? tD' HtD' ]. f_equal. apply HtA. auto.
-      * invert_clear HtsD. f_equal. apply IHts; auto.
+      invert_clear HtsD as [ | ? tD ? tsAD HtD HtsAD ].
+      unfold exact. simpl. f_equal.
+      * invert_clear HtD. f_equal. apply HtA. auto.
+      * invert_clear HtsAD. f_equal. apply IHts; auto.
 Qed.
 
 Definition link (t1 t2 : Tree) : Tree :=
@@ -427,7 +409,11 @@ Lemma linkD_approx (t1 t2 : Tree) (outD : TreeA) :
   outD `is_approx` link t1 t2 -> Tick.val (linkD t1 t2 outD) `is_approx` (t1, t2).
 Proof.
   destruct t1 as [ n1 x1 ts1 ], t2 as [ n2 x2 ts2 ]. simpl.
-  destruct (x1 <=? x2); cbn; repeat invert_constructor; repeat constructor; auto.
+  destruct (x1 <=? x2);
+    invert_clear 1 as [ nD ? xD ? tsAD ? HnD HxD HtsAD ];
+    invert_clear HtsAD as [ | tsA ? HtsA ].
+  2, 4: invert_clear HtsA.
+  all: repeat constructor; auto.
 Qed.
 #[global] Hint Resolve linkD_approx : core.
 
@@ -577,12 +563,12 @@ Lemma strictD_bounded (t : Tree) (tD : T TreeA) :
   tD `less_defined` exact t -> strictD t tD `less_defined` exact t.
 Proof.
   destruct t as [ n x ts ]. invert_clear 1 as [ | tA ? HtA ]. 1: repeat constructor.
-  invert_clear HtA as [ nD ? xD ? tsD ? HnD HxD HtsD ]. constructor. constructor.
+  invert_clear HtA as [ nD ? xD ? tsAD ? HnD HxD HtsAD ]. constructor. constructor.
   - apply lub_least_upper_bound.
     + auto.
     + reflexivity.
   - apply lub_least_upper_bound; auto.
-  - invert_clear HtsD; try constructor; auto.
+  - invert_clear HtsAD; try constructor; auto.
 Qed.
 
 Definition strictConsD {A} (xs' : T (listA A)) : T (listA A) := lub xs' (Thunk (ConsA Undefined Undefined)).
