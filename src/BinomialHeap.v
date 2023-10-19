@@ -86,82 +86,79 @@ Ltac invert_constructor :=
   | H : ?T |- _ => should_invert T; invert_clear H
   end.
 
-(* Lift a predicate to T. *)
-Inductive LiftT A (P : A -> Prop) : T A -> Prop :=
-| LiftT_Undefined : LiftT P Undefined
-| LiftT_Thunk x : P x -> LiftT P (Thunk x).
-#[global] Hint Constructors LiftT : core.
+#[global] Hint Constructors TR1 : core.
 
 Lemma listA_ind_alt A (P : listA A -> Prop) :
   P NilA ->
-  (forall xD xsD, LiftT P xsD -> P (ConsA xD xsD)) ->
+  (forall xD xsD, TR1 P xsD -> P (ConsA xD xsD)) ->
   forall xs, P xs.
 Proof.
   induction xs; auto.
 Qed.
 
-Lemma LiftT_impl A (P Q : A -> Prop) :
-  (forall x, P x -> Q x) -> forall x, LiftT P x -> LiftT Q x.
+Lemma TR1_impl A (P Q : A -> Prop) :
+  (forall x, P x -> Q x) -> forall x, TR1 P x -> TR1 Q x.
 Proof.
   intros until x. destruct 1; auto.
 Qed.
-#[global] Hint Resolve LiftT_impl : core.
+#[global] Hint Resolve TR1_impl : core.
 
-(* Lift a binary relation to T in a way that preserves the less-defined
-   relation. *)
-Inductive LiftT2 A B (R : A -> B -> Prop) : T A -> T B -> Prop :=
-| LiftT2_Undefined yD : LiftT2 R Undefined yD
-| LiftT2_Thunk x y : R x y -> LiftT2 R (Thunk x) (Thunk y).
-#[global] Hint Constructors LiftT2 : core.
+(* Like TR2 from Core.v, but preserves the less-defined relation. Note that the
+   original TR2 is not used anywhere, so this might be the "right"
+   definition. *)
+Inductive TR2 A B (R : A -> B -> Prop) : T A -> T B -> Prop :=
+| TR2_Thunk x y : R x y -> TR2 R (Thunk x) (Thunk y)
+| TR2_Undefined yD : TR2 R Undefined yD.
+#[global] Hint Constructors TR2 : core.
 
-Lemma LiftT2_impl A B (R1 R2 : A -> B -> Prop) :
-  (forall x y, R1 x y -> R2 x y) -> forall xD yD, LiftT2 R1 xD yD -> LiftT2 R2 xD yD.
+Lemma TR2_impl A B (R1 R2 : A -> B -> Prop) :
+  (forall x y, R1 x y -> R2 x y) -> forall xD yD, TR2 R1 xD yD -> TR2 R2 xD yD.
 Proof.
   intros until yD. destruct 1; auto.
 Qed.
-#[global] Hint Resolve LiftT2_impl : core.
+#[global] Hint Resolve TR2_impl : core.
 
-Lemma LiftT2_refl A (R : A -> A -> Prop) :
-  (forall x, R x x) -> forall xD, LiftT2 R xD xD.
+Lemma TR2_refl A (R : A -> A -> Prop) :
+  (forall x, R x x) -> forall xD, TR2 R xD xD.
 Proof.
   destruct xD; auto.
 Qed.
-#[global] Hint Resolve LiftT2_refl : core.
+#[global] Hint Resolve TR2_refl : core.
 
-Lemma LiftT2_trans A (R : A -> A -> Prop) :
+Lemma TR2_trans A (R : A -> A -> Prop) :
   (forall x y z, R x y -> R y z -> R x z) ->
-  forall xD yD zD, LiftT2 R xD yD -> LiftT2 R yD zD -> LiftT2 R xD zD.
+  forall xD yD zD, TR2 R xD yD -> TR2 R yD zD -> TR2 R xD zD.
 Proof.
   inversion 2; inversion 1; eauto.
 Qed.
-#[global] Hint Resolve LiftT2_trans : core.
+#[global] Hint Resolve TR2_trans : core.
 
-Lemma LiftT_LiftT2_diag A (R : A -> A -> Prop) xD :
-  LiftT (fun x => R x x) xD <-> LiftT2 R xD xD.
+Lemma TR1_TR2_diag A (R : A -> A -> Prop) xD :
+  TR1 (fun x => R x x) xD <-> TR2 R xD xD.
 Proof.
   split; inversion 1; auto.
 Qed.
-#[global] Hint Resolve -> LiftT_LiftT2_diag : core.
-#[global] Hint Resolve <- LiftT_LiftT2_diag : core.
+#[global] Hint Resolve -> TR1_TR2_diag : core.
+#[global] Hint Resolve <- TR1_TR2_diag : core.
 
-Lemma LiftT2_less_defined A `(LessDefined A) (R : A -> A -> Prop) (x y : T A) :
-  LiftT2 less_defined x y <-> x `less_defined` y.
+Lemma TR2_less_defined A `(LessDefined A) (R : A -> A -> Prop) (x y : T A) :
+  TR2 less_defined x y <-> x `less_defined` y.
 Proof.
   split; inversion 1; auto.
 Qed.
-#[global] Hint Resolve -> LiftT2_less_defined : core.
-#[global] Hint Resolve <- LiftT2_less_defined : core.
+#[global] Hint Resolve -> TR2_less_defined : core.
+#[global] Hint Resolve <- TR2_less_defined : core.
 
-Ltac invert_LiftT :=
+Ltac invert_TR :=
   match goal with
-  | H : LiftT _ _ |- _ => invert_clear H
-  | H : LiftT2 _ _ _ |- _ => invert_clear H
+  | H : TR1 _ _ |- _ => invert_clear H
+  | H : TR2 _ _ _ |- _ => invert_clear H
   end.
 
 (* Lift a predicate to listA. *)
 Inductive ForallA A (P : A -> Prop) : listA A -> Prop :=
 | ForallA_NilA : ForallA P NilA
-| ForallA_ConsA x xs : LiftT P x -> LiftT (ForallA P) xs -> ForallA P (ConsA x xs).
+| ForallA_ConsA x xs : TR1 P x -> TR1 (ForallA P) xs -> ForallA P (ConsA x xs).
 #[global] Hint Constructors ForallA : core.
 
 Lemma ForallA_impl A (P Q : A -> Prop) :
@@ -175,7 +172,7 @@ Qed.
    relation. *)
 Inductive ForallA2 A B (R : A -> B -> Prop) : listA A -> listA B -> Prop :=
 | ForallA2_NilA : ForallA2 R NilA NilA
-| ForallA2_ConsA x y xs ys : LiftT2 R x y -> LiftT2 (ForallA2 R) xs ys -> ForallA2 R (ConsA x xs) (ConsA y ys).
+| ForallA2_ConsA x y xs ys : TR2 R x y -> TR2 (ForallA2 R) xs ys -> ForallA2 R (ConsA x xs) (ConsA y ys).
 #[global] Hint Constructors ForallA2 : core.
 
 Lemma ForallA2_impl A B (R1 R2 : A -> B -> Prop) :
@@ -238,7 +235,7 @@ Inductive TreeA : Type :=
 | NodeA : forall (nD : T nat) (xD : T A) (tsD : T (listA TreeA)), TreeA.
 
 Lemma TreeA_ind : forall (P : TreeA -> Prop),
-    (forall (nD : T nat) (xD : T A) (tsD : T (listA TreeA)), LiftT (ForallA P) tsD -> P (NodeA nD xD tsD)) ->
+    (forall (nD : T nat) (xD : T A) (tsD : T (listA TreeA)), TR1 (ForallA P) tsD -> P (NodeA nD xD tsD)) ->
     forall (tD : TreeA), P tD.
 Proof.
   intros ? H. fix SELF 1.
@@ -263,7 +260,7 @@ Lemma LessDefined_TreeA_ind :
     (forall (n1D n2D : T nat) (x1D x2D : T nat) (ts1D ts2D : T (listA TreeA)),
         n1D `less_defined` n2D ->
         x1D `less_defined` x2D ->
-        LiftT2 (ForallA2 P) ts1D ts2D ->
+        TR2 (ForallA2 P) ts1D ts2D ->
         P (NodeA n1D x1D ts1D) (NodeA n2D x2D ts2D)) ->
     forall (t1 t2 : TreeA), LessDefined_TreeA t1 t2 -> P t1 t2.
 Proof.
@@ -283,7 +280,7 @@ Lemma LessDefined_TreeA_refl (t : TreeA) :
 Proof.
   pose (Reflexive_LessDefined_T (a := nat)).
   unfold Reflexive. induction t. constructor.
-  3: invert_LiftT.
+  3: invert_TR.
   all: auto.
 Qed.
 #[global] Hint Resolve LessDefined_TreeA_refl : core.
@@ -299,15 +296,15 @@ Proof.
   invert_clear Ht12 as [ ? n2D ? x2D ? ts2D HnD12 HxD12 HtsD12 ].
   invert_clear Ht23 as [ ? nD3 ? xD3 ? ts3D HnD23 HxD23 HtsD23 ].
   constructor. 1, 2: eauto.
-  invert_clear HtsD1 as [ | ts1 ]. 1: auto.
+  invert_clear HtsD1 as [ ts1 | ]. 2: auto.
   invert_clear HtsD12 as [ | ? ts2 Hts12 ].
   invert_clear HtsD23 as [ | ? ts3 Hts23 ].
   constructor.
   revert ts2 ts3 Hts12 Hts23. induction ts1;
-    repeat (invert_constructor + invert_LiftT); repeat constructor;
+    repeat (invert_constructor + invert_TR); repeat constructor;
     try (match goal with | H : _ |- _ => eapply H end);
     eauto.
-  Qed.
+Qed.
 #[global] Hint Resolve LessDefined_TreeA_trans : core.
 
 #[global] Instance LessDefined_TreeA_transitive : Transitive LessDefined_TreeA :=
@@ -347,7 +344,7 @@ Proof.
     invert_clear Hts21D as [ | ? ? Hts21 ]. 1: auto.
   f_equal. invert_clear IHt1.
   revert dependent ts2. induction ts1;
-    repeat (invert_constructor + invert_LiftT); repeat f_equal; auto.
+    repeat (invert_constructor + invert_TR); repeat f_equal; auto.
 Qed.
 #[global] Hint Resolve LessDefined_TreeA_antisym : core.
 
@@ -493,8 +490,8 @@ Proof.
   revert t2. induction t1 as [ n1D x1D ts1D Hts1D ]. intros t2 [ t3 [ Ht13 Ht23 ] ].
   invert_clear Ht13 as [ ? n3D ? x3D ? ts3D HnD13 HxD13 HtsD13 ].
   invert_clear Ht23 as [ n2D ? x2D ? ts2D ? HnD23 HxD23 HtsD23 ].
-  invert_clear Hts1D as [ | ts1 Hts1 ].
-  1: { unfold lub. simpl. f_equal. 3: invert_clear HtsD23. all: eauto. }
+  invert_clear Hts1D as [ ts1 Hts1 | ].
+  2: { unfold lub. simpl. f_equal. 3: invert_clear HtsD23. all: eauto. }
   invert_clear HtsD13 as [ | ? ts3 Hts13 ].
   invert_clear HtsD23 as [ | ts2 ? Hts23 ]; unfold lub; simpl; f_equal. 1, 2, 3, 4: eauto.
   f_equal.
@@ -504,11 +501,11 @@ Proof.
   invert_clear Hts13 as [ | ? t3D ? ts3D Ht13D Hts13D ].
   invert_clear Hts23 as [ | t2D ? ts2D ? Ht23D Hts23D ].
   f_equal.
-  - invert_clear Ht1D as [ | t1 Ht1 ];
-      invert_clear Ht23D as [ | t2 t3 Ht23 ]. 1, 2, 3: auto.
+  - invert_clear Ht1D as [ t1 Ht1 | ];
+      invert_clear Ht23D as [ | t2 t3 Ht23 ]. 1, 3, 4: auto.
     simpl. f_equal. apply Ht1. invert_clear Ht13D. eauto.
-  - invert_clear Hts1D as [ | ts1 Hts1 ];
-      invert_clear Hts23D as [ | ts2 ts3 Hts23 ]. 1, 2, 3: auto.
+  - invert_clear Hts1D as [ ts1 Hts1 | ];
+      invert_clear Hts23D as [ | ts2 ts3 Hts23 ]. 1, 3, 4: auto.
     simpl. f_equal. invert_clear IH. invert_clear Hts13D. eapply H; eauto.
 Qed.
 #[global] Hint Resolve Lub_TreeA_comm : core.
@@ -524,7 +521,7 @@ Proof.
     constructor. 1, 2: apply lub_upper_bound_l; eauto.
     invert_clear Hts13D as [ | ts1 ts3 Hts13 ]. 1: auto.
     invert_clear Hts23D as [ | ts2 ? Hts23 ]. 1: simpl; auto.
-    invert_clear IHts1D as [ | ? IHts1 ].
+    invert_clear IHts1D as [ ? IHts1 | ].
     revert ts2 ts3 Hts13 Hts23.
     induction ts1 as [ | t1D ts1D IH ] using listA_ind_alt; intros.
     1: invert_clear Hts23; simpl; auto.
@@ -532,13 +529,13 @@ Proof.
     invert_clear Hts23 as [ | t2D t3D ts2D ts3D Ht23D Hts23D ]. 1: auto.
     invert_clear IHts1 as [ | ? ? Ht1D Hts1D ].
     constructor.
-    - invert_clear Ht1D as [ | t1 Ht1 ]. 1: auto.
+    - invert_clear Ht1D as [ t1 Ht1 | ]. 2: auto.
       invert_clear Ht23D. simpl; auto.
       constructor. apply Ht1. invert_clear Hts13 as [ | ? ? ? ? Ht13 Hts13D ].
       invert_clear Ht13. eauto.
-    - invert_clear Hts1D as [ | ts1 Hts1 ]. 1: auto.
+    - invert_clear Hts1D as [ ts1 Hts1 | ]. 2: auto.
       invert_clear Hts23D. 1: simpl; auto.
-      invert_clear IH as [ | ? IH ]. repeat invert_constructor. eapply IH; eauto.
+      invert_clear IH as [ ? IH | ]. repeat invert_constructor. eapply IH; eauto.
   }
   constructor.
   - intros t1 t2 t3 Ht13 Ht23. revert t2 t3 Ht13 Ht23.
@@ -552,7 +549,7 @@ Proof.
     revert ts2 ts3 Hts13 Hts23.
     induction ts1 as [ | t1D ts1D IH ] using listA_ind_alt; intros;
       invert_clear Hts23 as [ | t2D t3D ts2D ts3D Ht23D Hts23D ]. 1, 2, 3: auto.
-    invert_clear IH; repeat (invert_constructor + invert_LiftT); simpl; auto.
+    invert_clear IH; repeat (invert_constructor + invert_TR); simpl; auto.
   - assumption.
   - intros. rewrite Lub_TreeA_comm; auto.
 Qed.
