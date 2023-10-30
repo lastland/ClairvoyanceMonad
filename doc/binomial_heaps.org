@@ -1,8 +1,5 @@
 #+title: Introduction to Clairvoyance/Binomial Heaps
 
-#+LaTeX_header: \usepackage{amsthm}
-#+LaTeX_header: \newtheorem*{theorem}{Theorem}
-#+LaTeX_header: \newtheorem*{corollary}{Corollary}
 #+LaTeX_header: \usepackage{minted}
 
 * ClairvoyanceMonad: important concepts
@@ -126,7 +123,7 @@ Record Tick (a : Type) : Type := MkTick
   ; val : a
   }.
 #+end_src
-It's just a writer monad over the monoid \( (\mathbb{N}, +) \).  But we don't actually need the full power of ~tell~, because all we ever do is call ~tick~, which just increments the accumulator by \( 1 \).
+It's just a writer monad over the monoid $(\mathbb{N}, +)$.  But we don't actually need the full power of ~tell~, because all we ever do is call ~tick~, which just increments the accumulator by $1$.
 #+begin_src coq
 Definition tick : Tick unit := MkTick 1 tt.
 #+end_src
@@ -146,13 +143,9 @@ Notation "u >> v" :=
 As mentioned, when analyzing a data structure, we define two versions, a ground type and an approximating type.  The name of the approximating type is typically the name of the ground type suffixed with ~A~; e.g., ~list~ becomes ~listA~.  Then, for each operation on the ground type, we define an analogous operation in demand semantics.  The demand-semantics operation takes all the same arguments as the original operation, plus an additional argument whose type is the approximating version of the return type of the original operation; it returns approximating versions of the arguments in the ~Tick~ monad.
 
 To be concrete, if the original operation has signature
-\[
-\texttt{t}_1 \to \texttt{t}_2 \to \cdots \to \texttt{t}_n \to \texttt{r}
-\]
+$$\texttt{t}_1 \to \texttt{t}_2 \to \cdots \to \texttt{t}_n \to \texttt{r},$$
 then the demand-semantics operation has signature
-\[
-\texttt{t}_1 \to \texttt{t}_2 \to \cdots \to \texttt{t}_n \to \texttt{rA} \to \texttt{Tick}(\texttt{tA}_1 \times \texttt{tA}_2 \times \cdots \times \texttt{tA}_n).
-\]
+$$\texttt{t}_1 \to \texttt{t}_2 \to \cdots \to \texttt{t}_n \to \texttt{rA} \to \texttt{Tick}(\texttt{tA}_1 \times \texttt{tA}_2 \times \cdots \times \texttt{tA}_n).$$
 The name of the demand-semantics operation is typically the name of the of the original operation with a ~D~ at the end; e.g., ~link~ becomes ~linkD~.
 
 The intuition for the demand-semantics translation is that the additional input (approximating the return value of the original operation) tells us which parts of the output will be computed, and the return value (approximating the inputs of the original operation) tell us which parts of the input must be computed in order to compute those parts of the output.
@@ -179,7 +172,7 @@ Notably missing from this exposition is an amortized analysis or anything having
 
 ** Binomial trees
 
-A /binomial tree/ of rank \( k \ge 0 \) is a node with \( k \) children, which are themselves binomial trees of respective ranks \( 0, 1, 2, \ldots, k - 1 \).
+A /binomial tree/ of rank $k \ge 0$ is a node with $k$ children, which are themselves binomial trees of respective ranks $0, 1, 2, \ldots, k - 1$.
 #+begin_src haskell
 data Tree a = Tree a [Tree a]
 
@@ -195,58 +188,41 @@ singletonTree x = Tree x []
 In this Haskell representation, subtrees are expected to be stored in order of /decreasing/ rank; that is, highest rank first.  (Note that, for efficiency reasons, a practical implementation would memoize the rank of a tree.  I will ignore the cost of computing the rank in the asymptotic analyses.)
 
 Recall that the height of a tree is the length of the longest path from the root node to any other node.
-#+begin_theorem
-A binomial tree of rank \( k \) has a height of \( k \).
-#+end_theorem
-#+begin_proof
-By complete induction on \( k \).  A binomial tree of rank \( 0 \) has height \( 0 \).  When \( k > 0 \), the height of the tree is one greater than the height of the child with the largest height.  By the inductive hypothesis, this is the child of rank \( k - 1 \), which has height \( k - 1 \).  Thus, the height of the tree is \( k - 1 + 1 = k \).
-#+end_proof
+- Theorem. :: A binomial tree of rank $k$ has a height of $k$.
+- Proof. :: By complete induction on $k$.  A binomial tree of rank $0$ has height $0$.  When $k > 0$, the height of the tree is one greater than the height of the child with the largest height.  By the inductive hypothesis, this is the child of rank $k - 1$, which has height $k - 1$.  Thus, the height of the tree is $k - 1 + 1 = k$.
 
-#+begin_theorem
-A binomial tree of rank \( k \) has \( \binom{k}{i} \) nodes at depth \( i \).
-#+end_theorem
-#+begin_proof
-By complete induction on \( k \).  Denote the number of nodes at depth \( i \) in a tree of rank \( k \) by \( D(k, i) \).  Note that, at depth \( 0 \), a binomial tree of rank \( k \) always has \( D(k, 0) = 1 = \binom{k}{0} \) node, so we can assume from here on that \( i > 0 \).  For the base case, a binomial tree of rank \( 0 \) has \( D(0, i) = 0 = \binom{0}{i} \) nodes at depth \( i > 0 \).  When \( k > 0 \), the number of nodes at depth \( i \) is \( D(k, i) = \sum_{j = 0}^{k - 1} D(j, i - 1) = \sum_{j = 0}^{k - 1} \binom{j}{i - 1} \).  By the [[https://en.wikipedia.org/wiki/Hockey-stick_identity][hockey-stick identity]], this is \( \binom{k - 1 + 1}{i - 1 + 1} = \binom{k}{i} \).
-#+end_proof
-
-#+begin_corollary
-A binomial tree of rank \( k \) has \( 2^k \) nodes.
-#+end_corollary
+It is an important fact that the rank of a binomial tree is logarithmic in the number of nodes.
+- Theorem. :: A binomial tree of rank $k$ has $\binom{k}{i}$ nodes at depth $i$.
+- Proof. :: By complete induction on $k$.  Denote the number of nodes at depth $i$ in a tree of rank $k$ by $D(k, i)$.  Note that, at depth $0$, a binomial tree of rank $k$ always has $D(k, 0) = 1 = \binom{k}{0}$ node, so we can assume from here on that $i > 0$.  For the base case, a binomial tree of rank $0$ has $D(0, i) = 0 = \binom{0}{i}$ nodes at depth $i > 0$.  When $k > 0$, the number of nodes at depth $i$ is $D(k, i) = \sum_{j = 0}^{k - 1} D(j, i - 1) = \sum_{j = 0}^{k - 1} \binom{j}{i - 1}$.  By the [[https://en.wikipedia.org/wiki/Hockey-stick_identity][hockey-stick identity]], this is $\binom{k - 1 + 1}{i - 1 + 1} = \binom{k}{i}$.
+- Corollary. :: A binomial tree of rank $k$ has $2^k$ nodes.
 
 From here on, we will only consider binomial trees that satisfy the (min-)heap invariant: the key of any child node is greater than or equal to the key of its parent.
 
 *** ~link~
 
-Observe that, in order to turn a binomial tree of rank \( k \) into a binomial tree of rank \( k + 1 \), it suffices to add one child tree of rank \( k \).  This leads us directly to the ~link~ operation.  ~link~ takes two binomial trees of the same rank \( k \) and combines them into a binomial tree of rank \( k + 1 \).  There is really only one sensible way to do this while preserving the heap invariant: compare the node values and make the tree with the larger node a child of the tree with the smaller node.  This adds to a tree of rank \( k \) one additional child node of rank \( k \), making a tree of rank \( k + 1 \).
+Observe that, in order to turn a binomial tree of rank $k$ into a binomial tree of rank $k + 1$, it suffices to add one child tree of rank $k$.  This leads us directly to the ~link~ operation.  ~link~ takes two binomial trees of the same rank $k$ and combines them into a binomial tree of rank $k + 1$.  There is really only one sensible way to do this while preserving the heap invariant: compare the node values and make the tree with the larger node a child of the tree with the smaller node.  This adds to a tree of rank $k$ one additional child node of rank $k$, making a tree of rank $k + 1$.
 #+begin_src haskell
 link :: Ord a => Tree a -> Tree a -> Tree a
 link t1@(Tree x1 cs1) t2@(Tree x2 cs2)
   | x1 <= x2  = Tree x1 (t2 : cs1)
   | otherwise = Tree x2 (t1 : cs2)
 #+end_src
-- Performance: :: ~link~ runs in \( O(1) \) time.
+- Performance: :: ~link~ runs in $O(1)$ time.
 
 ** Binomial heaps
 
 A binomial (min-)heap is a set of binomial trees that satisfies the following properties.
 - The (min-)heap invariant: in every tree, the key of any child node is greater than or equal to the key of its parent.
-- For each natural number \( k \), the heap contains at most one binomial tree of rank \( k \).
+- For each natural number $k$, the heap contains at most one binomial tree of rank $k$.
 #+begin_src haskell
 newtype Heap a = Heap [Tree a]
 #+end_src
 In this Haskell representation, trees are expected to be stored in order of /increasing/ rank; that is, lowest rank first.
 
 A good intuition for binomial heaps is that, much as cons-lists are like “enriched” unary natural numbers, binomial heaps are like “enriched” binary natural numbers.  The following theorem elucidates this connection.
-#+begin_theorem
-Suppose that \( n = \sum_{k = 0}^\infty a_k 2^k \), where each \( a_k \) is either \( 0 \) or \( 1 \).  Then a binomial heap of size \( n \) contains a binomial tree of rank \( k \) exactly when \( a_k = 1 \).  In other words, a binomial heap of size \( n \) contains a binomial tree of rank \( k \) exactly when the \( k \)th digit in the binary representation of \( n \) is nonzero.
-#+end_theorem
-#+begin_proof
-Given a binomial heap of size \( n \), we can write \( n = \sum_{i} s_i \), where \( s_i \) is the size of the \( i \)th tree.  Since a binomial tree of rank \( k \) has size \( 2^k \), we can rewrite this as \( n = \sum_{i} 2^{k_i} \), where \( k_i \) is the rank of the \( i \)th tree.  Since the trees all have distinct ranks, we can then write \( n = \sum_{k = 0}^\infty a_k 2^k \), where \( a_k = 1 \) if the heap has a tree of rank \( k \) and \( a_k = 0 \) otherwise.  Since binary representations of natural numbers are unique, this finishes the proof.
-#+end_proof
-
-#+begin_corollary
-A binomial heap with \( n \) elements consists of at most \( \lfloor \log_2 (n + 1) \rfloor \) trees.
-#+end_corollary
+- Theorem. :: Suppose that $n = \sum_{k = 0}^\infty a_k 2^k$, where each $a_k$ is either $0$ or $1$.  Then a binomial heap of size $n$ contains a binomial tree of rank $k$ exactly when $a_k = 1$.  In other words, a binomial heap of size $n$ contains a binomial tree of rank $k$ exactly when the $k$th digit in the binary representation of $n$ is nonzero.
+- Proof. :: Given a binomial heap of size $n$, we can write $n = \sum_{i} s_i$, where $s_i$ is the size of the $i$th tree.  Since a binomial tree of rank $k$ has size $2^k$, we can rewrite this as $n = \sum_{i} 2^{k_i}$, where $k_i$ is the rank of the $i$th tree.  Since the trees all have distinct ranks, we can then write $n = \sum_{k = 0}^\infty a_k 2^k$, where $a_k = 1$ if the heap has a tree of rank $k$ and $a_k = 0$ otherwise.  Since binary representations of natural numbers are unique, this finishes the proof.
+- Corollary. :: A binomial heap with $n$ elements consists of at most $\lfloor \log_2 (n + 1) \rfloor$ trees.
 
 *** Operations
 **** ~insertTree~
@@ -259,7 +235,7 @@ insertTree t1 (t2 : ts)
   | rank t1 < rank t2 = t1 : ts
   | otherwise         = insertTree (link t1 t2) ts
 #+end_src
-- Performance: :: In the worst case, ~insertTree~ has to scan the entire list of trees, entailing \( O(\log n) \) recursive calls and \( O(\log n) \) calls to ~link~; hence, ~insertTree~ runs in \( O(\log n) \) time.
+- Performance: :: In the worst case, ~insertTree~ has to scan the entire list of trees, entailing $O(\log n)$ recursive calls and $O(\log n)$ calls to ~link~; hence, ~insertTree~ runs in $O(\log n)$ time.
 
 **** ~insert~
 
@@ -268,7 +244,7 @@ To insert a new element, we simply put it inside a singleton tree and then inser
 insert :: Ord a => a -> Heap a -> Heap a
 insert x = insertTree (singletonTree x)
 #+end_src
-- Performance: :: Just like ~insertTree~, ~insert~ runs in \( O(\log n) \) time.
+- Performance: :: Just like ~insertTree~, ~insert~ runs in $O(\log n)$ time.
 
 **** ~merge~
 
@@ -282,7 +258,7 @@ merge (Heap ts1) (Heap ts2) = Heap (go ts1 ts2) where
     | otherwise         =
       insertTree (link t1 t2) (go ts1 ts2)
 #+end_src
-- Performance: :: The analysis is kind of tricky, which might be an argument against using this particular implementation.  (There is an alternate implementation that more explicitly looks like addition with carrying.)  In particular, the call to ~insertTree~ looks suspicious: what if we have to call it many times?  But ~merge~ is in fact an \( O(\log n) \)-time operation (where \(n\) is the number of elements in both heaps combined, or the number of elements in the larger heap; both give the same result).  The justification looks something like this: if ~t1~ and ~t2~ have the same rank, say \( k \), then ~merge~ calls ~insertTree~ on ~link t1 t2~, which has rank \( k + 1 \).  Therefore, the resulting list of trees does not have a tree of rank \( k \); or, if you like, the “place” of rank \( k \) is empty.  So if, in the course of computing ~merge~, we need to call ~insertTree~ on this list, we will definitely be able to stop inserting at rank \( k \), if not before.  Zooming out, we see that each “place” gets examined by ~insertTree~ at most once, meaning that ~insertTree~ gets called \( O(\log n) \) times.  Since ~merge~ makes \( O(\log n) \) recursive calls, this finishes the proof.  See [[https://stackoverflow.com/questions/11462626/should-melding-merging-of-binomial-heaps-be-done-in-one-pass-or-two][this Stack Overflow post]] for the same explanation in different words.
+- Performance: :: The analysis is kind of tricky, which might be an argument against using this particular implementation.  (There is an alternate implementation that more explicitly looks like addition with carrying.)  In particular, the call to ~insertTree~ looks suspicious: what if we have to call it many times?  But ~merge~ is in fact an $O(\log n)$-time operation (where \(n\) is the number of elements in both heaps combined, or the number of elements in the larger heap; both give the same result).  The justification looks something like this: if ~t1~ and ~t2~ have the same rank, say $k$, then ~merge~ calls ~insertTree~ on ~link t1 t2~, which has rank $k + 1$.  Therefore, the resulting list of trees does not have a tree of rank $k$; or, if you like, the “place” of rank $k$ is empty.  So if, in the course of computing ~merge~, we need to call ~insertTree~ on this list, we will definitely be able to stop inserting at rank $k$, if not before.  Zooming out, we see that each “place” gets examined by ~insertTree~ at most once, meaning that ~insertTree~ gets called $O(\log n)$ times.  Since ~merge~ makes $O(\log n)$ recursive calls, this finishes the proof.  See [[https://stackoverflow.com/questions/11462626/should-melding-merging-of-binomial-heaps-be-done-in-one-pass-or-two][this Stack Overflow post]] for the same explanation in different words.
 - Question: :: Is this operation associative and/or commutative?  (Modulo the “equivalent heap” relation, the answer is certainly yes.)
 
 **** ~head~
@@ -293,7 +269,7 @@ head :: Ord a => Heap a -> a
 head (Heap ts) = minimum (root <$> ts)
 #+end_src
 This should really return ~Maybe a~, but it turns out to be basically impossible to write a neat one-liner for that due to limitations in the Haskell standard library.[fn:1]
-- Performance: :: In a traditional binary heap, this operation runs in \( O(1) \) time, but since we have to scan the entire list of trees, we have to pay an \( O(\log n) \) time cost.
+- Performance: :: In a traditional binary heap, this operation runs in $O(1)$ time, but since we have to scan the entire list of trees, we have to pay an $O(\log n)$ time cost.
 
 **** ~uncons~
 
@@ -309,9 +285,8 @@ uncons (Heap ts) = Just (x, merge (Heap (reverse ts1)) (Heap ts2)) where
     | otherwise         = (t', t : ts') where
         (t', ts') = extractMinTree ts
 #+end_src
-- Performance: :: In the worst case, ~extractMinTree~ scans the list of trees once, so it runs in \( O(\log n) \) time.
-Note that, because of the different ordering conventions, we have to reverse the subtree list before merging.  The ~merge~ at the end also runs in \( O(\log n) \) time.
-
+- Performance: :: In the worst case, ~extractMinTree~ scans the list of trees once, so it runs in $O(\log n)$ time.
+Note that, because of the different ordering conventions, we have to reverse the subtree list before merging.  The ~merge~ at the end also runs in $O(\log n)$ time.
 * ~BinomialHeap.v~
 
 There is a bunch of commented-out code at the bottom of the file.  Most of that was uncommented when I started working on it; some things weren't working for reasons that I didn't understand, so I started over and have been incrementally adding stuff back in as I go.
