@@ -112,7 +112,8 @@ Class LubLaw a `{Lub a, LessDefined a} : Prop :=
   ; lub_upper_bound_r : forall x y : a, cobounded x y -> y `less_defined` lub x y
   }.
 #+end_src
-- Question: :: I feel like ~lub~ should be commutative.  Does that follow from the above?
+
+*Question.*  I feel like ~lub~ should be commutative.  Does that follow from the above?
 
 ** The ~Tick~ monad
 
@@ -212,7 +213,8 @@ link t1@(Tree x1 cs1) t2@(Tree x2 cs2)
   | x1 <= x2  = Tree x1 (t2 : cs1)
   | otherwise = Tree x2 (t1 : cs2)
 #+end_src
-- Performance: :: ~link~ runs in $O(1)$ time.
+
+*Performance.*  ~link~ runs in $O(1)$ time.
 
 ** Binomial heaps
 
@@ -243,7 +245,8 @@ insertTree t1 (t2 : ts)
   | rank t1 < rank t2 = t1 : ts
   | otherwise         = insertTree (link t1 t2) ts
 #+end_src
-- Performance: :: In the worst case, ~insertTree~ has to scan the entire list of trees, entailing $O(\log n)$ recursive calls and $O(\log n)$ calls to ~link~; hence, ~insertTree~ runs in $O(\log n)$ time.
+
+*Performance.*  In the worst case, ~insertTree~ has to scan the entire list of trees, entailing $O(\log n)$ recursive calls and $O(\log n)$ calls to ~link~; hence, ~insertTree~ runs in $O(\log n)$ time.
 
 **** ~insert~
 
@@ -252,7 +255,8 @@ To insert a new element, we simply put it inside a singleton tree and then inser
 insert :: Ord a => a -> Heap a -> Heap a
 insert x = insertTree (singletonTree x)
 #+end_src
-- Performance: :: Just like ~insertTree~, ~insert~ runs in $O(\log n)$ time.
+
+*Performance.*  Just like ~insertTree~, ~insert~ runs in $O(\log n)$ time.
 
 **** ~merge~
 
@@ -266,8 +270,10 @@ merge (Heap ts1) (Heap ts2) = Heap (go ts1 ts2) where
     | otherwise         =
       insertTree (link t1 t2) (go ts1 ts2)
 #+end_src
-- Performance: :: The analysis is kind of tricky, which might be an argument against using this particular implementation.  (There is an alternate implementation that more explicitly looks like addition with carrying.)  In particular, the call to ~insertTree~ looks suspicious: what if we have to call it many times?  But ~merge~ is in fact an $O(\log n)$-time operation (where \(n\) is the number of elements in both heaps combined, or the number of elements in the larger heap; both give the same result).  The justification looks something like this: if ~t1~ and ~t2~ have the same rank, say $k$, then ~merge~ calls ~insertTree~ on ~link t1 t2~, which has rank $k + 1$.  Therefore, the resulting list of trees does not have a tree of rank $k$; or, if you like, the “place” of rank $k$ is empty.  So if, in the course of computing ~merge~, we need to call ~insertTree~ on this list, we will definitely be able to stop inserting at rank $k$, if not before.  Zooming out, we see that each “place” gets examined by ~insertTree~ at most once, meaning that ~insertTree~ gets called $O(\log n)$ times.  Since ~merge~ makes $O(\log n)$ recursive calls, this finishes the proof.  See [[https://stackoverflow.com/questions/11462626/should-melding-merging-of-binomial-heaps-be-done-in-one-pass-or-two][this Stack Overflow post]] for the same explanation in different words.
-- Question: :: Is this operation associative and/or commutative?  (Modulo the “equivalent heap” relation, the answer is certainly yes.)
+
+*Performance.*  The analysis is kind of tricky, which might be an argument against using this particular implementation.  (There is an alternate implementation that more explicitly looks like addition with carrying.)  In particular, the call to ~insertTree~ looks suspicious: what if we have to call it many times?  But ~merge~ is in fact an $O(\log n)$-time operation (where \(n\) is the number of elements in both heaps combined, or the number of elements in the larger heap; both give the same result).  The justification looks something like this: if ~t1~ and ~t2~ have the same rank, say $k$, then ~merge~ calls ~insertTree~ on ~link t1 t2~, which has rank $k + 1$.  Therefore, the resulting list of trees does not have a tree of rank $k$; or, if you like, the “place” of rank $k$ is empty.  So if, in the course of computing ~merge~, we need to call ~insertTree~ on this list, we will definitely be able to stop inserting at rank $k$, if not before.  Zooming out, we see that each “place” gets examined by ~insertTree~ at most once, meaning that ~insertTree~ gets called $O(\log n)$ times.  Since ~merge~ makes $O(\log n)$ recursive calls, this finishes the proof.  See [[https://stackoverflow.com/questions/11462626/should-melding-merging-of-binomial-heaps-be-done-in-one-pass-or-two][this Stack Overflow post]] for the same explanation in different words.
+
+*Question.*  Is this operation associative and/or commutative?  (Modulo the “equivalent heap” relation, the answer is certainly yes.)
 
 **** ~head~
 
@@ -277,7 +283,8 @@ head :: Ord a => Heap a -> a
 head (Heap ts) = minimum (root <$> ts)
 #+end_src
 This should really return ~Maybe a~, but it turns out to be basically impossible to write a neat one-liner for that due to limitations in the Haskell standard library.[fn:1]
-- Performance: :: In a traditional binary heap, this operation runs in $O(1)$ time, but since we have to scan the entire list of trees, we have to pay an $O(\log n)$ time cost.
+
+*Performance.*  In a traditional binary heap, this operation runs in $O(1)$ time, but since we have to scan the entire list of trees, we have to pay an $O(\log n)$ time cost.
 
 **** ~uncons~
 
@@ -293,8 +300,10 @@ uncons (Heap ts) = Just (x, merge (Heap (reverse ts1)) (Heap ts2)) where
     | otherwise         = (t', t : ts') where
         (t', ts') = extractMinTree ts
 #+end_src
-- Performance: :: In the worst case, ~extractMinTree~ scans the list of trees once, so it runs in $O(\log n)$ time.
+
+*Performance.*  In the worst case, ~extractMinTree~ scans the list of trees once, so it runs in $O(\log n)$ time.
 Note that, because of the different ordering conventions, we have to reverse the subtree list before merging.  The ~merge~ at the end also runs in $O(\log n)$ time.
+
 * ~BinomialHeap.v~
 
 There is a bunch of commented-out code at the bottom of the file.  Most of that was uncommented when I started working on it; some things weren't working for reasons that I didn't understand, so I started over and have been incrementally adding stuff back in as I go.
