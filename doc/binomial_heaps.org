@@ -1,0 +1,448 @@
+#+title: Introduction to Clairvoyance/Binomial Heaps
+
+#+LaTeX_header: \usepackage{amsthm}
+#+LaTeX_header: \newtheorem*{theorem}{Theorem}
+#+LaTeX_header: \newtheorem*{corollary}{Corollary}
+#+LaTeX_header: \usepackage{minted}
+
+* ClairvoyanceMonad: important concepts
+** Thunks
+
+Defined in ~Core.v~.
+#+begin_src coq
+Inductive T (a : Type) : Type :=
+| Thunk (x : a)
+| Undefined.
+#+end_src
+This is just ~Maybe~ by a different name.  The idea is that you have ~Thunk x~ in a “branch” of computation where ~x~ is evaluated, and ~Undefined~ in a “branch” where it is not evaluated.
+
+When we analyze a data structure, we define two “versions”of it—one whose fields are all wrapped in ~T~, representing the type as it exists in a nonstrict language, and a strict version with no ~T~ fields.  I will sometimes refer to the version with ~T~ fields as an /approximating/ type and the version with no ~T~ fields as a /ground/ type.
+
+As an example, the approximating type for ~list~, called ~listA~, looks like this:
+#+begin_src coq
+Inductive listA (a : Type) : Type :=
+  NilA | ConsA (x1 : T a) (x2 : T (listA a)).
+#+end_src
+
+** The ~less_defined~ relation
+
+Defined in ~Approx.v~.
+#+begin_src coq
+Class LessDefined a := less_defined : a -> a -> Prop.
+Infix "`less_defined`" := less_defined (at level 42).
+#+end_src
+This is (I think) just the less-defined relation from domain theory.  (Strictly speaking, it should be called “less-defined-or-equal”.)  It should be a partial order.
+
+Ground values are considered less-defined just if they are equal; e.g.,
+#+begin_src coq
+#[global] Instance LessDefined_nat : LessDefined nat := eq.
+#+end_src
+The less-defined relation on ~T a~ is like the less-defined relation on ~a~, except that ~Undefined~ is at the bottom.
+#+begin_src coq
+Inductive LessDefined_T {a : Type} `{LessDefined a} : LessDefined (T a) :=
+| LessDefined_Undefined x : Undefined `less_defined` x
+| LessDefined_Thunk x y :
+    x `less_defined` y -> Thunk x `less_defined` Thunk y.
+#+end_src
+For approximating types, the relation is defined as a sum of componentwise conjunctions.
+#+begin_src coq
+Inductive LessDefined_list {a : Type} `{LessDefined a} : LessDefined (listA a) :=
+| less_defined_list_NilA : NilA `less_defined` NilA
+| less_defined_list_ConsA : forall (x y : T a) (xs ys : T (listA a)),
+    x `less_defined` y ->
+    xs `less_defined` ys ->
+    ConsA x xs `less_defined` ConsA y ys.
+#+end_src
+
+*** ~exact~
+
+Defined in ~Approx.v~.
+#+begin_src coq
+Class Exact a b : Type := exact : a -> b.
+#+end_src
+Somewhat unfortunately named (due to the existence of a standard tactic with the same name), ~Exact~ is a simple typeclass that specifies how to embed a ground type into an approximating typee.  In very straightforward cases, we just need to unpack the input, wrap all of its components in ~Thunk~, and repack them.
+#+begin_src coq
+#[global] Instance Exact_prod {a aA b bA} `{Exact a aA, Exact b bA} : Exact (a * b) (aA * bA) :=
+  fun xs => (exact (fst xs), exact (snd xs)).
+#+end_src
+If the type under consideration is (directly), recursive, then `exact` is recursively defined in the obvious way.
+#+begin_src coq
+Equations exact_listA {a b : Type} `{Exact a b} (xs : list a) : listA b :=
+exact_listA nil := NilA ;
+exact_listA (cons y ys) := ConsA (Thunk (exact y)) (Thunk (exact_listA ys)).
+#+end_src
+
+~exact~ should obey a certain law; namely, an embedded element should be maximal in the less-defined relation (i.e., it should be completely defined).
+#+begin_src coq
+Class ExactMaximal a b {Hless : LessDefined a} (Hexact : Exact b a) :=
+  exact_maximal : forall (xA : a) (x : b), exact x `less_defined` xA -> exact x = xA.
+#+end_src
+
+*** The ~is_approx~ relation
+
+#+begin_src coq
+Notation is_approx xA x := (xA `less_defined` exact x) (only parsing).
+Infix "`is_approx`" := is_approx (at level 42, only parsing).
+#+end_src
+This is a relation between approximating types and ground types.  A value of an approximating type approximates a ground value if lives somewhere below it in the less-defined relation (after embedding).
+
+*** ~Lub~
+
+Defined in ~Approx.v~.
+#+begin_src coq
+Class Lub (a : Type) : Type :=
+  lub : a -> a -> a.
+#+end_src
+The least-upper-bound operation with respect to the less-defined relation.
+
+Strictly speaking, ~lub~ should have the signature ~a -> a -> Maybe a~, since it is not generally true that any two values have a least upper bound.  (Example 1: any two ground values only have a least upper bound if they are equal, in which case ~lub x x~ should just be ~x~.  Example 2: ~NilA~ and ~ConsA x y~ do not have a least upper bound for any ~x~, ~y~.)  However, that seems have been deemed too cumbersome.  Instead:
+1. When two values don't have a least upper bound, ~lub~ just returns arbitrary nonsense.
+   #+begin_src coq
+   #[global] Instance Lub_nat : Lub nat := fun n _ => n.
+   #+end_src
+2. When a theorem depends on the existence of a well-defined least upper bound, we require that the inputs be /cobounded/; that is, that they have /some/ common upper bound.
+   #+begin_src coq
+   Definition cobounded {a} `{LessDefined a} (x y : a) : Prop :=
+     exists z : a, x `less_defined` z /\ y `less_defined` z.
+   #+end_src
+
+~lub~ should always obey certain laws.
+#+begin_src coq
+Class LubLaw a `{Lub a, LessDefined a} : Prop :=
+  { lub_least_upper_bound : forall x y z : a,
+      x `less_defined` z -> y `less_defined` z -> lub x y `less_defined` z
+  ; lub_upper_bound_l : forall x y : a, cobounded x y -> x `less_defined` lub x y
+  ; lub_upper_bound_r : forall x y : a, cobounded x y -> y `less_defined` lub x y
+  }.
+#+end_src
+- Question: :: I feel like ~lub~ should be commutative.  Does that follow from the above?
+
+** The ~Tick~ monad
+
+Defined in ~src/Tick.v~.
+#+begin_src coq
+Record Tick (a : Type) : Type := MkTick
+  { cost : nat
+  ; val : a
+  }.
+#+end_src
+It's just a writer monad over the monoid \( (\mathbb{N}, +) \).  But we don't actually need the full power of ~tell~, because all we ever do is call ~tick~, which just increments the accumulator by \( 1 \).
+#+begin_src coq
+Definition tick : Tick unit := MkTick 1 tt.
+#+end_src
+
+Coq doesn't have general-purpose ~do~-notation, so we have to invent our own.
+#+begin_src coq
+Notation "'let+' x := u 'in' k" :=
+  (bind u (fun x => k%tick))
+    (at level 200, x as pattern) : tick_scope.
+Notation "u >> v" :=
+  (bind u (fun _ => v%tick))
+    (at level 61, left associativity) : tick_scope.
+#+end_src
+
+** Tying it all together: how to analyze a data structure
+
+As mentioned, when analyzing a data structure, we define two versions, a ground type and an approximating type.  The name of the approximating type is typically the name of the ground type suffixed with ~A~; e.g., ~list~ becomes ~listA~.  Then, for each operation on the ground type, we define an analogous operation in demand semantics.  The demand-semantics operation takes all the same arguments as the original operation, plus an additional argument whose type is the approximating version of the return type of the original operation; it returns approximating versions of the arguments in the ~Tick~ monad.
+
+To be concrete, if the original operation has signature
+\[
+\texttt{t}_1 \to \texttt{t}_2 \to \cdots \to \texttt{t}_n \to \texttt{r}
+\]
+then the demand-semantics operation has signature
+\[
+\texttt{t}_1 \to \texttt{t}_2 \to \cdots \to \texttt{t}_n \to \texttt{rA} \to \texttt{Tick}(\texttt{tA}_1 \times \texttt{tA}_2 \times \cdots \times \texttt{tA}_n).
+\]
+The name of the demand-semantics operation is typically the name of the of the original operation with a ~D~ at the end; e.g., ~link~ becomes ~linkD~.
+
+The intuition for the demand-semantics translation is that the additional input (approximating the return value of the original operation) tells us which parts of the output will be computed, and the return value (approximating the inputs of the original operation) tell us which parts of the input must be computed in order to compute those parts of the output.
+
+Once everything is in place, the analysis consists of two proofs.
+- Functional correctness: :: If final input to the demand-semantics operation approximates the result of the original operation (in the sense of ~is_approx~), then the output of the demand-semantics operation approximates the input.
+- Cost analysis: :: A theorem that gives the cost of the operation, possibly in an amortized form.  I do not have any personal experience with this side of things, so I can't explain it very well right now.
+
+** Boring miscellanea
+
+The project is targeting Coq version 8.17.  The latest version (as of September 2023) is 8.18, so you may need to pin Coq to an earlier version. There is at least one theorem that will fail under Coq 8.18.
+
+The project uses the Equations plugin, which you'll need to get from your package manager. At least, I did.
+
+We're working on the ~demand~ branch.
+
+* Binomial heaps (theory)
+
+A binomial heap is a particular kind of heap.  The advantage of binomial heaps over the usual binary tree implementation is that they can be merged with reasonable asymptotic performance.
+
+The following describes some of the theory of binomial heaps, not our particular implementation. I have included Haskell code to demonstrate (Okasaki uses ML).
+
+Notably missing from this exposition is an amortized analysis or anything having to do with laziness; I am simply elaborating on Okasaki's analysis.
+
+** Binomial trees
+
+A /binomial tree/ of rank \( k \ge 0 \) is a node with \( k \) children, which are themselves binomial trees of respective ranks \( 0, 1, 2, \ldots, k - 1 \).
+#+begin_src haskell
+data Tree a = Tree a [Tree a]
+
+root :: Tree a -> a
+root (Tree x _) = x
+
+rank :: Tree a -> Int
+rank (Tree _ cs) = length cs
+
+singletonTree :: a -> Tree a
+singletonTree x = Tree x []
+#+end_src
+In this Haskell representation, subtrees are expected to be stored in order of /decreasing/ rank; that is, highest rank first.  (Note that, for efficiency reasons, a practical implementation would memoize the rank of a tree.  I will ignore the cost of computing the rank in the asymptotic analyses.)
+
+Recall that the height of a tree is the length of the longest path from the root node to any other node.
+#+begin_theorem
+A binomial tree of rank \( k \) has a height of \( k \).
+#+end_theorem
+#+begin_proof
+By complete induction on \( k \).  A binomial tree of rank \( 0 \) has height \( 0 \).  When \( k > 0 \), the height of the tree is one greater than the height of the child with the largest height.  By the inductive hypothesis, this is the child of rank \( k - 1 \), which has height \( k - 1 \).  Thus, the height of the tree is \( k - 1 + 1 = k \).
+#+end_proof
+
+#+begin_theorem
+A binomial tree of rank \( k \) has \( \binom{k}{i} \) nodes at depth \( i \).
+#+end_theorem
+#+begin_proof
+By complete induction on \( k \).  Denote the number of nodes at depth \( i \) in a tree of rank \( k \) by \( D(k, i) \).  Note that, at depth \( 0 \), a binomial tree of rank \( k \) always has \( D(k, 0) = 1 = \binom{k}{0} \) node, so we can assume from here on that \( i > 0 \).  For the base case, a binomial tree of rank \( 0 \) has \( D(0, i) = 0 = \binom{0}{i} \) nodes at depth \( i > 0 \).  When \( k > 0 \), the number of nodes at depth \( i \) is \( D(k, i) = \sum_{j = 0}^{k - 1} D(j, i - 1) = \sum_{j = 0}^{k - 1} \binom{j}{i - 1} \).  By the [[https://en.wikipedia.org/wiki/Hockey-stick_identity][hockey-stick identity]], this is \( \binom{k - 1 + 1}{i - 1 + 1} = \binom{k}{i} \).
+#+end_proof
+
+#+begin_corollary
+A binomial tree of rank \( k \) has \( 2^k \) nodes.
+#+end_corollary
+
+From here on, we will only consider binomial trees that satisfy the (min-)heap invariant: the key of any child node is greater than or equal to the key of its parent.
+
+*** ~link~
+
+Observe that, in order to turn a binomial tree of rank \( k \) into a binomial tree of rank \( k + 1 \), it suffices to add one child tree of rank \( k \).  This leads us directly to the ~link~ operation.  ~link~ takes two binomial trees of the same rank \( k \) and combines them into a binomial tree of rank \( k + 1 \).  There is really only one sensible way to do this while preserving the heap invariant: compare the node values and make the tree with the larger node a child of the tree with the smaller node.  This adds to a tree of rank \( k \) one additional child node of rank \( k \), making a tree of rank \( k + 1 \).
+#+begin_src haskell
+link :: Ord a => Tree a -> Tree a -> Tree a
+link t1@(Tree x1 cs1) t2@(Tree x2 cs2)
+  | x1 <= x2  = Tree x1 (t2 : cs1)
+  | otherwise = Tree x2 (t1 : cs2)
+#+end_src
+- Performance: :: ~link~ runs in \( O(1) \) time.
+
+** Binomial heaps
+
+A binomial (min-)heap is a set of binomial trees that satisfies the following properties.
+- The (min-)heap invariant: in every tree, the key of any child node is greater than or equal to the key of its parent.
+- For each natural number \( k \), the heap contains at most one binomial tree of rank \( k \).
+#+begin_src haskell
+newtype Heap a = Heap [Tree a]
+#+end_src
+In this Haskell representation, trees are expected to be stored in order of /increasing/ rank; that is, lowest rank first.
+
+A good intuition for binomial heaps is that, much as cons-lists are like “enriched” unary natural numbers, binomial heaps are like “enriched” binary natural numbers.  The following theorem elucidates this connection.
+#+begin_theorem
+Suppose that \( n = \sum_{k = 0}^\infty a_k 2^k \), where each \( a_k \) is either \( 0 \) or \( 1 \).  Then a binomial heap of size \( n \) contains a binomial tree of rank \( k \) exactly when \( a_k = 1 \).  In other words, a binomial heap of size \( n \) contains a binomial tree of rank \( k \) exactly when the \( k \)th digit in the binary representation of \( n \) is nonzero.
+#+end_theorem
+#+begin_proof
+Given a binomial heap of size \( n \), we can write \( n = \sum_{i} s_i \), where \( s_i \) is the size of the \( i \)th tree.  Since a binomial tree of rank \( k \) has size \( 2^k \), we can rewrite this as \( n = \sum_{i} 2^{k_i} \), where \( k_i \) is the rank of the \( i \)th tree.  Since the trees all have distinct ranks, we can then write \( n = \sum_{k = 0}^\infty a_k 2^k \), where \( a_k = 1 \) if the heap has a tree of rank \( k \) and \( a_k = 0 \) otherwise.  Since binary representations of natural numbers are unique, this finishes the proof.
+#+end_proof
+
+#+begin_corollary
+A binomial heap with \( n \) elements consists of at most \( \lfloor \log_2 (n + 1) \rfloor \) trees.
+#+end_corollary
+
+*** Operations
+**** ~insertTree~
+
+An auxiliary function, ~insertTree~ inserts a tree into a heap.  First, we try to insert the new tree at the appropriate “place” (corresponding to its rank).  If there is already a tree there (i.e., if the heap contains a tree with the same rank), then we link the trees together and insert the new tree instead.  This is analogous to the carry operation in binary arithmetic.
+#+begin_src haskell
+insertTree :: Ord a => Tree a -> [Tree a] -> [Tree a]
+insertTree t1 [] = [t1]
+insertTree t1 (t2 : ts)
+  | rank t1 < rank t2 = t1 : ts
+  | otherwise         = insertTree (link t1 t2) ts
+#+end_src
+- Performance: :: In the worst case, ~insertTree~ has to scan the entire list of trees, entailing \( O(\log n) \) recursive calls and \( O(\log n) \) calls to ~link~; hence, ~insertTree~ runs in \( O(\log n) \) time.
+
+**** ~insert~
+
+To insert a new element, we simply put it inside a singleton tree and then insert that tree.
+#+begin_src haskell
+insert :: Ord a => a -> Heap a -> Heap a
+insert x = insertTree (singletonTree x)
+#+end_src
+- Performance: :: Just like ~insertTree~, ~insert~ runs in \( O(\log n) \) time.
+
+**** ~merge~
+
+~merge~ is arguably the entire reason to care about binomial heaps in the first place.  If ~insertTree~ is like incrementing a place in a binary number, then ~merge~ is like adding two (sparse) binary numbers together.
+#+begin_src haskell
+merge (Heap ts1) (Heap ts2) = Heap (go ts1 ts2) where
+  go []              ts2 = ts2
+  go ts1'@(t1 : ts1) ts2'@(t2 : ts2)
+    | rank t1 < rank t2 = t1 : go ts1 ts2'
+    | rank t2 < rank t1 = t2 : go ts1' ts2
+    | otherwise         =
+      insertTree (link t1 t2) (go ts1 ts2)
+#+end_src
+- Performance: :: The analysis is kind of tricky, which might be an argument against using this particular implementation.  (There is an alternate implementation that more explicitly looks like addition with carrying.)  In particular, the call to ~insertTree~ looks suspicious: what if we have to call it many times?  But ~merge~ is in fact an \( O(\log n) \)-time operation (where \(n\) is the number of elements in both heaps combined, or the number of elements in the larger heap; both give the same result).  The justification looks something like this: if ~t1~ and ~t2~ have the same rank, say \( k \), then ~merge~ calls ~insertTree~ on ~link t1 t2~, which has rank \( k + 1 \).  Therefore, the resulting list of trees does not have a tree of rank \( k \); or, if you like, the “place” of rank \( k \) is empty.  So if, in the course of computing ~merge~, we need to call ~insertTree~ on this list, we will definitely be able to stop inserting at rank \( k \), if not before.  Zooming out, we see that each “place” gets examined by ~insertTree~ at most once, meaning that ~insertTree~ gets called \( O(\log n) \) times.  Since ~merge~ makes \( O(\log n) \) recursive calls, this finishes the proof.  See [[https://stackoverflow.com/questions/11462626/should-melding-merging-of-binomial-heaps-be-done-in-one-pass-or-two][this Stack Overflow post]] for the same explanation in different words.
+- Question: :: Is this operation associative and/or commutative?  (Modulo the “equivalent heap” relation, the answer is certainly yes.)
+
+**** ~head~
+
+~head~ (in Okasaki, ~findMin~) returns the minimum element in the heap.
+#+begin_src haskell
+head :: Ord a => Heap a -> a
+head (Heap ts) = minimum (root <$> ts)
+#+end_src
+This should really return ~Maybe a~, but it turns out to be basically impossible to write a neat one-liner for that due to limitations in the Haskell standard library.[fn:1]
+- Performance: :: In a traditional binary heap, this operation runs in \( O(1) \) time, but since we have to scan the entire list of trees, we have to pay an \( O(\log n) \) time cost.
+
+**** ~uncons~
+
+~uncons~ (in Okasaki, ~deleteMin~) returns the minimum element in the heap, plus a new heap with the minimum element removed.  First, we call the auxiliary function ~extractMinTree~, which finds the tree with the minimum element and removes it.  Then we merge the remaining trees with the children of the tree that was removed.
+#+begin_src haskell
+uncons :: Ord a => Heap a -> Maybe (a, Heap a)
+uncons (Heap []) = Nothing
+uncons (Heap ts) = Just (x, merge (Heap (reverse ts1)) (Heap ts2)) where
+  (Tree x ts1, ts2) = extractMinTree ts
+  extractMinTree [t] = (t, [])
+  extractMinTree (t : ts)
+    | root t <= root t' = (t, ts)
+    | otherwise         = (t', t : ts') where
+        (t', ts') = extractMinTree ts
+#+end_src
+- Performance: :: In the worst case, ~extractMinTree~ scans the list of trees once, so it runs in \( O(\log n) \) time.
+Note that, because of the different ordering conventions, we have to reverse the subtree list before merging.  The ~merge~ at the end also runs in \( O(\log n) \) time.
+
+* ~BinomialHeap.v~
+
+There is a bunch of commented-out code at the bottom of the file.  Most of that was uncommented when I started working on it; some things weren't working for reasons that I didn't understand, so I started over and have been incrementally adding stuff back in as I go.
+
+Also, note that there is a fair amount of stuff that isn't used yet and may not be necessary.  (For example, ~TR2~ and ~ForallA2~.)
+
+** ~Tree~, ~TreeA~, and their induction principles
+
+#+begin_src coq
+Inductive Tree : Type :=
+| Node : forall (n : nat) (x : A) (ts : list Tree), Tree.
+#+end_src
+~n~ is the memoized rank.  ~A~ is currently not a type parameter, but an alias:
+#+begin_src coq
+Notation A := nat (only parsing).
+#+end_src
+
+Much of our difficulties come from the weirdness of ~Tree~ (and its approximation, ~TreeA~): it is recursive, but only indirectly; i.e, ~Tree~ contains ~list Tree~, not ~Tree~.  The first problem is that Coq generates the wrong induction principle for indirectly-recursive types.  If you define the above type and then type ~Check Tree_ind~, you will get
+#+begin_src coq
+Tree_ind
+     : forall P : Tree -> Prop, (forall (n x : nat) (ts : list Tree), P (Node n x ts)) -> forall t : Tree, P t
+#+end_src
+which is clearly not right, as there is no inductive hypothesis.  The inductive hypothesis should be something like “P holds for every child tree”.  Fortunately, Coq lets us write (and prove) our own induction principle.
+#+begin_src coq
+Lemma Tree_ind (P : Tree -> Prop) :
+  (forall (n : nat) (x : A) (ts : list Tree), Forall P ts -> P (Node n x ts)) ->
+  forall (t : Tree), P t.
+#+end_src
+
+We run into a similar problem with the approximating type ~TreeA~.
+#+begin_src coq
+Inductive TreeA : Type :=
+| NodeA : forall (nD : T nat) (xD : T A) (tsD : T (listA TreeA)), TreeA.
+#+end_src
+However, this time we cannot just use ~Forall~, because that only applies to the standard ~list~ type.  Also, everything is wrapped in ~T~, so we have to find a way to deal with that.  For ~listA~, we deal with that by requiring two cases, one where the tail is ~Undefined~ and one where it is a ~Thunk~:
+#+begin_src coq
+Lemma listA_ind : forall (a : Type) (P : listA a -> Prop),
+    P NilA ->
+    (forall (x1 : T a),
+        P (ConsA x1 Undefined)) ->
+    (forall (x1 : T a) (x2 : listA a),
+        P x2 ->
+        P (ConsA x1 (Thunk x2))) ->
+    forall l : listA a, P l.
+#+end_src
+But this approach doesn't scale if we need to take multiple predicates over arguments that may or may not be wrapped in ~Thunk~.
+
+** ~TR1~, ~ForallA~
+
+The following two datatypes helps deal with this problem.
+#+begin_src coq
+Inductive TR1 {a : Type} (P : a -> Prop) : T a -> Prop :=
+| TR1_Thunk {x} : P x -> TR1 P (Thunk x)
+| TR1_Undefined : TR1 P Undefined.
+#+end_src
+~TR1~ (defined in ~Core.v~) lifts a predicate over ~A~ to a predicate over ~T A~.  ~TR1 P~ is considered “vacuously true” for ~Undefined~.
+#+begin_src coq
+Inductive ForallA A (P : A -> Prop) : listA A -> Prop :=
+| ForallA_NilA : ForallA P NilA
+| ForallA_ConsA x xs : TR1 P x -> TR1 (ForallA P) xs -> ForallA P (ConsA x xs).
+#+end_src
+~ForallA~ (defined in ~BinomialHeap.v~) is like ~Forall~, but for ~listA~.
+
+Now we can state (and prove) the induction principle.
+#+begin_src coq
+Lemma TreeA_ind : forall (P : TreeA -> Prop),
+    (forall (nD : T nat) (xD : T A) (tsD : T (listA TreeA)), TR1 (ForallA P) tsD -> P (NodeA nD xD tsD)) ->
+    forall (tD : TreeA), P tD.
+#+end_src
+
+** Recursion woes
+
+The indirectly-recursive nature of ~TreeA~ causes other annoyances.  Foe example, we might want to define the ~lub~ operation for ~TreeA~ like
+#+begin_src coq
+Fixpoint lub_TreeA (t1 t2 : TreeA) : TreeA :=
+  match t1, t2 with
+  | NodeA n1 x1 ts1, NodeA n2 x2 ts2 =>
+      NodeA
+        (lub n1 n2)
+        (lub x1 x2)
+        (@lub _ (@Lub_T _ (@Demand.lub_listA _ lub_TreeA)) ts1 ts2)
+  end.
+#+end_src
+Unfortunately, the termination checker won't let us do this.  It says that it can't guess the decreasing argument; but even if we specify one, it will say that the recursive call to ~lub_TreeA~ doesn't have enough arguments.  Instead, we have to sort of tip-toe around the termination checker by defining two mutually-recursive functions.
+#+begin_src coq
+#[global] Instance Lub_TreeA : Lub TreeA :=
+  fix Lub_TreeA t1 t2 :=
+    let fix lub_list_TreeA (ts1 ts2 : listA TreeA) :=
+      match ts1, ts2 with
+      | NilA, NilA => NilA
+      | ConsA t1 ts1, ConsA t2 ts2 => ConsA (lub_T Lub_TreeA t1 t2) (@lub _ (@Lub_T _ lub_list_TreeA) ts1 ts2)
+      | _, _ => NilA
+      end in
+    match t1, t2 with
+    | NodeA n1 x1 ts1, NodeA n2 x2 ts2 => NodeA (lub n1 n2) (lub x1 x2) (@lub _ (@Lub_T _ lub_list_TreeA) ts1 ts2)
+    end.
+#+end_src
+This makes proofs involving ~lub~ computations a pain, because there's no way to write lemmas about the inner function ~lub_list_TreeA~, and the terms involved sometimes expand into unreadable messes.
+
+(Weirdly, though, I was able to get a similar definition for ~exact~ working.
+#+begin_src coq
+Fixpoint exact_Tree (t : Tree) : TreeA :=
+  match t with
+  | Node n x ts =>
+      NodeA
+        (exact n)
+        (exact x)
+        (@exact _ _ (@Exact_T _ _ (@Exact_list _ _ Exact_id)) (map exact_Tree ts))
+  end.
+#+end_src
+Perhaps the difference is that ~exact~ takes only one argument?)
+
+** Some custom tactics
+
+- ~invert_clear~ is my attempt at re-writing ~inversion_clear~ to make it behave better.  The generated hypotheses go at the bottom of the context rather than where the inverted hypothesis was; maybe I'll try to clean that up sometime.
+- ~invert_constructor~ inverts the first hypothesis it finds that is a predicate applied to a constructor.
+- ~invert_TR~ inverts a ~TR1~ hypothesis.
+
+~repeat (invert_TR + invert_constructor)~ is sometimes useful for breaking down the context.
+
+** The rest of the file and the future
+
+So far, we mostly have background theory (e.g., establishing ~Lub~, ~LessDefined~, ~Exact~ and their properties for ~Tree~), but we do have the functional correctness proof for ~link~.  The next big step is ~insTreeD~, which is the functional correctness proof for ~insTree~.  We also don't have any cost proofs (there are some skeletons commented out at the bottom of the file), so those are also needed.
+
+* Footnotes
+
+[fn:1] For those interested: we want to use ~foldMap~ at the monoid ~Min (Maybe a)~, but the ~Monoid~ instance for ~Min t~ requires a ~Bounded~ instance for ~t~.  It won't even do to just adjoin a lower bound to ~t~ (say, by defining ~Nothing~ to be a lower bound), because ~Bounded~ requires both a lower and an upper bound.  As I see it, this situation arises from a convergence of three deficiencies in the Haskell standard library, and fixing just one of them would be enough.
+- Define a ~BoundedBelow~ typeclass, add an instance ~Ord a => BoundedBelow (Maybe a)~, and make ~Monoid (Min a)~ require ~BoundedBelow a~ instead of ~Bounded a~.
+- Define a type constructor that adjoins lower and upper bounds to any ~Ord~ type and extract that to ~Maybe a~.
+- Make ~minimum~ return a ~Maybe~.
+
+# Local Variables:
+# org-latex-listings: minted
+# End:
