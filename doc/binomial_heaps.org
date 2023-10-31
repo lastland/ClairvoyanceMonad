@@ -198,7 +198,7 @@ It is an important fact that the rank of a binomial tree is logarithmic in the n
 
 *Theorem.*  A binomial tree of rank $k$ has $\binom{k}{i}$ nodes at depth $i$.
 
-*Proof.*  By complete induction on $k$.  Denote the number of nodes at depth $i$ in a tree of rank $k$ by $D(k, i)$.  Note that, at depth $0$, a binomial tree of rank $k$ always has $D(k, 0) = 1 = \binom{k}{0}$ node, so we can assume from here on that $i > 0$.  For the base case, a binomial tree of rank $0$ has $D(0, i) = 0 = \binom{0}{i}$ nodes at depth $i > 0$.  When $k > 0$, the number of nodes at depth $i$ is $D(k, i) = \sum_{j = 0}^{k - 1} D(j, i - 1) = \sum_{j = 0}^{k - 1} \binom{j}{i - 1}$.  By the [[https://en.wikipedia.org/wiki/Hockey-stick_identity][hockey-stick identity]], this is $\binom{k - 1 + 1}{i - 1 + 1} = \binom{k}{i}$.
+*Proof.*  By complete induction on $k$.  Denote the number of nodes at depth $i$ in a tree of rank $k$ by $D(k, i)$.  Note that, at depth $0$, a binomial tree of rank $k$ always has $D(k, 0) = 1 = \binom{k}{0}$ node, so we can assume from here on that $i > 0$.  For the base case, a binomial tree of rank $0$ has $D(0, i) = 0 = \binom{0}{i}$ nodes at depth $i > 0$.  When $k > 0$, the number of nodes at depth $i$ is $D(k, i) = \sum _ {j = 0} ^ {k - 1} D(j, i - 1) = \sum _ {j = 0} ^ {k - 1} \binom{j}{i - 1}$.  By the [[https://en.wikipedia.org/wiki/Hockey-stick_identity][hockey-stick identity]], this is $\binom{k - 1 + 1}{i - 1 + 1} = \binom{k}{i}$.
 
 *Corollary.*  A binomial tree of rank $k$ has $2^k$ nodes.
 
@@ -228,9 +228,9 @@ In this Haskell representation, trees are expected to be stored in order of /inc
 
 A good intuition for binomial heaps is that, much as cons-lists are like “enriched” unary natural numbers, binomial heaps are like “enriched” binary natural numbers.  The following theorem elucidates this connection.
 
-*Theorem.*  Suppose that $n = \sum_{k = 0}^\infty a_k 2^k$, where each $a_k$ is either $0$ or $1$.  Then a binomial heap of size $n$ contains a binomial tree of rank $k$ exactly when $a_k = 1$.  In other words, a binomial heap of size $n$ contains a binomial tree of rank $k$ exactly when the $k$th digit in the binary representation of $n$ is nonzero.
+*Theorem.*  Suppose that $n = \sum _ {k = 0} ^ \infty a_k 2^k$, where each $a_k$ is either $0$ or $1$.  Then a binomial heap of size $n$ contains a binomial tree of rank $k$ exactly when $a_k = 1$.  In other words, a binomial heap of size $n$ contains a binomial tree of rank $k$ exactly when the $k$th digit in the binary representation of $n$ is nonzero.
 
-*Proof.*  Given a binomial heap of size $n$, we can write $n = \sum_{i} s_i$, where $s_i$ is the size of the $i$th tree.  Since a binomial tree of rank $k$ has size $2^k$, we can rewrite this as $n = \sum_{i} 2^{k_i}$, where $k_i$ is the rank of the $i$th tree.  Since the trees all have distinct ranks, we can then write $n = \sum_{k = 0}^\infty a_k 2^k$, where $a_k = 1$ if the heap has a tree of rank $k$ and $a_k = 0$ otherwise.  Since binary representations of natural numbers are unique, this finishes the proof.
+*Proof.*  Given a binomial heap of size $n$, we can write $n = \sum _ {i} s_i$, where $s_i$ is the size of the $i$th tree.  Since a binomial tree of rank $k$ has size $2^k$, we can rewrite this as $n = \sum _ {i} 2^{k_i}$, where $k_i$ is the rank of the $i$th tree.  Since the trees all have distinct ranks, we can then write $n = \sum _ {k = 0} ^ \infty a_k 2^k$, where $a_k = 1$ if the heap has a tree of rank $k$ and $a_k = 0$ otherwise.  Since binary representations of natural numbers are unique, this finishes the proof.
 
 *Corollary.*  A binomial heap with $n$ elements consists of at most $\lfloor \log_2 (n + 1) \rfloor$ trees.
 
