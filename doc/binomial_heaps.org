@@ -57,19 +57,19 @@ Defined in ~Approx.v~.
 #+begin_src coq
 Class Exact a b : Type := exact : a -> b.
 #+end_src
-Somewhat unfortunately named (due to the existence of a standard tactic with the same name), ~Exact~ is a simple typeclass that specifies how to embed a ground type into an approximating typee.  In very straightforward cases, we just need to unpack the input, wrap all of its components in ~Thunk~, and repack them.
+Somewhat unfortunately named (due to the existence of a standard tactic with the same name), ~Exact~ is a simple typeclass that specifies how to embed a ground type into an approximating type.  In very straightforward cases, we just need to unpack the input, wrap all of its components in ~Thunk~, and repack them.
 #+begin_src coq
 #[global] Instance Exact_prod {a aA b bA} `{Exact a aA, Exact b bA} : Exact (a * b) (aA * bA) :=
   fun xs => (exact (fst xs), exact (snd xs)).
 #+end_src
-If the type under consideration is (directly), recursive, then `exact` is recursively defined in the obvious way.
+If the type under consideration is (directly) recursive, then `exact` is recursively defined in the obvious way.
 #+begin_src coq
 Equations exact_listA {a b : Type} `{Exact a b} (xs : list a) : listA b :=
 exact_listA nil := NilA ;
 exact_listA (cons y ys) := ConsA (Thunk (exact y)) (Thunk (exact_listA ys)).
 #+end_src
 
-~exact~ should obey a certain law; namely, an embedded element should be maximal in the less-defined relation (i.e., it should be completely defined).
+~exact~ should obey a certain law; namely, an embedded element should be maximal in the less-defined relation (i.e., it should be “completely defined”).
 #+begin_src coq
 Class ExactMaximal a b {Hless : LessDefined a} (Hexact : Exact b a) :=
   exact_maximal : forall (xA : a) (x : b), exact x `less_defined` xA -> exact x = xA.
@@ -141,7 +141,7 @@ Notation "u >> v" :=
 
 ** Tying it all together: how to analyze a data structure
 
-As mentioned, when analyzing a data structure, we define two versions, a ground type and an approximating type.  The name of the approximating type is typically the name of the ground type suffixed with ~A~; e.g., ~list~ becomes ~listA~.  Then, for each operation on the ground type, we define an analogous operation in demand semantics.  The demand-semantics operation takes all the same arguments as the original operation, plus an additional argument whose type is the approximating version of the return type of the original operation; it returns approximating versions of the arguments in the ~Tick~ monad.
+As mentioned, when analyzing a data structure, we define two versions: a ground type and an approximating type.  The name of the approximating type is typically the name of the ground type suffixed with ~A~; e.g., ~list~ becomes ~listA~.  Then, for each operation on the ground type, we define an analogous operation in demand semantics.  The demand-semantics operation takes all the same arguments as the original operation, plus an additional argument whose type is the approximating version of the return type of the original operation; it returns approximating versions of the arguments in the ~Tick~ monad.
 
 To be concrete, if the original operation has signature
 $$\texttt{t}_1 \to \texttt{t}_2 \to \cdots \to \texttt{t}_n \to \texttt{r},$$
@@ -159,7 +159,16 @@ Once everything is in place, the analysis consists of two proofs.
 
 The project is targeting Coq version 8.17.  The latest version (as of September 2023) is 8.18, so you may need to pin Coq to an earlier version. There is at least one theorem that will fail under Coq 8.18.
 
-The project uses the Equations plugin, which you'll need to get from your package manager. At least, I did.
+The project uses the Equations plugin, which you'll need to get from your package manager. At least, I did.  If you have Nix, you can use this ~shell.nix~:
+#+begin_src nix
+{ pkgs ? import <nixpkgs> { } }: pkgs.mkShell {
+  packages = [
+    pkgs.coq_8_17
+    pkgs.coqPackages_8_17.equations
+  ];
+}
+#+end_src
+(Don't bother trying to use a flake: ~flake.nix~ needs to be committed to Git.)
 
 We're working on the ~demand~ branch.
 
@@ -206,7 +215,7 @@ From here on, we will only consider binomial trees that satisfy the (min-)heap i
 
 *** ~link~
 
-Observe that, in order to turn a binomial tree of rank $k$ into a binomial tree of rank $k + 1$, it suffices to add one child tree of rank $k$.  This leads us directly to the ~link~ operation.  ~link~ takes two binomial trees of the same rank $k$ and combines them into a binomial tree of rank $k + 1$.  There is really only one sensible way to do this while preserving the heap invariant: compare the node values and make the tree with the larger node a child of the tree with the smaller node.  This adds to a tree of rank $k$ one additional child node of rank $k$, making a tree of rank $k + 1$.
+Observe that, in order to turn a binomial tree of rank $k$ into a binomial tree of rank $k + 1$, it suffices to add one child tree of rank $k$.  This leads us directly to the ~link~ operation, which takes two binomial trees of the same rank $k$ and combines them into a binomial tree of rank $k + 1$.  There is really only one sensible way to do this while preserving the heap invariant: compare the node values and make the tree with the larger node a child of the tree with the smaller node.  This adds to a tree of rank $k$ one additional child node of rank $k$, resulting in a tree of rank $k + 1$.
 #+begin_src haskell
 link :: Ord a => Tree a -> Tree a -> Tree a
 link t1@(Tree x1 cs1) t2@(Tree x2 cs2)
@@ -228,9 +237,9 @@ In this Haskell representation, trees are expected to be stored in order of /inc
 
 A good intuition for binomial heaps is that, much as cons-lists are like “enriched” unary natural numbers, binomial heaps are like “enriched” binary natural numbers.  The following theorem elucidates this connection.
 
-*Theorem.*  Suppose that $n = \sum _ {k = 0} ^ \infty a_k 2^k$, where each $a_k$ is either $0$ or $1$.  Then a binomial heap of size $n$ contains a binomial tree of rank $k$ exactly when $a_k = 1$.  In other words, a binomial heap of size $n$ contains a binomial tree of rank $k$ exactly when the $k$th digit in the binary representation of $n$ is nonzero.
+*Theorem.*  Suppose that $n = \sum _ {k = 0} ^ \infty a_k 2^k$, where each $a_k$ is either $0$ or $1$.  Then a binomial heap of size $n$ contains a binomial tree of rank $k$ exactly when $a_k = 1$.  In other words, a binomial heap of size $n$ contains a binomial tree of rank $k$ exactly when the $k$-th digit in the binary representation of $n$ is nonzero.
 
-*Proof.*  Given a binomial heap of size $n$, we can write $n = \sum _ {i} s_i$, where $s_i$ is the size of the $i$th tree.  Since a binomial tree of rank $k$ has size $2^k$, we can rewrite this as $n = \sum _ {i} 2^{k_i}$, where $k_i$ is the rank of the $i$th tree.  Since the trees all have distinct ranks, we can then write $n = \sum _ {k = 0} ^ \infty a_k 2^k$, where $a_k = 1$ if the heap has a tree of rank $k$ and $a_k = 0$ otherwise.  Since binary representations of natural numbers are unique, this finishes the proof.
+*Proof.*  Given a binomial heap of size $n$, we can write $n = \sum _ {i} s_i$, where $s_i$ is the size of the $i$-th tree.  Since a binomial tree of rank $k$ has size $2^k$, we can rewrite this as $n = \sum_i 2 ^ {k_i}$, where $k_i$ is the rank of the $i$-th tree.  Since the trees all have distinct ranks, we can then write $n = \sum _ {k = 0} ^ \infty a_k 2^k$, where $a_k = 1$ if the heap has a tree of rank $k$ and $a_k = 0$ otherwise.  Since binary representations of natural numbers are unique, this finishes the proof.
 
 *Corollary.*  A binomial heap with $n$ elements consists of at most $\lfloor \log_2 (n + 1) \rfloor$ trees.
 
@@ -284,7 +293,7 @@ head (Heap ts) = minimum (root <$> ts)
 #+end_src
 This should really return ~Maybe a~, but it turns out to be basically impossible to write a neat one-liner for that due to limitations in the Haskell standard library.[fn:1]
 
-*Performance.*  In a traditional binary heap, this operation runs in $O(1)$ time, but since we have to scan the entire list of trees, we have to pay an $O(\log n)$ time cost.
+*Performance.*  In a traditional binary heap, this operation runs in $O(1)$ time; but since we have to scan the entire list of trees, we have to pay an $O(\log n)$ time cost.
 
 **** ~uncons~
 
@@ -301,8 +310,7 @@ uncons (Heap ts) = Just (x, merge (Heap (reverse ts1)) (Heap ts2)) where
         (t', ts') = extractMinTree ts
 #+end_src
 
-*Performance.*  In the worst case, ~extractMinTree~ scans the list of trees once, so it runs in $O(\log n)$ time.
-Note that, because of the different ordering conventions, we have to reverse the subtree list before merging.  The ~merge~ at the end also runs in $O(\log n)$ time.
+*Performance.*  In the worst case, ~extractMinTree~ scans the list of trees once, so it runs in $O(\log n)$ time.  Note that, because of the different ordering conventions, we have to reverse the subtree list before merging; this runs in $O(\log n)$ time.  The ~merge~ at the end also runs in $O(\log n)$ time.
 
 * ~BinomialHeap.v~
 
@@ -326,7 +334,7 @@ Much of our difficulties come from the weirdness of ~Tree~ (and its approximatio
 Tree_ind
      : forall P : Tree -> Prop, (forall (n x : nat) (ts : list Tree), P (Node n x ts)) -> forall t : Tree, P t
 #+end_src
-which is clearly not right, as there is no inductive hypothesis.  The inductive hypothesis should be something like “P holds for every child tree”.  Fortunately, Coq lets us write (and prove) our own induction principle.
+which is clearly not right, as there is no inductive hypothesis.  The inductive hypothesis should be something like “~P~ holds for every child tree”.  Fortunately, Coq lets us state (and prove) our own induction principle.
 #+begin_src coq
 Lemma Tree_ind (P : Tree -> Prop) :
   (forall (n : nat) (x : A) (ts : list Tree), Forall P ts -> P (Node n x ts)) ->
@@ -338,7 +346,7 @@ We run into a similar problem with the approximating type ~TreeA~.
 Inductive TreeA : Type :=
 | NodeA : forall (nD : T nat) (xD : T A) (tsD : T (listA TreeA)), TreeA.
 #+end_src
-However, this time we cannot just use ~Forall~, because that only applies to the standard ~list~ type.  Also, everything is wrapped in ~T~, so we have to find a way to deal with that.  For ~listA~, we deal with that by requiring two cases, one where the tail is ~Undefined~ and one where it is a ~Thunk~:
+However, we cannot just use ~Forall~ this time, because that only applies to the standard ~list~ type.  Also, everything is wrapped in ~T~, so we have to find a way to deal with that.  For ~listA~, we deal with that by requiring two cases, one where the tail is ~Undefined~ and one where it is a ~Thunk~:
 #+begin_src coq
 Lemma listA_ind : forall (a : Type) (P : listA a -> Prop),
     P NilA ->
@@ -376,7 +384,7 @@ Lemma TreeA_ind : forall (P : TreeA -> Prop),
 
 ** Recursion woes
 
-The indirectly-recursive nature of ~TreeA~ causes other annoyances.  Foe example, we might want to define the ~lub~ operation for ~TreeA~ like
+The indirectly-recursive nature of ~TreeA~ causes other annoyances.  For example, we might want to define the ~lub~ operation for ~TreeA~ like
 #+begin_src coq
 Fixpoint lub_TreeA (t1 t2 : TreeA) : TreeA :=
   match t1, t2 with
@@ -421,7 +429,6 @@ Perhaps the difference is that ~exact~ takes only one argument?)
 - ~invert_clear~ is my attempt at re-writing ~inversion_clear~ to make it behave better.  The generated hypotheses go at the bottom of the context rather than where the inverted hypothesis was; maybe I'll try to clean that up sometime.
 - ~invert_constructor~ inverts the first hypothesis it finds that is a predicate applied to a constructor.
 - ~invert_TR~ inverts a ~TR1~ hypothesis.
-
 ~repeat (invert_TR + invert_constructor)~ is sometimes useful for breaking down the context.
 
 ** The rest of the file and the future
