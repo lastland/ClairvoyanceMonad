@@ -372,32 +372,32 @@ Proof.
   apply lub_r; auto.
 Qed.
 
-Record Good `{IsAA A A', IsAA B B'} (l : Lens A A' B B') : Prop := MkGood
-  { complete : forall a b', b' `is_approx` get l a -> Tick.val (put l a b') `is_approx` a
-  ; monotone : forall a b' b'',
-      b' `less_defined` b'' ->
-      b'' `is_approx` get l a ->
-      put l a b' `less_defined` put l a b''
-  ; homomorphic : forall a b' b'',
-      b' `is_approx` get l a ->
-      b'' `is_approx` get l a ->
-      eqle (put l a (lub b' b'')) (lift2_lub (put l a b') (put l a b''))
+Record Good `{IsAA G G', IsAA A A'} (l : Lens G G' A A') : Prop := MkGood
+  { complete : forall g a', a' `is_approx` get l g -> Tick.val (put l g a') `is_approx` g
+  ; monotone : forall g a' a'',
+      a' `less_defined` a'' ->
+      a'' `is_approx` get l g ->
+      put l g a' `less_defined` put l g a''
+  ; homomorphic : forall g a' a'',
+      a' `is_approx` get l g ->
+      a'' `is_approx` get l g ->
+      eqle (put l g (lub a' a'')) (lift2_lub (put l g a') (put l g a''))
   }.
 
-Record Correct `{IsAA A A', IsAA B B'} (l : Lens A A' B B') (cv : A' -> M B') : Prop := MkCorrect
+Record Correct `{IsAA G G', IsAA A A'} (l : Lens G G' A A') (cv : G' -> M A') : Prop := MkCorrect
   { Good_correct : Good l
-  ; functional_correct : forall a a', a' `is_approx` a -> cv a' {{ fun b' n => b' `is_approx` get l a }}
-  ; underapprox : forall a a', a' `is_approx` a -> cv a' {{ fun b' n =>
-      put l a b' `less_defined` Tick.MkTick n a' }}
+  ; functional_correct : forall g g', g' `is_approx` g -> cv g' {{ fun a' n => a' `is_approx` get l g }}
+  ; underapprox : forall g g', g' `is_approx` g -> cv g' {{ fun a' n =>
+      put l g a' `less_defined` Tick.MkTick n g' }}
   ; minimal_ex :
-      forall a b', b' `is_approx` get l a ->
-      forall a', a' `is_approx` a ->
-        Tick.val (put l a b') `less_defined` a' ->
-        cv a' [[ fun b'' n => n = Tick.cost (put l a b') /\ b' `less_defined` b'' ]]
+      forall g a', a' `is_approx` get l g ->
+      forall g', g' `is_approx` g ->
+        Tick.val (put l g a') `less_defined` g' ->
+        cv g' [[ fun a'' n => n = Tick.cost (put l g a') /\ a' `less_defined` a'' ]]
   ; minimal_univ :
-      forall a a', a' `is_approx` a ->
-        cv a' {{ fun b'' m =>
-          forall b', b' `less_defined` b'' -> put l a b' `less_defined` Tick.MkTick m a' }}
+      forall g g', g' `is_approx` g ->
+        cv g' {{ fun a'' m =>
+          forall a', a' `less_defined` a'' -> put l g a' `less_defined` Tick.MkTick m g' }}
   }.
 
 #[global] Hint Resolve Good_correct : core.
@@ -711,8 +711,8 @@ Proof.
     + rewrite Nat.add_0_r. apply Nat.add_le_mono; apply H0 + apply H1.
     + apply lub_least_upper_bound; apply H0 + apply H1.
   - intros; apply optimistic_bind. inv H.
-    assert (Tick.val (put la a x) `is_approx` a) by apply Ca, H5.
-    assert (Tick.val (put lb a xs) `is_approx` a) by apply Cb, H6.
+    assert (Tick.val (put la g x) `is_approx` g) by apply Ca, H5.
+    assert (Tick.val (put lb g xs) `is_approx` g) by apply Cb, H6.
     cbn in H1; apply lub_inv in H1; [ destruct H1 | eauto ].
     apply (optimistic_mon (minimal_ex Ca _ _ H5 _ H0 H1)).
     intros ? _ [-> ?]. apply optimistic_bind.
@@ -881,7 +881,7 @@ Proof.
   intros Gl. constructor; unfold force_lens, force_dem; cbn.
   - intros. apply Gl; constructor; auto.
   - intros. apply Gl; constructor; auto.
-  - intros. change (Thunk (lub b' b'')) with (lub (Thunk b') (Thunk b'')).
+  - intros. change (Thunk (lub a' a'')) with (lub (Thunk a') (Thunk a'')).
     apply Gl; constructor; auto.
 Qed.
 
@@ -1123,27 +1123,27 @@ Theorem Good_foldr `{IsAA G G', IsAA A A', IsAA B B'}
   : Good lb -> Good ln -> Good la -> Good (foldr_lens lb ln la).
 Proof.
   intros Gb Gn Ga. unfold foldr_lens; constructor; cbn; intros.
-  - destruct (Tick.val (foldr_dem' lb ln a (get la a) b')) as [g' a0] eqn:Ef.
-    cbn. assert (F : (g', a0) `is_approx` (a, get la a)).
+  - destruct (Tick.val (foldr_dem' lb ln g (get la g) a')) as [g' a0] eqn:Ef.
+    cbn. assert (F : (g', a0) `is_approx` (g, get la g)).
     { rewrite <- Ef. apply (complete_foldr' Gb Gn). auto. }
     apply lub_least_upper_bound.
     + change g' with (fst (g', a0)). apply F.
     + apply Ga, F.
   - unfold foldr_dem. montac. { apply (monotone_foldr' Gb Gn); auto. }
     apply (complete_foldr' Gb Gn) in H0.
-    destruct (Tick.val (foldr_dem' _ _ _ _ b')).
-    destruct (Tick.val (foldr_dem' _ _ _ _ b'')).
+    destruct (Tick.val (foldr_dem' _ _ _ _ a')).
+    destruct (Tick.val (foldr_dem' _ _ _ _ a'')).
     destruct H0, H2; cbn in *.
     montac. { apply Ga; auto. }
-    assert (Tick.val (put la a l0) `is_approx` a). { apply Ga; auto. }
+    assert (Tick.val (put la g l0) `is_approx` g). { apply Ga; auto. }
     apply less_defined_ret. apply less_defined_lub; eauto.
   - unfold foldr_dem.
-    apply (lub_bind (P := fun ga => ga `is_approx` (a, get la a))).
+    apply (lub_bind (P := fun ga => ga `is_approx` (g, get la g))).
     { apply complete_foldr'; auto. }
     { apply complete_foldr'; auto. }
     { apply homomorphic_foldr'; auto. }
-    intros [g' a'] [] ? [Eg' Ea'] []. cbn in *.
-    apply (lub_bind (P := fun g'' => g'' `is_approx` a)).
+    intros [g' x'] [] ? [Eg' Ea'] []. cbn in *.
+    apply (lub_bind (P := fun g'' => g'' `is_approx` g)).
     { apply Ga; auto. }
     { apply Ga; auto. }
     { apply (homomorphic Ga); auto. }
@@ -1375,23 +1375,23 @@ Proof.
     apply (pessimistic_mon (underapprox_foldr' Cb Cn _ H _ Ex)).
     intros. unfold foldr_dem.
     rewrite (Nat.add_comm n n0).
-    change (Tick.MkTick (n0 + n) _) with (Tick.bind (Tick.MkTick n0 (a', x)) (fun _ => Tick.MkTick n a')).
-    apply (less_defined_bind'' (fun _ ax => ax = (a', x))); auto.
+    change (Tick.MkTick (n0 + n) _) with (Tick.bind (Tick.MkTick n0 (g', x)) (fun _ => Tick.MkTick n g')).
+    apply (less_defined_bind'' (fun _ gx => gx = (g', x))); auto.
     intros [g1 x1] _ -> [Eg1 Ex2]; cbn in *.
     rewrite <- (Nat.add_0_r n).
-    change (Tick.MkTick (n + 0) _) with (Tick.MkTick n a' >> Tick.MkTick 0 a')%tick.
-    apply (less_defined_bind'' (fun _ a2 => a2 = a')); auto.
+    change (Tick.MkTick (n + 0) _) with (Tick.MkTick n g' >> Tick.MkTick 0 g')%tick.
+    apply (less_defined_bind'' (fun _ g2 => g2 = g')); auto.
     { etransitivity; [ | apply Fx ].
       apply (monotone (Good_correct Ca)); auto. }
     intros g2 _ -> Eg2.
     apply less_defined_ret. apply lub_least_upper_bound; auto.
   - apply optimistic_bind.
     unfold foldr_fn in H.
-    destruct (Tick.val (foldr_dem' lb ln a (get la a) b')) as [g' x'] eqn:Ef'.
-    assert (Hgx : (g', x') `is_approx` (a, get la a)).
+    destruct (Tick.val (foldr_dem' lb ln g (get la g) a')) as [g1 x1] eqn:Ef'.
+    assert (Hgx : (g1, x1) `is_approx` (g, get la g)).
     { rewrite <- Ef'. apply complete_foldr'; eauto. }
     destruct Hgx as [Hg Hx]; cbn in *.
-    assert (Hp : Tick.val (put la a x') `less_defined` a').
+    assert (Hp : Tick.val (put la g x1) `less_defined` g').
     { apply lub_inv in H1; [ apply H1 | ].
       eexists; split; [ apply Hg | apply complete; eauto ]. }
     apply (optimistic_mon (optimistic_conj (functional_correct Ca _ _ H0) (minimal_ex Ca _ _ Hx _ H0 Hp))).
@@ -1408,12 +1408,12 @@ Proof.
     intros b m Fb b' Eb'.
     unfold foldr_dem.
     rewrite (Nat.add_comm n m).
-    change (Tick.MkTick (m + n) _) with (Tick.MkTick m (a', x) >> Tick.MkTick n a')%tick.
-    apply (less_defined_bind'' (fun _ ax => ax = (a', x))); auto.
+    change (Tick.MkTick (m + n) _) with (Tick.MkTick m (g', x) >> Tick.MkTick n g')%tick.
+    apply (less_defined_bind'' (fun _ gx => gx = (g', x))); auto.
     intros [g1 x1] _ -> [Eg Ex]; cbn in *.
     rewrite <- (Nat.add_0_r n).
-    change (Tick.MkTick (n + 0) _) with (Tick.MkTick n a' >> Tick.MkTick 0 a')%tick.
-    apply (less_defined_bind'' (fun _ a'' => a'' = a')); auto.
+    change (Tick.MkTick (n + 0) _) with (Tick.MkTick n g' >> Tick.MkTick 0 g')%tick.
+    apply (less_defined_bind'' (fun _ g'' => g'' = g')); auto.
     intros g2 _ -> Eg2.
     apply less_defined_ret.
     apply lub_least_upper_bound; auto.
