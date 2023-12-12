@@ -77,14 +77,15 @@ Fixpoint pop (A : Type) (q : Queue A) : option (A * Queue A) :=
   match q with
   | Nil => None
   | Deep (FTwo x y) q r => Some (x, Deep (FOne y) q r)
-  | Deep (FOne x) q r => let q' := match pop q with
-                                   | Some ((y, z), q) => Deep (FTwo y z) q r
-                                   | None => match r with
-                                             | RZero => Nil
-                                             | ROne y => Deep (FOne y) Nil RZero
-                                             end
+  | Deep (FOne x) q r => let q' := match r with
+                                   | RZero => Nil
+                                   | ROne y => Deep (FOne y) Nil RZero
                                    end
-                         in Some (x, q')
+                         in let q'' := match pop q with
+                                       | Some ((y, z), q) => Deep (FTwo y z) q r
+                                       | None => q'
+                                       end
+                            in Some (x, q'')
   end.
 
 
