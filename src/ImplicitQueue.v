@@ -343,23 +343,16 @@ Fixpoint push A (q : Queue A) (x : A) : Queue A :=
 
 Fixpoint pushD A (q : Queue A) (x : A) (outD : QueueA A) : Tick (T (QueueA A) * T A) :=
   Tick.tick >>
-    match q with
-    | Nil => match outD with
-             | DeepA (Thunk (FOneA xD)) (Thunk NilA) (Thunk RZeroA) => Tick.ret (Thunk NilA, xD)
-             | _ => bottom
-             end
-    | Deep f q RZero => match outD with
-                        | DeepA fD qD (Thunk (ROneA xD)) =>
-                            Tick.ret (Thunk (DeepA fD qD (Thunk RZeroA)), xD)
-                        | _ => bottom
-                        end
-    | Deep f q (ROne y) => match outD with
-                           | DeepA fD qD (Thunk RZeroA) =>
-                               let+ (qD, pD) := thunkD (pushD q (y, x)) qD in
-                               let (yD, xD) := factorPairD pD
-                               in Tick.ret (Thunk (DeepA fD qD (Thunk (ROneA yD))), xD)
-                           | _ => bottom
-                           end
+    match outD, q with
+    | DeepA (Thunk (FOneA xD)) (Thunk NilA) (Thunk RZeroA), Nil =>
+        Tick.ret (Thunk NilA, xD)
+    | DeepA fD qD (Thunk (ROneA xD)), Deep f q RZero =>
+        Tick.ret (Thunk (DeepA fD qD (Thunk RZeroA)), xD)
+    | DeepA fD qD (Thunk RZeroA), Deep f q (ROne y) =>
+        let+ (qD, pD) := thunkD (pushD q (y, x)) qD in
+        let (yD, xD) := factorPairD pD
+        in Tick.ret (Thunk (DeepA fD qD (Thunk (ROneA yD))), xD)
+    | _, _ => bottom
     end.
 
 Lemma pushD_approx A `{LessDefined A} (q : Queue A) (x : A) (outD : QueueA A) :
@@ -384,30 +377,22 @@ Fixpoint pop A (q : Queue A) : option (A * Queue A) :=
 Fixpoint popD A (q : Queue A) (outD : option (T A * T (QueueA A))) :
   Tick (T (QueueA A)) :=
   Tick.tick >>
-    match q with
-    | Nil => match outD with
-             | None => Tick.ret (Thunk NilA)
-             | _ => bottom
-             end
-    | Deep (FTwo _ _) _ _ => match outD with
-                             | Some (xA, Thunk (DeepA (Thunk (FOneA yA)) qA rA)) =>
-                                 Tick.ret (Thunk (DeepA (Thunk (FTwoA xA yA)) qA rA))
-                             | _ => Tick.ret bottom
-                             end
-    | Deep (FOne _) q _ =>
-        match outD with
-        | Some (xD, Thunk NilA) =>
-            (* `pop q` is `None`, `r` is `RZero` *)
-            Tick.ret (Thunk (DeepA (Thunk (FOneA xD)) (Thunk NilA) (Thunk RZeroA)))
-        | Some (xD, Thunk (DeepA (Thunk (FOneA yD)) (Thunk NilA) (Thunk RZeroA))) =>
-            (* `pop q` is `None`, `r` is `ROne y` *)
-            Tick.ret (Thunk (DeepA (Thunk (FOneA xD)) (Thunk NilA) (Thunk (ROneA yD))))
-        | Some (xD, Thunk (DeepA (Thunk (FTwoA yD zD)) qD rD)) =>
-            (* `pop q` is `Some ((y, z), q)` *)
-            let+ qD := popD q (Some (unfactorPairD yD zD, qD)) in
-            Tick.ret (Thunk (DeepA (Thunk (FOneA xD)) qD rD))
-        | _ => bottom
-        end
+    match outD, q with
+    | None, Nil =>
+        Tick.ret (Thunk NilA)
+    | Some (xA, Thunk (DeepA (Thunk (FOneA yA)) qA rA)), Deep (FTwo _ _) _ _ =>
+        Tick.ret (Thunk (DeepA (Thunk (FTwoA xA yA)) qA rA))
+    | Some (xD, Thunk NilA), Deep (FOne _) q _ =>
+        (* `pop q` is `None`, `r` is `RZero` *)
+        Tick.ret (Thunk (DeepA (Thunk (FOneA xD)) (Thunk NilA) (Thunk RZeroA)))
+    | Some (xD, Thunk (DeepA (Thunk (FOneA yD)) (Thunk NilA) (Thunk RZeroA))), Deep (FOne _) q _ =>
+        (* `pop q` is `None`, `r` is `ROne y` *)
+        Tick.ret (Thunk (DeepA (Thunk (FOneA xD)) (Thunk NilA) (Thunk (ROneA yD))))
+    | Some (xD, Thunk (DeepA (Thunk (FTwoA yD zD)) qD rD)), Deep (FOne _) q _ =>
+        (* `pop q` is `Some ((y, z), q)` *)
+        let+ qD := popD q (Some (unfactorPairD yD zD, qD)) in
+        Tick.ret (Thunk (DeepA (Thunk (FOneA xD)) qD rD))
+    | _, _ => bottom
     end.
 
 Lemma popD_approx A `{LessDefined A} (q : Queue A) (outD : option (T A * T (QueueA A))) :
