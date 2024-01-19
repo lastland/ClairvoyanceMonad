@@ -267,9 +267,26 @@ Inductive Queue (A : Type) : Type :=
 | Nil : Queue A
 | Deep : Front A -> Queue (A * A) -> Rear A -> Queue A.
 
+Unset Elimination Schemes.
+
 Inductive QueueA (A : Type) : Type :=
 | NilA : QueueA A
 | DeepA : T (FrontA A) -> T (QueueA (A * A)) -> T (RearA A) -> QueueA A.
+
+Lemma QueueA_ind (P : forall A, QueueA A -> Prop) :
+  (forall A, P A NilA) ->
+  (forall A f m r, TR1 (P (prod A A)) m -> P A (DeepA f m r)) ->
+  forall (A : Type) (q : QueueA A), P A q.
+Proof.
+  intros HNilA HDeepA. fix SELF 2.
+  destruct q.
+  - apply HNilA.
+  - apply HDeepA. destruct t0.
+    + constructor. apply SELF.
+    + constructor.
+Qed.
+
+Set Elimination Schemes.
 
 Inductive LessDefined_QueueA A `{LessDefined A} : LessDefined (QueueA A) :=
 | LessDefined_NilA : NilA `less_defined` NilA
