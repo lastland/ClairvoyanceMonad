@@ -317,6 +317,11 @@ Notation IsAA := IsApproxAlgebra (only parsing).
 #[global] Instance LessDefined_prod {a b} `{LessDefined a, LessDefined b} : LessDefined (a * b) :=
   pair_rel less_defined less_defined.
 
+#[global] Instance Reflexive_LessDefined_prod {a b} `{lda : LessDefined a, ldb : LessDefined b, Reflexive a lda, Reflexive b ldb} : Reflexive (@LessDefined_prod a b lda ldb).
+Proof.
+  intros [? ?]. split; reflexivity.
+Qed.
+
 #[global] Instance ExactMaximal_prod {a aA b bA} `{ExactMaximal a aA, ExactMaximal b bA}
   : ExactMaximal (a * b) (aA * bA).
 Proof.

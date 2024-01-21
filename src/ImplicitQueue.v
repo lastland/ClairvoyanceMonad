@@ -1,4 +1,4 @@
-From Coq Require Import Relations RelationClasses.
+From Coq Require Import Arith Psatz Relations RelationClasses.
 From Clairvoyance Require Import Core Approx Tick.
 
 Import Tick.Notations.
@@ -340,36 +340,78 @@ Proof.
   apply make_partial_order. apply LessDefined_QueueA_antisym. firstorder.
 Qed.
 
-#[global] Instance Exact_Queue : forall A B `{Exact A B}, Exact (Queue A) (QueueA B) :=
-  fix Exact_Queue _ _ _ q :=
+(* You think you want this to be parameterized over TWO types; i.e.,
+
+   `Exact (Queue A) (Queue B).`
+
+   You think you want that, but you don't.
+
+   Why? Suppose we're trying to prove by induction a predicate that mentions
+   `exact q`, where `q` is an expression of type `Queue A`, and we have not
+   taken an instance argument whose type has the form `Exact A B`.
+
+   Question: What `Exact` instance is being used in the theorem statement?
+
+   Answer: `Exact_Queue A (Exact_id A)`.
+
+   Now consider the case where we have an inductive hypothesis that mentions
+   `exact m`, where `m` is an expression of type `Queue A`.
+
+   Question: What `Exact` instance is being used in the inductive hypothesis?
+
+   Answer: `Exact_Queue (A * A) (Exact_id (A * A))`, because this is the same
+   instance that was used for the initial induction, except with A * A
+   substituted for A.
+
+   But suppose that `Exact_Queue` took two type arguments.
+
+   Question: What `Exact` instance would be used in the `Deep` case?
+
+   Answer: `Exact_Queue A B (Exact_prod A A Exact_id Exact_id) (Exact_prod B B
+   Exact_id Exact_id)`.
+
+   Since there is an instance mismatch, we will find the theorem impossible to
+   prove without a tedious auxiliary lemma (if at all; I admit that I haven't
+   tried very hard). Worse, the problem may not be immediately apparent, since
+   Coq will reject terms that SEEM to have exactly the right type. *)
+#[global] Instance Exact_Queue : forall A `{Exact A}, Exact (Queue A) (QueueA A) :=
+  fix Exact_Queue A B _ q :=
     match q with
     | Nil => NilA
     | Deep f q r => DeepA (exact f) (Thunk (Exact_Queue _ _ _ q)) (exact r)
     end.
 
-#[global] Instance ExactMaximal_Queue A B `{ExactMaximal B A} :
-  ExactMaximal (QueueA B) (Queue A).
+#[global] Instance ExactMaximal_Queue A `{ExactMaximal A A} :
+  ExactMaximal (QueueA A) (Queue A).
 Admitted.
 
 Fixpoint push A (q : Queue A) (x : A) : Queue A :=
   match q with
   | Nil => Deep (FOne x) Nil RZero
-  | Deep f q RZero => Deep f q (ROne x)
-  | Deep f q (ROne y) => Deep f (push q (y, x)) RZero
+  | Deep f m RZero => Deep f m (ROne x)
+  | Deep f m (ROne y) => Deep f (push m (y, x)) RZero
   end.
 
 Fixpoint pushD A (q : Queue A) (x : A) (outD : QueueA A) : Tick (T (QueueA A) * T A) :=
   Tick.tick >>
-    match outD, q with
-    | DeepA (Thunk (FOneA xD)) (Thunk NilA) (Thunk RZeroA), Nil =>
-        Tick.ret (Thunk NilA, xD)
-    | DeepA fD qD (Thunk (ROneA xD)), Deep f q RZero =>
-        Tick.ret (Thunk (DeepA fD qD (Thunk RZeroA)), xD)
-    | DeepA fD qD (Thunk RZeroA), Deep f q (ROne y) =>
-        let+ (qD, pD) := thunkD (pushD q (y, x)) qD in
-        let (yD, xD) := factorPairD pD
-        in Tick.ret (Thunk (DeepA fD qD (Thunk (ROneA yD))), xD)
-    | _, _ => bottom
+    match q with
+    | Nil => match outD with
+             | DeepA (Thunk (FOneA xD)) (Thunk NilA) (Thunk RZeroA) =>
+                 Tick.ret (Thunk NilA, xD)
+             | _ => bottom
+             end
+    | Deep f m RZero => match outD with
+                        | DeepA fD mD (Thunk (ROneA xD)) =>
+                            Tick.ret (Thunk (DeepA fD mD (Thunk RZeroA)), xD)
+                        | _ => bottom
+                        end
+    | Deep f m (ROne y) => match outD with
+                           | DeepA fD mD (Thunk RZeroA) =>
+                               let+ (mD, pD) := thunkD (pushD m (y, x)) mD in
+                               let (yD, xD) := factorPairD pD in
+                               Tick.ret (Thunk (DeepA fD mD (Thunk (ROneA yD))), xD)
+                           | _ => bottom
+                           end
     end.
 
 Lemma pushD_approx A `{LessDefined A} (q : Queue A) (x : A) (outD : QueueA A) :
@@ -415,3 +457,65 @@ Fixpoint popD A (q : Queue A) (outD : option (T A * T (QueueA A))) :
 Lemma popD_approx A `{LessDefined A} (q : Queue A) (outD : option (T A * T (QueueA A))) :
   outD `is_approx` pop q -> Tick.val (popD q outD) `is_approx` q.
 Admitted.
+
+Fixpoint length (A : Type) (q : Queue A) : nat :=
+  match q with
+  | Nil => 0
+  | Deep f m r => match f with
+                   | FOne _ => 1
+                   | FTwo _ _ => 2
+                  end +
+                    match r with
+                    | RZero => 0
+                    | ROne _ => 1
+                    end +
+                    2 * length m
+  end.
+
+Lemma pushD_cost_mono : forall (A : Type) `{LessDefined A} (q : Queue A) (x : A) (d1 d2 : QueueA A),
+  d1 `is_approx` push q x ->
+  d2 `is_approx` push q x ->
+  d1 `less_defined` d2 ->
+  Tick.cost (pushD q x d1) <= Tick.cost (pushD q x d2).
+Proof.
+Admitted.
+
+Lemma pushD_cost_exact_maximal (A : Type) `{LDA : LessDefined A} `{Reflexive A LDA}
+  (q : Queue A) (x : A) (outD : QueueA A) :
+  outD `is_approx` push q x ->
+  Tick.cost (pushD q x outD) <= Tick.cost (pushD q x (exact (push q x))).
+Proof.
+  intros. apply pushD_cost_mono.
+  - assumption.
+  - reflexivity.
+  - assumption.
+Qed.
+
+Lemma pushD_cost_worstcase (A : Type) `{LDA : LessDefined A} `{Reflexive A LDA}
+  (q : Queue A) (x : A) (outD : QueueA A) :
+  outD `is_approx` push q x ->
+  Tick.cost (pushD q x outD) <= Nat.log2 (2 + length q).
+Proof.
+  transitivity (Tick.cost (pushD q x (exact (push q x)))).
+  - apply pushD_cost_exact_maximal. assumption.
+  - clear dependent outD.
+    revert dependent A. fix SELF 4. intros.
+    refine (match q with
+            | Nil => _
+            | Deep f m RZero => _
+            | Deep f m (ROne y) => _
+            end).
+    + auto.
+    + simpl. change 1 with (Nat.log2 2). pose Nat.log2_le_mono. auto with arith.
+    + simpl.
+      destruct (Tick.val (pushD m (y, x) (Exact_Queue (push m (y, x))))).
+      destruct (factorPairD t0).
+      simpl. rewrite Nat.add_0_r.
+      transitivity (1 + Nat.log2 (2 + length m)).
+      * apply le_n_S. apply (SELF _ LessDefined_prod Reflexive_LessDefined_prod).
+      * transitivity (Nat.log2 (4 + 2 * length m)).
+        -- replace (4 + 2 * length m) with (2 * (2 + length m)).
+           ++ rewrite Nat.log2_double; auto with arith.
+           ++ lia.
+        -- apply Nat.log2_le_mono. destruct f; auto with arith.
+Qed.
