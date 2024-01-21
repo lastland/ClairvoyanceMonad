@@ -9,6 +9,12 @@ Set Maximal Implicit Insertion.
 
 (* Auxiliary stuff *)
 
+(* Tear a goal down by destructing on every case that the goal matches on. *)
+Ltac tear_down := repeat (simpl; match goal with
+                                 | |- context [match ?x with _ => _ end] => destruct x
+                                 | |- context [if ?x then _ else _] => destruct x
+                                 end).
+
 (* I have had some problems with inversion_clear. This does the same thing, but
    hopefully better. Note that it might not work as expected if the inverted
    hypothesis "contains" equalities. *)
@@ -49,6 +55,24 @@ Tactic Notation "invert_clear" integer(n) :=
   progress (intros until n);
   match goal with
   | H : _ |- _ => invert_clear H as [ ]
+  end.
+
+(* Tactic to invert/subst/clear a single hypothesis of the form
+
+   P x1 x2 ... (C y1 y2 ... ym) ... xn
+
+   where C is a constructor. This is a common way to make progress. *)
+Ltac invert_constructor :=
+  let rec head_is_constructor t := match t with
+                                   | ?f ?x => head_is_constructor f
+                                   | _ => is_constructor t
+                                   end in
+  let rec should_invert T := match T with
+                             | ?P ?x => head_is_constructor x + should_invert P
+                             end in
+  intros;
+  match goal with
+  | H : ?T |- _ => should_invert T; invert_clear H
   end.
 
 (* Prove that a relation is a partial order by showing that it is a preorder and
@@ -473,22 +497,28 @@ Fixpoint length (A : Type) (q : Queue A) : nat :=
   end.
 
 Lemma pushD_cost_mono : forall (A : Type) `{LessDefined A} (q : Queue A) (x : A) (d1 d2 : QueueA A),
-  d1 `is_approx` push q x ->
-  d2 `is_approx` push q x ->
   d1 `less_defined` d2 ->
   Tick.cost (pushD q x d1) <= Tick.cost (pushD q x d2).
 Proof.
-Admitted.
+  fix SELF 3. intros. refine (match q with
+                              | Nil => _
+                              | Deep f m RZero => _
+                              | Deep f m (ROne y) => _
+                              end).
+  - tear_down; auto.
+  - tear_down; lia.
+  - tear_down; lia + (repeat invert_constructor).
+    unfold thunkD. tear_down; lia + (repeat invert_constructor).
+    do 2 rewrite Nat.add_0_r.
+    apply le_n_S, (SELF _ (@LessDefined_prod A A H H) m). exact H1.
+Qed.
 
 Lemma pushD_cost_exact_maximal (A : Type) `{LDA : LessDefined A} `{Reflexive A LDA}
   (q : Queue A) (x : A) (outD : QueueA A) :
   outD `is_approx` push q x ->
   Tick.cost (pushD q x outD) <= Tick.cost (pushD q x (exact (push q x))).
 Proof.
-  intros. apply pushD_cost_mono.
-  - assumption.
-  - reflexivity.
-  - assumption.
+  intros. apply pushD_cost_mono. assumption.
 Qed.
 
 Lemma pushD_cost_worstcase (A : Type) `{LDA : LessDefined A} `{Reflexive A LDA}
@@ -512,7 +542,7 @@ Proof.
       destruct (factorPairD t0).
       simpl. rewrite Nat.add_0_r.
       transitivity (1 + Nat.log2 (2 + length m)).
-      * apply le_n_S. apply (SELF _ LessDefined_prod Reflexive_LessDefined_prod).
+      * apply le_n_S. apply  (SELF _ LessDefined_prod Reflexive_LessDefined_prod).
       * transitivity (Nat.log2 (4 + 2 * length m)).
         -- replace (4 + 2 * length m) with (2 * (2 + length m)).
            ++ rewrite Nat.log2_double; auto with arith.
