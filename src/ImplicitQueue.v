@@ -10,10 +10,10 @@ Set Maximal Implicit Insertion.
 (* Auxiliary stuff *)
 
 (* Tear a goal down by destructing on every case that the goal matches on. *)
-Ltac tear_down := repeat (simpl; match goal with
-                                 | |- context [match ?x with _ => _ end] => destruct x
-                                 | |- context [if ?x then _ else _] => destruct x
-                                 end).
+Ltac teardown := repeat (simpl; match goal with
+                                | |- context [match ?x with _ => _ end] => destruct x
+                                | |- context [if ?x then _ else _] => destruct x
+                                end).
 
 (* I have had some problems with inversion_clear. This does the same thing, but
    hopefully better. Note that it might not work as expected if the inverted
@@ -505,10 +505,10 @@ Proof.
                               | Deep f m RZero => _
                               | Deep f m (ROne y) => _
                               end).
-  - tear_down; auto.
-  - tear_down; lia.
-  - tear_down; lia + (repeat invert_constructor).
-    unfold thunkD. tear_down; lia + (repeat invert_constructor).
+  - teardown; auto.
+  - teardown; lia.
+  - teardown; lia + (repeat invert_constructor).
+    unfold thunkD. teardown; lia + (repeat invert_constructor).
     do 2 rewrite Nat.add_0_r.
     apply le_n_S, (SELF _ (@LessDefined_prod A A H H) m). exact H1.
 Qed.
@@ -542,7 +542,7 @@ Proof.
       destruct (factorPairD t0).
       simpl. rewrite Nat.add_0_r.
       transitivity (1 + Nat.log2 (2 + length m)).
-      * apply le_n_S. apply  (SELF _ LessDefined_prod Reflexive_LessDefined_prod).
+      * apply le_n_S, (SELF _ LessDefined_prod Reflexive_LessDefined_prod).
       * transitivity (Nat.log2 (4 + 2 * length m)).
         -- replace (4 + 2 * length m) with (2 * (2 + length m)).
            ++ rewrite Nat.log2_double; auto with arith.
