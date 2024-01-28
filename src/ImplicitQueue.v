@@ -411,14 +411,14 @@ Qed.
   ExactMaximal (QueueA A) (Queue A).
 Admitted.
 
-Fixpoint push A (q : Queue A) (x : A) : Queue A :=
+Fixpoint push (A : Type) (q : Queue A) (x : A) : Queue A :=
   match q with
   | Nil => Deep (FOne x) Nil RZero
   | Deep f m RZero => Deep f m (ROne x)
   | Deep f m (ROne y) => Deep f (push m (y, x)) RZero
   end.
 
-Fixpoint pushD A (q : Queue A) (x : A) (outD : QueueA A) : Tick (T (QueueA A) * T A) :=
+Fixpoint pushD (A : Type) (q : Queue A) (x : A) (outD : QueueA A) : Tick (T (QueueA A) * T A) :=
   Tick.tick >>
     match q with
     | Nil => match outD with
@@ -444,46 +444,52 @@ Lemma pushD_approx A `{LessDefined A} (q : Queue A) (x : A) (outD : QueueA A) :
   outD `is_approx` push q x -> Tick.val (pushD q x outD) `is_approx` (q, x).
 Admitted.
 
-Fixpoint pop A (q : Queue A) : option (A * Queue A) :=
+Fixpoint pop (A : Type) (q : Queue A) : option (A * Queue A) :=
   match q with
   | Nil => None
-  | Deep (FTwo x y) q r => Some (x, Deep (FOne y) q r)
-  | Deep (FOne x) q r => let q' := match r with
-                                   | RZero => Nil
-                                   | ROne y => Deep (FOne y) Nil RZero
-                                   end
-                         in let q'' := match pop q with
-                                       | Some ((y, z), q) => Deep (FTwo y z) q r
-                                       | None => q'
-                                       end
-                            in Some (x, q'')
+  | Deep (FOne x) m r => Some (x, match pop m with
+                                  | None => match r with
+                                            | RZero => Nil
+                                            | ROne y => Deep (FOne y) Nil RZero
+                                            end
+                                  | Some (y, z, m) => Deep (FTwo y z) m r
+                                  end)
+  | Deep (FTwo x y) m r => Some (x, Deep (FOne y) m r)
   end.
 
 Fixpoint popD A (q : Queue A) (outD : option (T A * T (QueueA A))) :
   Tick (T (QueueA A)) :=
   Tick.tick >>
-    match outD, q with
-    | None, Nil =>
-        Tick.ret (Thunk NilA)
-    | Some (xA, Thunk (DeepA (Thunk (FOneA yA)) qA rA)), Deep (FTwo _ _) _ _ =>
-        Tick.ret (Thunk (DeepA (Thunk (FTwoA xA yA)) qA rA))
-    | Some (xD, Thunk NilA), Deep (FOne _) q _ =>
-        (* `pop q` is `None`, `r` is `RZero` *)
-        Tick.ret (Thunk (DeepA (Thunk (FOneA xD)) (Thunk NilA) (Thunk RZeroA)))
-    | Some (xD, Thunk (DeepA (Thunk (FOneA yD)) (Thunk NilA) (Thunk RZeroA))), Deep (FOne _) q _ =>
-        (* `pop q` is `None`, `r` is `ROne y` *)
-        Tick.ret (Thunk (DeepA (Thunk (FOneA xD)) (Thunk NilA) (Thunk (ROneA yD))))
-    | Some (xD, Thunk (DeepA (Thunk (FTwoA yD zD)) qD rD)), Deep (FOne _) q _ =>
-        (* `pop q` is `Some ((y, z), q)` *)
-        let+ qD := popD q (Some (unfactorPairD yD zD, qD)) in
-        Tick.ret (Thunk (DeepA (Thunk (FOneA xD)) qD rD))
-    | _, _ => bottom
+    match q with
+    | Nil => match outD with
+             | None => Tick.ret (Thunk NilA)
+             | _ => bottom
+             end
+    | Deep (FOne x) m r => match outD with
+                           | Some (xD, Thunk NilA) =>
+                               (* `pop q` is `None`, `r` is `RZero` *)
+                               Tick.ret (Thunk (DeepA (Thunk (FOneA xD)) (Thunk NilA) (Thunk RZeroA)))
+                           | Some (xD, Thunk (DeepA (Thunk (FOneA yD)) (Thunk NilA) (Thunk RZeroA))) =>
+                               (* `pop q` is `None`, `r` is `ROne y` *)
+                               Tick.ret (Thunk (DeepA (Thunk (FOneA xD)) (Thunk NilA) (Thunk (ROneA yD))))
+                           | Some (xD, Thunk (DeepA (Thunk (FTwoA yD zD)) mD rD)) =>
+                               (* `pop q` is `Some ((y, z), q)` *)
+                               let+ mD := popD m (Some (unfactorPairD yD zD, mD)) in
+                               Tick.ret (Thunk (DeepA (Thunk (FOneA xD)) mD rD))
+                           | _ => bottom
+                           end
+    | Deep (FTwo x y) m r => match outD with
+                             | Some (xA, Thunk (DeepA (Thunk (FOneA yA)) mA rA)) =>
+                                 Tick.ret (Thunk (DeepA (Thunk (FTwoA xA yA)) mA rA))
+                             | _ => bottom
+                             end
     end.
 
 Lemma popD_approx A `{LessDefined A} (q : Queue A) (outD : option (T A * T (QueueA A))) :
   outD `is_approx` pop q -> Tick.val (popD q outD) `is_approx` q.
 Admitted.
 
+(* Length of a queue. *)
 Fixpoint length (A : Type) (q : Queue A) : nat :=
   match q with
   | Nil => 0
@@ -498,6 +504,7 @@ Fixpoint length (A : Type) (q : Queue A) : nat :=
                     2 * length m
   end.
 
+(* Height of a queue approximation. *)
 Fixpoint heightA (A : Type) (qA : QueueA A) : nat :=
   match qA with
   | NilA => 0
@@ -538,12 +545,12 @@ Lemma pushD_cost_worstcase :
     outD `is_approx` push q x ->
     Tick.cost (pushD q x outD) <= heightA outD.
 Proof.
-  fix SELF 4. intros A LDA HReflexive q x outD Happrox. revert Happrox.
+  fix SELF 4. intros ? ? HReflexive ? ? ?.
   refine (match q with
           | Nil => _
           | Deep f m RZero => _
           | Deep f m (ROne y) => _
-          end); intros.
+          end); intro Happrox.
   1, 2: invert_clear Happrox; teardown; simpl; lia.
   invert_clear Happrox as [ | fD ? mD ? rD ? HfD HmD HrD ].
   invert_clear HrD as [ | rA ? HrA ]. 1: simpl; lia.
@@ -552,8 +559,7 @@ Proof.
                         '(mD, pD) := Tick.val (pushD m (y, x) mA) in
                       let (yD, xD) := factorPairD pD in
                       Tick.ret (Thunk (DeepA fD mD (Thunk (ROneA yD))), xD)))
-    with 0.
-  2: destruct (Tick.val (pushD m (y, x) mA)) as [mD pD], (factorPairD pD); auto.
+    with 0. 2: destruct (Tick.val (pushD m (y, x) mA)) as [mD pD], (factorPairD pD); auto.
   specialize (SELF _ _ _ _ _ _ HmA). lia.
 Qed.
 
@@ -585,4 +591,48 @@ Proof.
            ++ rewrite Nat.log2_double; auto with arith.
            ++ lia.
         -- apply Nat.log2_le_mono. destruct f; auto with arith.
+Qed.
+
+Lemma popD_cost_worstcase :
+  forall (A : Type) `{LDA : LessDefined A} `{Reflexive A LDA}
+         (q : Queue A) (outD : option (T A * T (QueueA A))),
+    outD `is_approx` pop q ->
+    Tick.cost (popD q outD) <= 1 + match outD with
+                                   | None | Some (_, Undefined) => 0
+                                   | Some (_, Thunk qA) => heightA qA
+                                   end.
+Proof.
+  fix SELF 4. intros ? ? HReflexive ? ?. refine (match q with
+                                                 | Nil => _
+                                                 | Deep (FOne x) m r => _
+                                                 | Deep (FTwo x y) m r => _
+                                                 end).
+  1, 3: invert_clear 1; teardown; simpl; lia.
+  refine (match outD with
+          | Some (xD, Thunk NilA) => _
+          | Some (xD, Thunk (DeepA (Thunk (FOneA yD)) (Thunk NilA) (Thunk RZeroA))) => _
+          | Some (xD, Thunk (DeepA (Thunk (FTwoA yD zD)) mD rD)) => _
+          | _ => _
+          end); simpl; try lia.
+  clear q0 t0 f0.
+  invert_clear 1 as [ | ? ? HmA ]. invert_clear HmA as [ Hx HqoutD ].
+  invert_clear HqoutD as [ | ? ? HqoutA ].
+  specialize (SELF _ _ _ m). revert SELF. revert HqoutA.
+  refine (match pop m with
+          | Some (y, z, m) => _
+          | _ => _
+          end).
+  clear p0 p1.
+  2: destruct r; intros;
+  repeat match goal with
+    | H : ?x `less_defined` ?y |- _ =>
+        (head_is_constructor x + head_is_constructor y); invert_clear H
+    end.
+  intro HqoutA.
+  assert (Some (unfactorPairD yD zD, mD) `less_defined` exact (Some (y, z, m))) as Hyzm.
+  - invert_clear HqoutA as [ | ? ? ? ? ? ? HyzD HmD HrD ].
+    invert_clear HyzD as [ | ? ? HyzA ].
+    invert_clear HyzA as [ | ? ? ? ? HyD HzD ].
+    invert_clear HyD; invert_clear HzD; repeat constructor; auto.
+  - intro SELF. specialize (SELF _ Hyzm). lia.
 Qed.
