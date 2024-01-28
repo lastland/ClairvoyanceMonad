@@ -57,16 +57,18 @@ Tactic Notation "invert_clear" integer(n) :=
   | H : _ |- _ => invert_clear H as [ ]
   end.
 
+(* Auxiliary tactic. *)
+Ltac head_is_constructor t := match t with
+                              | ?f ?x => head_is_constructor f
+                              | _ => is_constructor t
+                              end.
+
 (* Tactic to invert/subst/clear a single hypothesis of the form
 
    P x1 x2 ... (C y1 y2 ... ym) ... xn
 
    where C is a constructor. This is a common way to make progress. *)
 Ltac invert_constructor :=
-  let rec head_is_constructor t := match t with
-                                   | ?f ?x => head_is_constructor f
-                                   | _ => is_constructor t
-                                   end in
   let rec should_invert T := match T with
                              | ?P ?x => head_is_constructor x + should_invert P
                              end in
@@ -78,7 +80,7 @@ Ltac invert_constructor :=
 (* Prove that a relation is a partial order by showing that it is a preorder and
    that it is antisymmetric. *)
 Lemma make_partial_order A (R : A -> A -> Prop) `{PreOrder A R} :
-   (forall (x y : A), R x y -> R y x -> x = y) -> PartialOrder eq R.
+  (forall (x y : A), R x y -> R y x -> x = y) -> PartialOrder eq R.
 Proof.
   intros.
   unfold PartialOrder, relation_equivalence, predicate_equivalence, pointwise_lifting, relation_conjunction,
@@ -486,8 +488,8 @@ Fixpoint length (A : Type) (q : Queue A) : nat :=
   match q with
   | Nil => 0
   | Deep f m r => match f with
-                   | FOne _ => 1
-                   | FTwo _ _ => 2
+                  | FOne _ => 1
+                  | FTwo _ _ => 2
                   end +
                     match r with
                     | RZero => 0
@@ -496,9 +498,18 @@ Fixpoint length (A : Type) (q : Queue A) : nat :=
                     2 * length m
   end.
 
+Fixpoint heightA (A : Type) (qA : QueueA A) : nat :=
+  match qA with
+  | NilA => 0
+  | DeepA _ mD _ => 1 + match mD with
+                        | Thunk mA => heightA mA
+                        | Undefined => 0
+                        end
+  end.
+
 Lemma pushD_cost_mono : forall (A : Type) `{LessDefined A} (q : Queue A) (x : A) (d1 d2 : QueueA A),
-  d1 `less_defined` d2 ->
-  Tick.cost (pushD q x d1) <= Tick.cost (pushD q x d2).
+    d1 `less_defined` d2 ->
+    Tick.cost (pushD q x d1) <= Tick.cost (pushD q x d2).
 Proof.
   fix SELF 3. intros. refine (match q with
                               | Nil => _
@@ -521,7 +532,33 @@ Proof.
   intros. apply pushD_cost_mono. assumption.
 Qed.
 
-Lemma pushD_cost_worstcase (A : Type) `{LDA : LessDefined A} `{Reflexive A LDA}
+Lemma pushD_cost_worstcase :
+  forall (A : Type) `{LDA : LessDefined A} `{Reflexive A LDA}
+         (q : Queue A) (x : A) (outD : QueueA A),
+    outD `is_approx` push q x ->
+    Tick.cost (pushD q x outD) <= heightA outD.
+Proof.
+  fix SELF 4. intros A LDA HReflexive q x outD Happrox. revert Happrox.
+  refine (match q with
+          | Nil => _
+          | Deep f m RZero => _
+          | Deep f m (ROne y) => _
+          end); intros.
+  1, 2: invert_clear Happrox; teardown; simpl; lia.
+  invert_clear Happrox as [ | fD ? mD ? rD ? HfD HmD HrD ].
+  invert_clear HrD as [ | rA ? HrA ]. 1: simpl; lia.
+  invert_clear HrA. invert_clear HmD as [ | mA ? HmA ]. 1: simpl; lia.
+  simpl. replace (Tick.cost (let
+                        '(mD, pD) := Tick.val (pushD m (y, x) mA) in
+                      let (yD, xD) := factorPairD pD in
+                      Tick.ret (Thunk (DeepA fD mD (Thunk (ROneA yD))), xD)))
+    with 0.
+  2: destruct (Tick.val (pushD m (y, x) mA)) as [mD pD], (factorPairD pD); auto.
+  specialize (SELF _ _ _ _ _ _ HmA). lia.
+Qed.
+
+(* TODO Can this be derived from pushD_cost_worstcase? *)
+Lemma push_cost_worstcase (A : Type) `{LDA : LessDefined A} `{Reflexive A LDA}
   (q : Queue A) (x : A) (outD : QueueA A) :
   outD `is_approx` push q x ->
   Tick.cost (pushD q x outD) <= Nat.log2 (2 + length q).
