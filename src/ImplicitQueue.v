@@ -636,3 +636,34 @@ Proof.
     invert_clear HyD; invert_clear HzD; repeat constructor; auto.
   - intro SELF. specialize (SELF _ Hyzm). lia.
 Qed.
+
+Class Debitable (A : Type) :=
+  debt : A -> nat.
+
+#[global] Instance Debitable_T (A : Type) `{Debitable A} : Debitable (T A) :=
+  fun xD => match xD with
+            | Thunk x => debt x
+            | Undefined => 0
+            end.
+
+#[global] Instance Debitable_FrontA (A : Type) : Debitable (FrontA A) :=
+  fun fA => match fA with
+            | FOneA _ => 1
+            | FTwoA _ _ => 0
+            end.
+
+#[global] Instance Debitable_RearA (A : Type) : Debitable (RearA A) :=
+  fun fA => match fA with
+            | RZeroA => 0
+            | ROneA _ => 1
+            end.
+
+#[global] Instance Debitable_QueueA : forall (A : Type), Debitable (QueueA A).
+Admitted.
+
+Lemma pushD_cost (A : Type) `{LessDefined A} (q : Queue A) (x : A) (outD : QueueA A) :
+  outD `is_approx` push q x ->
+  match pushD q x outD with
+  | {| Tick.cost := cost; Tick.val := (qD, _) |} => debt qD + cost <= 1 + debt outD
+  end.
+Admitted.
