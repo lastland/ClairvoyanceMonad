@@ -661,9 +661,9 @@ Class Debitable (A : Type) :=
 #[global] Instance Debitable_QueueA : forall (A : Type), Debitable (QueueA A).
 Admitted.
 
-Lemma pushD_cost (A : Type) `{LessDefined A} (q : Queue A) (x : A) (outD : QueueA A) :
-  outD `is_approx` push q x ->
-  match pushD q x outD with
-  | {| Tick.cost := cost; Tick.val := (qD, _) |} => debt qD + cost <= 1 + debt outD
-  end.
+Lemma pushD_cost : forall (A : Type) `{LessDefined A} (q : Queue A) (x : A) (outD : QueueA A),
+    outD `is_approx` push q x ->
+    match pushD q x outD with
+    | {| Tick.cost := cost; Tick.val := (qD, _) |} => debt qD + cost <= 1 + debt outD
+    end.
 Admitted.
