@@ -123,6 +123,15 @@ Definition zipT A B (p : T A) (q : T B) : T (A * B) :=
   | _, _ => Undefined
   end.
 
+Lemma zipT_less_defined A B `{LessDefined A, LessDefined B}
+  (aD aD' : T A) (bD bD' : T B) :
+  aD `less_defined` aD' ->
+  bD `less_defined` bD' ->
+  zipT aD bD `less_defined` zipT aD' bD'.
+Proof.
+  repeat invert_clear 1; simpl; repeat constructor; auto.
+Qed.
+
 #[local] Existing Instance Exact_id | 1.
 
 (* Actual important stuff begins here. *)
@@ -432,14 +441,15 @@ Lemma push_ind :
     (forall A x f m y, P (prod A A) m (y, x) (push m (y, x)) -> P A (Deep f m (ROne y)) x (Deep f (push m (y, x)) RZero)) ->
     forall A (q : Queue A) (x : A), P A q x (push q x).
 Proof.
-  intros ? H1 H2 H3. fix SELF 2. intros ? q. refine (match q with
-                                                     | Nil => _
-                                                     | Deep f m RZero => _
-                                                     | Deep f m (ROne y) => _
-                                                     end).
-  - intros. apply H1.
-  - intros. apply H2.
-  - intros. apply H3. apply SELF.
+  intros ? H1 H2 H3. fix SELF 2. intros ? q.
+  refine (match q with
+          | Nil => _
+          | Deep f m RZero => _
+          | Deep f m (ROne y) => _
+          end); intros.
+  - apply H1.
+  - apply H2.
+  - apply H3. apply SELF.
 Qed.
 
 Fixpoint pushD (A : Type) (q : Queue A) (x : A) (outD : QueueA A) : Tick (T (QueueA A) * T A) :=
@@ -490,6 +500,30 @@ Fixpoint pop (A : Type) (q : Queue A) : option (A * Queue A) :=
   | Deep (FTwo x y) m r => Some (x, Deep (FOne y) m r)
   end.
 
+Lemma pop_ind :
+  forall (P : forall (A : Type), Queue A -> option (A * Queue A) -> Prop),
+    (forall A, P A Nil None) ->
+    (forall A x y m r, P A (Deep (FTwo x y) m r) (Some (x, Deep (FOne y) m r))) ->
+    (forall A x m r, P (prod A A) m (pop m) -> P A (Deep (FOne x) m r) (Some (x, match pop m with
+                                                                                 | None => match r with
+                                                                                           | RZero => Nil
+                                                                                           | ROne y => Deep (FOne y) Nil RZero
+                                                                                           end
+                                                                                 | Some (y, z, m) => Deep (FTwo y z) m r
+                                                                                 end))) ->
+    forall A (q : Queue A), P A q (pop q).
+Proof.
+  intros ? H1 H2 H3. fix SELF 2. intros ? q.
+  refine (match q with
+          | Nil => _
+          | Deep (FOne x) m r => _
+          | Deep (FTwo x y) m r => _
+          end); intros.
+  - apply H1.
+  - apply H3. apply SELF.
+  - apply H2.
+Qed.
+
 Fixpoint popD A (q : Queue A) (outD : option (T A * T (QueueA A))) :
   Tick (T (QueueA A)) :=
   Tick.tick >>
@@ -512,8 +546,8 @@ Fixpoint popD A (q : Queue A) (outD : option (T A * T (QueueA A))) :
                            | _ => bottom
                            end
     | Deep (FTwo x y) m r => match outD with
-                             | Some (xA, Thunk (DeepA (Thunk (FOneA yA)) mA rA)) =>
-                                 Tick.ret (Thunk (DeepA (Thunk (FTwoA xA yA)) mA rA))
+                             | Some (xD, Thunk (DeepA (Thunk (FOneA yD)) mD rD)) =>
+                                 Tick.ret (Thunk (DeepA (Thunk (FTwoA xD yD)) mD rD))
                              | _ => bottom
                              end
     end.
@@ -707,7 +741,7 @@ Lemma pushD_cost : forall (A : Type) `{LessDefined A} (q : Queue A) (x : A) (out
     debt qD + cost <= 2 + debt outD.
 Proof.
   (* Rearrange hypotheses to make the types work out. *)
-  intros A LDA q x. revert A q x LDA.
+  intros ? LDA ? ?. revert A q x LDA.
   apply (push_ind (fun (A : Type) (q : Queue A) (x : A) (q' : Queue A) =>
                      forall LDA outD,
                        outD `is_approx` q' ->
@@ -735,4 +769,64 @@ Proof.
       destruct t0; try destruct x1;
         do 3 (unfold debt at 1; simpl in * );
               destruct f1; try destruct x1; simpl; change (Debitable_T t) with (debt t); lia.
+Qed.
+
+Lemma popD_cost : forall (A : Type) `{LessDefined A} (q : Queue A) (outD : option (T A * T (QueueA A))),
+    outD `is_approx` pop q ->
+    let d := match outD with
+             | None => 0
+             | Some (_, qD) => debt qD
+             end in
+    let inM := popD q outD in
+    let cost := Tick.cost inM in
+    let inD := Tick.val inM in
+    debt inD + cost <= 2 + d.
+Proof.
+  (* Rearrange hypotheses to make the types work out. *)
+  intros ? LDA ?. revert A q LDA.
+  apply (pop_ind (fun A q p =>
+                    forall LDA outD,
+                      outD `is_approx` p ->
+                      let d := match outD with
+                               | Some (_, qD) => debt qD
+                               | None => 0
+                               end in
+                      let inM := popD q outD in
+                      let cost := Tick.cost inM in
+                      let inD := Tick.val inM in
+                      debt inD + cost <= 2 + d));
+    intros until outD.
+  - destruct outD; simpl; lia.
+  - refine (match outD with
+            | Some (xD, Thunk (DeepA (Thunk (FOneA yD)) mD rD)) => _
+            | _ => _
+            end);
+      repeat (unfold debt; simpl);
+      try (destruct rD as [ rA | ]; [ destruct rA | ]; simpl);
+      lia.
+  - refine (match outD with
+            | Some (xD, Thunk NilA) => _
+            | Some (xD, Thunk (DeepA (Thunk (FOneA yD)) (Thunk NilA) (Thunk RZeroA))) => _
+            | Some (xD, Thunk (DeepA (Thunk (FTwoA yD zD)) mD rD)) => _
+            | _ => _
+            end); try solve [ simpl; lia ].
+    intro Happrox.
+    invert_clear Happrox as [ | ? ? Happrox ].
+    invert_clear Happrox as [ Hx HoutD ]. simpl in *. invert_clear HoutD as [ | ? ? HoutD ].
+    destruct (pop m) as [ pD' | ] eqn:Hpop; simpl.
+    + destruct pD' as [ p' q' ]. destruct p' as [ y z ].
+      invert_clear HoutD as [ | ? ? ? ? ? ? Hyz Hm Hr ].
+      invert_clear Hyz as [ | ? ? Hyz ]. invert_clear Hyz as [ | ? ? ? ? Hy Hz ].
+      assert (Some (zipT yD zD, mD) `is_approx` Some (y, z, q')) as Happrox by
+          (repeat constructor; simpl; auto; change (exact (y, z)) with (zipT (Thunk y) (Thunk z));
+           apply zipT_less_defined; auto).
+      specialize (H _ _ Happrox). simpl in H.
+      destruct rD as [ r' | ]; [ destruct r' | ]; repeat (unfold debt; simpl);
+        change (Debitable_T (Tick.val (popD m (Some (zipT yD zD, mD)))))
+        with (debt (Tick.val (popD m (Some (zipT yD zD, mD)))));
+        change (Debitable_T mD) with (debt mD);
+        lia.
+    + destruct r. 1: invert_clear HoutD.
+      invert_clear HoutD as [ | ? ? ? ? ? ? Hyz Hm Hr ].
+      invert_clear Hyz as [ | ? ? Hyz ]. invert_clear Hyz.
 Qed.
