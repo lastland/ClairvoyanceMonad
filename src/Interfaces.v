@@ -498,17 +498,6 @@ Existing Class CvDemand.
 Context {pd : PureDemand}.
 Context {cd : CvDemand}.
 
-Lemma cv_demand_trace_from : forall t xs ysD,
-  ysD `less_defined` exact (eval_trace_from t xs) ->
-  forall n xsD, Tick.MkTick n xsD = demand_trace_from t xs ysD ->
-    exec_trace_from t xsD [[ fun ys m => ysD `less_defined` ys /\ m <= n ]].
-Proof.
-Admitted.
-
-Lemma cv_demand_trace : forall t, exec_trace t [[ fun _ n => n <= Tick.cost (demand_trace t) ]].
-Proof.
-Admitted.
-
 (** Amortized cost specification. *)
 Section AmortizedCostSpec.
 
@@ -542,7 +531,8 @@ End AmortizedCostSpec.
 
 (** Clairvoyant Physicist's method *)
 
-(* TODO: These classes are a bit of a mess. Find a good way to package all of the required operations and facts together. *)
+(* TODO: These classes are a bit of a mess. Find a good way to package all of
+the required operations and facts together. *)
 
 Definition Potential : Type := valueA -> nat.
 Existing Class Potential.
