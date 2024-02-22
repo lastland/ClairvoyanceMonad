@@ -27,5 +27,6 @@ src/Relations.v
 src/Setoid.v
 src/DemandLogic.v
 src/BinomialHeap.v
+src/ImplicitQueue.v
 src/Demand2.v
 # src/DemandSemantics.v
