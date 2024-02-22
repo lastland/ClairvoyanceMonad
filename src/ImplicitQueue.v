@@ -1085,6 +1085,7 @@ Qed.
 From Coq Require Import List.
 Import ListNotations.
 From Clairvoyance Require Import Interfaces.
+Open Scope tick_scope.
 
 Inductive op (A : Type) : Type :=
 | Empty
