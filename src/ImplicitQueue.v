@@ -232,6 +232,26 @@ Qed.
 Proof.
 Admitted.
 
+#[global] Instance Lub_FrontA (A : Type) `{Lub A} : Lub (FrontA A) :=
+  fun f1 f2 =>
+    match f1, f2 with
+    | FOneA x1, FOneA x2 => FOneA (lub x1 x2)
+    | FTwoA x1 y1, FTwoA x2 y2 => FTwoA (lub x1 x2) (lub y1 y2)
+    | _, _ => FOneA Undefined
+    end.
+
+#[global] Instance LubLaw_FrontA (A : Type)
+  `{LDA : LessDefined A, Reflexive A less_defined, LBA : Lub A, @LubLaw _ LBA LDA} :
+  LubLaw (FrontA A).
+Proof.
+  split.
+  - repeat invert_clear 1; repeat constructor; apply lub_least_upper_bound; auto.
+  - invert_clear 1. invert_clear H1.
+    invert_clear H1; invert_clear H2; repeat constructor; apply lub_upper_bound_l; eauto.
+  - invert_clear 1. invert_clear H1.
+    invert_clear H1; invert_clear H2; repeat constructor; apply lub_upper_bound_r; eauto.
+Qed.
+
 Inductive Rear A : Type :=
 | RZero : Rear A
 | ROne : A -> Rear A.
@@ -314,6 +334,26 @@ Qed.
 #[global] Instance ExactMaximal_Rear A B `{ExactMaximal B A} :
   ExactMaximal (RearA B) (Rear A).
 Admitted.
+
+#[global] Instance Lub_RearA (A : Type) `{Lub A} : Lub (RearA A) :=
+  fun r1 r2 =>
+    match r1, r2 with
+    | RZeroA, RZeroA => RZeroA
+    | ROneA x1, ROneA x2 => ROneA (lub x1 x2)
+    | _, _ => RZeroA
+    end.
+
+#[global] Instance LubLaw_RearA (A : Type)
+  `{LDA : LessDefined A, Reflexive A less_defined, LBA : Lub A, @LubLaw _ LBA LDA} :
+  LubLaw (RearA A).
+Proof.
+  split.
+  - repeat invert_clear 1; repeat constructor; apply lub_least_upper_bound; auto.
+  - invert_clear 1. invert_clear H1.
+    invert_clear H1; invert_clear H2; repeat constructor; apply lub_upper_bound_l; eauto.
+  - invert_clear 1. invert_clear H1.
+    invert_clear H1; invert_clear H2; repeat constructor; apply lub_upper_bound_r; eauto.
+Qed.
 
 Inductive Queue (A : Type) : Type :=
 | Nil : Queue A
@@ -455,6 +495,71 @@ Qed.
   ExactMaximal (QueueA A) (Queue A).
 Admitted.
 
+#[global] Instance Lub_QueueA : forall (A : Type) `{Lub A}, Lub (QueueA A) :=
+  fix lub_QueueA (A : Type) _ (q1 q2 : QueueA A) :=
+    match q1, q2 with
+    | NilA, NilA => NilA
+    | DeepA f1 m1 r1, DeepA f2 m2 r2 =>
+        DeepA (lub f1 f2) (@lub _ (@Lub_T _ (lub_QueueA _ _)) m1 m2) (lub r1 r2)
+    | _, _ => NilA
+    end.
+
+#[global] Instance LubLaw_QueueA (A : Type)
+  `{LDA : LessDefined A, Reflexive A less_defined, LBA : Lub A, @LubLaw _ LBA LDA} :
+  LubLaw (QueueA A).
+Proof.
+  split.
+  - induction z; repeat invert_clear 1; repeat constructor;
+      try solve [ apply lub_least_upper_bound; auto ].
+    invert_clear H1; repeat match goal with
+                       | H : ?x `less_defined` ?y |- _ =>
+                           (head_is_constructor x + head_is_constructor y); invert_clear H
+                       end; repeat constructor; auto.
+      apply H1; auto.
+      + apply Reflexive_LessDefined_prod.
+      + apply LubLaw_prod.
+  - induction x; invert_clear 1;
+      match goal with
+      | H : ?P /\ ?Q |- _ => invert_clear H
+      end;
+      repeat match goal with
+        | H : ?x `less_defined` ?y |- _ =>
+            (head_is_constructor x + head_is_constructor y); invert_clear H
+        end; repeat constructor; try solve [ apply lub_upper_bound_l; eauto ].
+    invert_clear H1; auto.
+    repeat match goal with
+           | H : ?x `less_defined` ?y |- _ =>
+               (head_is_constructor x + head_is_constructor y); invert_clear H
+           end; constructor; try reflexivity.
+      apply H1.
+    + apply Reflexive_LessDefined_prod.
+    + apply LubLaw_prod.
+    + eauto.
+  - induction y; invert_clear 1;
+      match goal with
+      | H : ?P /\ ?Q |- _ => invert_clear H
+      end;
+      repeat match goal with
+        | H : ?x `less_defined` ?y |- _ =>
+            (head_is_constructor x + head_is_constructor y); invert_clear H
+        end; repeat constructor; try solve [ apply lub_upper_bound_r; eauto ].
+    invert_clear H1; auto.
+    repeat match goal with
+           | H : ?x `less_defined` ?y |- _ =>
+               (head_is_constructor x + head_is_constructor y); invert_clear H
+           end; constructor; try reflexivity.
+    apply H1.
+    + apply Reflexive_LessDefined_prod.
+    + apply LubLaw_prod.
+    + eauto.
+Qed.
+
+#[global] Instance IsApproxAlgebra_QueueA (A : Type)
+  `{LDA : LessDefined A, PreOrder A LDA, LBA : Lub A, @LubLaw A LBA LDA} :
+  IsApproxAlgebra (Queue A) (T (QueueA A)).
+Proof.
+  econstructor; try typeclasses eauto.
+Defined.
 Fixpoint push (A : Type) (q : Queue A) (x : A) : Queue A :=
   match q with
   | Nil => Deep (FOne x) Nil RZero
