@@ -577,6 +577,15 @@ Qed.
 Proof.
   econstructor; try typeclasses eauto.
 Defined.
+
+(* empty *)
+
+Definition empty (A : Type) : Queue A := Nil.
+
+Definition emptyA (A : Type) : M (QueueA A) := ret NilA.
+
+(* push *)
+
 Fixpoint push (A : Type) (q : Queue A) (x : A) : Queue A :=
   match q with
   | Nil => Deep (FOne x) Nil RZero
@@ -1056,3 +1065,111 @@ Proof.
       invert_clear HoutD as [ | ? ? ? ? ? ? Hyz Hm Hr ].
       invert_clear Hyz as [ | ? ? Hyz ]. invert_clear Hyz.
 Qed.
+
+From Coq Require Import List.
+Import ListNotations.
+From Clairvoyance Require Import Interfaces.
+
+Inductive op (A : Type) : Type :=
+| Empty
+| Push (x : A)
+| Pop.
+
+#[global] Instance WellFormed_Queue (A : Type) : WellFormed (Queue A) := fun _ => True.
+
+#[global] Instance Eval_Queue (A : Type) : Eval (op A) (Queue A) :=
+  fun op args => match op, args with
+                 | Empty, [] => [empty]
+                 | Push x, [q] => [push q x]
+                 | Pop, [q] => match pop q with
+                               | None => []
+                               | Some (_, q) => [q]
+                               end
+                 | _, _ => []
+                 end.
+
+#[global] Instance Budget_Queue (A : Type) : Budget (op A) (Queue A) :=
+  fun _ _ => 2.
+
+#[global] Instance Demand_Queue (A : Type) : Demand (op A) (Queue A) (T (QueueA A)) :=
+  fun op args argsA =>
+    match op, args, argsA with
+    | Empty, [], _ => Tick.ret (bottom_of (exact args))
+    | Push x, [q], [outD] =>
+        let outD := forceD (bottom_of (exact (push q x))) outD in
+        let+ (qD, _) := pushD q x outD in
+        Tick.ret [qD]
+    | Pop, [q], outD =>
+        let outD' := match outD with
+                     | [] => None
+                     | [qD'] => Some (Undefined, qD')
+                     | _ => None
+                     end in
+        let+ qD := popD q outD' in
+        Tick.ret [qD]
+    | _, _, _ => Tick.ret []
+    end.
+
+#[global] Instance Potential_Queue (A : Type) : Potential (T (QueueA A)) :=
+  fun qD => match qD with
+            | Thunk qA => debt qA
+            | Undefined => 0
+            end.
+
+Theorem physicist's_argumentD :
+  forall (A : Type) `{LDA : LessDefined A, PreOrder A LDA, LBA : Lub A, @LubLaw A LBA LDA},
+    @Physicist'sArgumentD
+      (op A) (Queue A) (T (QueueA A))
+      _ _ _ _ _ _.
+Proof.
+  unfold Physicist'sArgumentD.
+  intros A LDA HPreOrder LBA HLubLaw o args.
+  refine (match o, args with
+          | Empty, [] => _
+          | Push x, [q] => _
+          | Pop, [q] => _
+          | _, _ => _
+          end); try solve [ invert_clear 2; invert_clear 1; simpl; lia ].
+  - intros Hwf output Hld input n.
+    revert Hld. simpl. refine (match output with
+                               | [] => _
+                               | [outD] => _
+                               | _ :: _ :: _ => _
+                               end); try solve [ invert_clear 2; simpl; lia ].
+    invert_clear 1. invert_clear H as [ | outD' ? Hld ].
+    + assert (exists f m r, push q x = Deep f m r)
+        as [ f [ m [ r Hpush ] ] ]
+          by apply push_is_Deep. rewrite Hpush in *.
+      invert_clear 1. destruct q; try destruct r0; simpl; lia.
+    + simpl. pose proof (pushD_cost _ _ Hld) as Hcost.
+      destruct (pushD q x outD'). destruct val.
+      cbn in *. invert_clear 1. simpl. destruct t; unfold debt in *; simpl in *; lia.
+  - intros Hwf output Hld input n.
+    revert Hld. simpl. refine (match output with
+                               | [] => _
+                               | [qD'] => _
+                               | _ :: _ :: _ => _
+                               end);
+      try solve [ destruct (pop q); try destruct p; invert_clear 1; invert_clear 1;
+                  destruct q; teardown; simpl; lia ].
+    invert_clear 1. subst. invert_clear H0.
+    destruct (pop q) eqn:Hpop; try solve [ invert_clear H3 ]. destruct p.
+    invert_clear H3.
+    pose proof (@popD_cost _ _ q (Some (Undefined, qD'))).
+    assert (@less_defined _ (@LessDefined_option (T A * T (QueueA A)) _)
+              (Some (Undefined, qD'))
+              (exact (pop q)))
+      by (unfold less_defined, exact, Exact_option;
+          rewrite Hpop; repeat constructor; simpl; auto).
+    specialize (H0 H1). simpl in H0.
+    invert_clear 1. invert_clear H; simpl.
+    + unfold Potential_Queue. destruct q; try destruct f; simpl; lia.
+    + destruct q.
+      * simpl. lia.
+      * unfold Potential_Queue.
+        destruct (Tick.val (popD (Deep f q r) (Some (Undefined, Thunk x)))).
+        -- unfold debt, Debitable_T in H0. lia.
+        -- unfold debt, Debitable_T in H0. lia.
+Qed.
+#[export] Existing Instance physicist's_argumentD.
+
