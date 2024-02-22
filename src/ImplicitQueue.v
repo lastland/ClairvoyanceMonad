@@ -144,6 +144,12 @@ Qed.
 
 #[local] Existing Instance Exact_id | 1.
 
+Definition forceD {a} (y : a) (u : T a) : a :=
+  match u with
+  | Undefined => y
+  | Thunk x => x
+  end.
+
 (* Actual important stuff begins here. *)
 
 Inductive Front A :=
@@ -682,13 +688,15 @@ Lemma pop_ind :
   forall (P : forall (A : Type), Queue A -> option (A * Queue A) -> Prop),
     (forall A, P A Nil None) ->
     (forall A x y m r, P A (Deep (FTwo x y) m r) (Some (x, Deep (FOne y) m r))) ->
-    (forall A x m r, P (prod A A) m (pop m) -> P A (Deep (FOne x) m r) (Some (x, match pop m with
-                                                                                 | None => match r with
-                                                                                           | RZero => Nil
-                                                                                           | ROne y => Deep (FOne y) Nil RZero
-                                                                                           end
-                                                                                 | Some (y, z, m) => Deep (FTwo y z) m r
-                                                                                 end))) ->
+    (forall A x m r,
+        P (prod A A) m (pop m) ->
+        P A (Deep (FOne x) m r) (Some (x, match pop m with
+                                          | None => match r with
+                                                    | RZero => Nil
+                                                    | ROne y => Deep (FOne y) Nil RZero
+                                                    end
+                                          | Some (y, z, m) => Deep (FTwo y z) m r
+                                          end))) ->
     forall A (q : Queue A), P A q (pop q).
 Proof.
   intros ? H1 H2 H3. fix SELF 2. intros ? q.
@@ -712,13 +720,13 @@ Fixpoint popD A (q : Queue A) (outD : option (T A * T (QueueA A))) :
              end
     | Deep (FOne x) m r => match outD with
                            | Some (xD, Thunk NilA) =>
-                               (* `pop q` is `None`, `r` is `RZero` *)
+                               (* `pop m` is `None`, `r` is `RZero` *)
                                Tick.ret (Thunk (DeepA (Thunk (FOneA xD)) (Thunk NilA) (Thunk RZeroA)))
                            | Some (xD, Thunk (DeepA (Thunk (FOneA yD)) (Thunk NilA) (Thunk RZeroA))) =>
-                               (* `pop q` is `None`, `r` is `ROne y` *)
+                               (* `pop m` is `None`, `r` is `ROne y` *)
                                Tick.ret (Thunk (DeepA (Thunk (FOneA xD)) (Thunk NilA) (Thunk (ROneA yD))))
                            | Some (xD, Thunk (DeepA (Thunk (FTwoA yD zD)) mD rD)) =>
-                               (* `pop q` is `Some ((y, z), q)` *)
+                               (* `pop m` is `Some ((y, z), q)` *)
                                let+ mD := popD m (Some (zipT yD zD, mD)) in
                                Tick.ret (Thunk (DeepA (Thunk (FOneA xD)) mD rD))
                            | _ => bottom
@@ -796,6 +804,8 @@ Fixpoint heightA (A : Type) (qA : QueueA A) : nat :=
                         | Undefined => 0
                         end
   end.
+
+(* Cost *)
 
 Lemma pushD_cost_mono : forall (A : Type) `{LessDefined A} (q : Queue A) (x : A) (d1 d2 : QueueA A),
     d1 `less_defined` d2 ->
