@@ -495,6 +495,17 @@ Qed.
   ExactMaximal (QueueA A) (Queue A).
 Admitted.
 
+#[global] Instance BottomOf (A : Type) : BottomOf (QueueA A) :=
+  fun q => match q with
+           | NilA => NilA
+           | DeepA _ _ _ => DeepA Undefined Undefined Undefined
+           end.
+
+#[global] Instance BottomIsLeast_QueueA (A : Type) `{LessDefined A} : BottomIsLeast (QueueA A).
+Proof.
+  invert_clear 1; repeat constructor.
+Qed.
+
 #[global] Instance Lub_QueueA : forall (A : Type) `{Lub A}, Lub (QueueA A) :=
   fix lub_QueueA (A : Type) _ (q1 q2 : QueueA A) :=
     match q1, q2 with
