@@ -2,6 +2,7 @@ From Coq Require Import Arith Psatz Relations RelationClasses.
 From Clairvoyance Require Import Core Approx Tick.
 
 Import Tick.Notations.
+Open Scope tick_scope.
 
 Set Implicit Arguments.
 Set Contextual Implicit.
@@ -1194,8 +1195,7 @@ Proof.
     + destruct q.
       * simpl. lia.
       * unfold Potential_Queue.
-        destruct (Tick.val (popD (Deep f q r) (Some (Undefined, Thunk x)))).
-        -- unfold debt, Debitable_T in H0. lia.
-        -- unfold debt, Debitable_T in H0. lia.
+        destruct (Tick.val (popD (Deep f q r) (Some (Undefined, Thunk x))));
+          unfold debt, Debitable_T in H0; lia.
 Qed.
 #[export] Existing Instance physicist's_argumentD.
