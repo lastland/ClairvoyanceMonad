@@ -348,10 +348,17 @@ Inductive LessDefined_QueueA A `{LessDefined A} : LessDefined (QueueA A) :=
 #[global] Hint Constructors LessDefined_QueueA : core.
 #[global] Existing Instance LessDefined_QueueA.
 
-Lemma LessDefined_QueueA_refl A `{LessDefined A} :
+Lemma LessDefined_QueueA_refl A `{LessDefined A, Reflexive A less_defined} :
   (forall (x : A), x `less_defined` x) -> forall (x : QueueA A), x `less_defined` x.
 Proof.
-Admitted.
+  induction x.
+  - constructor.
+  - assert (@Reflexive (A * A) less_defined) by apply Reflexive_LessDefined_prod.
+    assert (@Reflexive (T (FrontA A)) less_defined) by apply Reflexive_LessDefined_T.
+    assert (@Reflexive (T (RearA A)) less_defined) by apply Reflexive_LessDefined_T.
+    constructor; auto.
+    invert_clear H2; constructor. apply H2; auto.
+Qed.
 #[global] Hint Resolve LessDefined_QueueA_refl : core.
 
 #[global] Instance Reflexive_LessDefined_QueueA A `{LDA : LessDefined A, Reflexive A LDA} :
@@ -360,11 +367,22 @@ Proof.
   unfold Reflexive. eauto.
 Qed.
 
-Lemma LessDefined_QueueA_trans A `{LessDefined A} :
+Lemma LessDefined_QueueA_trans A `{LessDefined A, Transitive A less_defined} :
   (forall (x y z : A), x `less_defined` y -> y `less_defined` z -> x `less_defined` z) ->
   forall (x y z : QueueA A), x `less_defined` y -> y `less_defined` z -> x `less_defined` z.
 Proof.
-Admitted.
+  induction y.
+  - repeat invert_clear 1. auto.
+  -  assert (@Transitive (T (FrontA A)) less_defined) by apply Transitive_LessDefined_T.
+     assert (@Transitive (T (RearA A)) less_defined) by apply Transitive_LessDefined_T.
+     assert (@Transitive (A * A) less_defined) by apply Transitive_LessDefined_prod.
+    repeat invert_clear 1. repeat constructor; try (etransitivity; eauto).
+    invert_clear H2; repeat match goal with
+                       | H : ?x `less_defined` ?y |- _ =>
+                           (head_is_constructor x + head_is_constructor y); invert_clear H
+                       end; constructor.
+    apply H2; auto.
+Qed.
 #[global] Hint Resolve LessDefined_QueueA_trans : core.
 
 #[global] Instance Transitive_LessDefined_QueueA A `{LDA : LessDefined A, Transitive A LDA} :

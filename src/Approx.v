@@ -322,6 +322,13 @@ Proof.
   intros [? ?]. split; reflexivity.
 Qed.
 
+#[global] Instance Transitive_LessDefined_prod {a b}
+  `{lda : LessDefined a, ldb : LessDefined b, Transitive a lda, Transitive b ldb} :
+  Transitive (@LessDefined_prod a b lda ldb).
+Proof.
+  repeat inversion 1. repeat constructor; etransitivity; eauto.
+Qed.
+
 #[global] Instance ExactMaximal_prod {a aA b bA} `{ExactMaximal a aA, ExactMaximal b bA}
   : ExactMaximal (a * b) (aA * bA).
 Proof.
