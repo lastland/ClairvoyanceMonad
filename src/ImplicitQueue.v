@@ -236,7 +236,17 @@ Qed.
 #[global] Instance ExactMaximal_Front A B `{ExactMaximal B A} :
   ExactMaximal (FrontA B) (Front A).
 Proof.
-Admitted.
+  intros xA []; unfold exact, Exact_Front; inversion 1; subst; f_equal.
+  - destruct x2; unfold exact, Exact_T.
+    + f_equal. apply H. inversion H2; subst. assumption.
+    + inversion H2.
+  - destruct x2; unfold exact, Exact_T.
+    + f_equal. apply H. inversion H3; subst. assumption.
+    + inversion H3.
+  - destruct y2; unfold exact, Exact_T.
+    + f_equal. apply H. inversion H5; subst. assumption.
+    + inversion H5.
+Qed.
 
 #[global] Instance Lub_FrontA (A : Type) `{Lub A} : Lub (FrontA A) :=
   fun f1 f2 =>
@@ -1189,4 +1199,3 @@ Proof.
         -- unfold debt, Debitable_T in H0. lia.
 Qed.
 #[export] Existing Instance physicist's_argumentD.
-
