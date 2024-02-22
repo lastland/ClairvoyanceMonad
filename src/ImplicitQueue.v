@@ -693,6 +693,22 @@ Fixpoint pop (A : Type) (q : Queue A) : option (A * Queue A) :=
   | Deep (FTwo x y) m r => Some (x, Deep (FOne y) m r)
   end.
 
+Lemma pop_None_inv (A : Type) (q : Queue A) : pop q = None -> q = Nil.
+Proof.
+  refine (match q with
+          | Nil => _
+          | Deep (FOne _) m r => match pop m with
+                          | None => match r with
+                                    | RZero => _
+                                    | ROne _ => _
+                                    end
+                          | Some _ => _
+                          end
+          | Deep (FTwo _ _) _ _ => _
+          end); simpl; auto; invert_clear 1.
+Qed.
+#[global] Hint Resolve pop_None_inv : core.
+
 Lemma pop_ind :
   forall (P : forall (A : Type), Queue A -> option (A * Queue A) -> Prop),
     (forall A, P A Nil None) ->
