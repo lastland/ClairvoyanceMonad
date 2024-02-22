@@ -70,6 +70,16 @@ Ltac head_is_constructor t := match t with
                               | _ => is_constructor t
                               end.
 
+(* An incomplete tactic that indicates whether the head of a term
+   is a constructor or projection. *)
+Ltac head_is_constructor_or_proj t :=
+  match t with
+  | ?f ?x => head_is_constructor_or_proj f
+  | fst => idtac
+  | snd => idtac
+  | _ => is_constructor t
+  end.
+
 (* Tactic to invert/subst/clear a single hypothesis of the form
 
    P x1 x2 ... (C y1 y2 ... ym) ... xn
@@ -483,9 +493,43 @@ Proof.
           end); simpl; eauto.
 Qed.
 
-Lemma pushD_approx A `{LessDefined A} (q : Queue A) (x : A) (outD : QueueA A) :
-  outD `is_approx` push q x -> Tick.val (pushD q x outD) `is_approx` (q, x).
-Admitted.
+Lemma pushD_approx : forall (A : Type) `{LessDefined A} (q : Queue A) (x : A) (outD : QueueA A),
+    outD `is_approx` push q x -> Tick.val (pushD q x outD) `is_approx` (q, x).
+Proof.
+  intros ? LDA ? ? ?. revert A q x LDA outD.
+  apply (push_ind (fun A q x q' => forall `{LessDefined A} (outD : QueueA A),
+                       outD `less_defined` exact q' ->
+                       Tick.val (pushD q x outD) `less_defined` exact (q, x)));
+    intros until outD.
+  - refine (match outD with
+            | DeepA (Thunk (FOneA xD)) (Thunk NilA) (Thunk RZeroA) => _
+            | _ => _
+            end); intro Happrox;
+      repeat match goal with
+        | H : ?x `less_defined` ?y |- _ =>
+            (head_is_constructor_or_proj x + head_is_constructor_or_proj y); invert_clear H
+        end; repeat constructor; simpl; repeat constructor; auto.
+  - refine (match outD with
+            | DeepA fD mD (Thunk (ROneA xD)) => _
+            | _ => bottom
+            end); intro Happrox;
+      repeat match goal with
+        | H : ?x `less_defined` ?y |- _ =>
+            (head_is_constructor_or_proj x + head_is_constructor_or_proj y); invert_clear H
+        end; repeat constructor; auto.
+  - refine (match outD with
+            | DeepA fD mD' (Thunk RZeroA) => _
+            | _ => _
+            end); try solve [ repeat constructor ].
+    intro Happrox.
+    invert_clear Happrox as [ | ? ? ? ? ? ? HfD HmD' HrD ].
+    invert_clear HmD' as [ | mA' ? HmA' ]. 1: repeat constructor; auto.
+    specialize (H _ _ HmA').
+    simpl. destruct (Tick.val (pushD m (y, x) mA')) as [ mD pD ].
+    invert_clear H as [ HmD HpD ]. simpl in *.
+    invert_clear HpD as [ | p ? Hp ]; [ | destruct p; invert_clear Hp ];
+      repeat constructor; simpl; auto.
+Qed.
 
 Fixpoint pop (A : Type) (q : Queue A) : option (A * Queue A) :=
   match q with
@@ -552,9 +596,47 @@ Fixpoint popD A (q : Queue A) (outD : option (T A * T (QueueA A))) :
                              end
     end.
 
-Lemma popD_approx A `{LessDefined A} (q : Queue A) (outD : option (T A * T (QueueA A))) :
-  outD `is_approx` pop q -> Tick.val (popD q outD) `is_approx` q.
-Admitted.
+Lemma popD_approx :
+  forall (A : Type) `{LessDefined A} (q : Queue A) (outD : option (T A * T (QueueA A))),
+    outD `is_approx` pop q -> Tick.val (popD q outD) `is_approx` q.
+Proof.
+  intros A LDA q outD. revert A q LDA outD.
+  apply (pop_ind (fun A q p =>
+                    forall `{LessDefined A} (outD : option (T A * T (QueueA A))),
+                      outD `less_defined` exact p ->
+                      Tick.val (popD q outD) `less_defined` exact q));
+  intros until outD.
+  - refine (match outD with
+            | None => _
+            | _ => _
+            end); repeat constructor.
+  - refine (match outD with
+            | Some (xD, Thunk (DeepA (Thunk (FOneA yD)) mD rD)) => _
+            | _ => _
+            end); intro Happrox;
+      repeat (match goal with
+              | H : ?x `less_defined` ?y |- _ =>
+                  (head_is_constructor x + head_is_constructor y); invert_clear H
+              end; simpl in * ); repeat constructor; auto.
+  - refine (match outD with
+            | Some (xD, Thunk NilA) => _
+            | Some (xD, Thunk (DeepA (Thunk (FOneA yD)) (Thunk NilA) (Thunk RZeroA))) => _
+            | Some (xD, Thunk (DeepA (Thunk (FTwoA yD zD)) mD rD)) => _
+            | _ => _
+            end); revert H;
+      destruct (pop m) as [ [ [ y z ] m' ]  | ] eqn:Hpopeq;
+      teardown;
+      intros;
+      repeat (match goal with
+              | H : ?x `less_defined` ?y |- _ =>
+                  (head_is_constructor x + head_is_constructor y); invert_clear H
+              end; simpl in * );
+      repeat constructor; auto.
+    + replace m with (@Nil (A * A)); try symmetry; auto with *.
+    + replace m with (@Nil (A * A)); try symmetry; auto with *.
+    + apply H. invert_clear H1; invert_clear H2; repeat constructor; auto.
+    + apply H. invert_clear H1; invert_clear H4; repeat constructor; auto.
+Qed.
 
 (* Length of a queue. *)
 Fixpoint length (A : Type) (q : Queue A) : nat :=
