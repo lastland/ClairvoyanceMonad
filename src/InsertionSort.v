@@ -1,9 +1,58 @@
 From Coq Require Import List Arith Psatz.
 
-From Clairvoyance Require Import Core Approx List ListA Tick Misc.
+From Clairvoyance Require Import Core Approx ApproxM List ListA Tick Misc.
 
 Import ListNotations.
 Import Tick.Notations.
+
+Fixpoint insert (x : nat) (xs : list nat) : list nat :=
+  match xs with 
+  | y :: ys => if Nat.leb x y then y :: insert x ys else x :: y :: ys
+  | nil => x :: nil
+  end.
+
+Definition insert_sort (xs : list nat) : list nat :=
+  foldr nil insert xs.
+
+Fixpoint insertA_ (x : nat) (xs : listA nat) : M (listA nat) :=
+  match xs with 
+  | ConsA y ys => 
+      tick >>
+      forcing y (fun y' =>
+      if Nat.leb x y' then 
+        tick >>
+        forcing ys (fun ys' => 
+        let~ t := insertA_ x ys' in
+        ret (ConsA y t)) else ret (ConsA (Thunk x) (Thunk (ConsA y ys))))
+  | NilA => ret (ConsA (Thunk x) (Thunk NilA))
+  end.
+
+Definition insertA (x:T nat) (xs : T(listA nat)) : M (listA nat) :=
+  tick >>
+  tick >>
+  let! x' := force x in
+  let! xs' := force xs in 
+  insertA_ x' xs'.
+
+Lemma insertA__mon (v:nat) (xsA xsA' : listA nat) 
+  : xsA `less_defined` xsA' ->
+    insertA_ v xsA `less_defined` insertA_ v xsA'.
+Proof.
+  intros Hxs; induction Hxs; cbn; solve_mon.
+Qed.
+
+#[global] Hint Resolve insertA__mon : mon.
+
+
+Lemma insertA_mon (v1 v2 :T nat) (xsA xsA' : T (listA nat))
+  : v1 `less_defined` v2 -> xsA `less_defined` xsA' ->
+    insertA v1 xsA `less_defined` insertA v2 xsA'.
+Proof.
+  intros; unfold insertA; solve_mon.
+Qed.
+
+#[global] Hint Resolve insertA_mon : mon.
+
 
 Module CaseStudyInsert.
 
@@ -131,56 +180,3 @@ Admitted.
 
 End CaseStudyInsert.
 
-(* I'm not sure if we need these... *)
-
-(*
-Fixpoint selectA_ (l : listA nat) : M (option (T (listA nat) * nat)) :=
-  tick >>
-  match l with
-  | NilA => ret None
-  | ConsA x xs =>
-    forcing x (fun x =>
-    forcing xs (fun xs =>
-    let! o := selectA_ xs in
-    match o with
-    | None => ret (Some (Thunk NilA, x))
-    | Some (ys, y) =>
-      if x <? y then
-        ret (Some (Thunk (ConsA (Thunk y) ys), x))
-      else
-        ret (Some (Thunk (ConsA (Thunk x) ys), y))
-    end))
-  end.
-
-(* Invariant: n = length l. n is the decreasing argument. *)
-Fixpoint selectsortA (n : nat) (l : T (listA nat)) : M (listA nat) :=
-  tick >>
-  let! l := force l in
-  let! o := selectA_ l in
-  match n, o with
-  | S n, Some (ys, y) =>
-    let~ zs := selectsortA n ys in
-    ret (ConsA (Thunk y) zs)
-  | _, _ => ret NilA
-  end.
-
-Parameter selectsort : forall (l : list nat), list nat.
-
-Lemma selectsortA_cost {l n}
-  : n = length l ->
-    forall (d : listA nat), d `is_approx` exact (selectsort l) ->
-    let m := sizeX' 1 d in
-    selectsortA n (exact l) [[ fun sorted cost => d `less_defined` sorted /\ cost <= m * (length l + 1) ]].
-Proof.
-Admitted.
-
-Lemma selectsortA_cost' {l n}
-  : n = length l ->
-    forall (d : listA nat), d `is_approx` exact (selectsort l) ->
-    exists (lA : T (listA nat)), lA `is_approx` l /\
-    let m := sizeX' 1 d in
-    selectsortA n lA [[ fun sorted cost => d `less_defined` sorted /\ cost <= m * (length l + 1) ]].
-Proof.
-Admitted.
-
-*)

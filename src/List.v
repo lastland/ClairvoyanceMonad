@@ -87,15 +87,6 @@ Fixpoint foldr {a b} (v : b) (f : a -> b -> b)  (xs : list a) : b :=
   end.
 
 
-Fixpoint insert (x : nat) (xs : list nat) : list nat :=
-  match xs with 
-  | y :: ys => if Nat.leb x y then y :: insert x ys else x :: y :: ys
-  | nil => x :: nil
-  end.
-
-Definition insert_sort (xs : list nat) : list nat :=
-  foldr nil insert xs.
-
 
 (* ---------------------- Approximate versions ---------------------- *)
 
@@ -146,27 +137,6 @@ Fixpoint revA_ {a : Type} (xs' : listA a) (ys : T (listA a)) : M (listA a) :=
 Definition revA {a : Type} (xs : T (listA a)) : M (listA a) :=
   let~ ys := ret NilA in
   (fun xs' => revA_ xs' ys) $! xs.
-
-Fixpoint insertA_ (x : nat) (xs : listA nat) : M (listA nat) :=
-  match xs with 
-  | ConsA y ys => 
-      tick >>
-      forcing y (fun y' =>
-      if Nat.leb x y' then 
-        tick >>
-        forcing ys (fun ys' => 
-        let~ t := insertA_ x ys' in
-        ret (ConsA y t)) else ret (ConsA (Thunk x) (Thunk (ConsA y ys))))
-  | NilA => ret (ConsA (Thunk x) (Thunk NilA))
-  end.
-
-Definition insertA (x:T nat) (xs : T(listA nat)) : M (listA nat) :=
-  tick >>
-  tick >>
-  let! x' := force x in
-  let! xs' := force xs in 
-  insertA_ x' xs'.
-
 
 Fixpoint foldlA_ {a b} (f : T b -> T a -> M b) (v : T b) (xs : listA a) : M b :=
   tick >>
@@ -395,26 +365,6 @@ Proof.
 Qed.
 
 #[global] Hint Resolve revA_mon : mon. 
-
-Lemma insertA__mon (v:nat) (xsA xsA' : listA nat) 
-  : xsA `less_defined` xsA' ->
-    insertA_ v xsA `less_defined` insertA_ v xsA'.
-Proof.
-  intros Hxs; induction Hxs; cbn; solve_mon.
-Qed.
-
-#[global] Hint Resolve insertA__mon : mon.
-
-
-Lemma insertA_mon (v1 v2 :T nat) (xsA xsA' : T (listA nat))
-  : v1 `less_defined` v2 -> xsA `less_defined` xsA' ->
-    insertA v1 xsA `less_defined` insertA v2 xsA'.
-Proof.
-  intros; unfold insertA; solve_mon.
-Qed.
-
-#[global] Hint Resolve insertA_mon : mon.
-
 
 Lemma tailX_mon {a} (xs xs' : T (listA a))
   : xs `less_defined` xs' -> tailX xs `less_defined` tailX xs'.
