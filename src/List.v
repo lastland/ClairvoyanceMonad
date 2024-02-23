@@ -1,4 +1,3 @@
-
 From Coq Require Import Arith List Psatz Morphisms Relations.
 From Equations Require Import Equations.
 
@@ -264,10 +263,18 @@ Definition sumOfTakeD (n : nat) (xs : list nat) (outD : nat) : Tick (T (listA na
   let+ xsD := thunkD (takeD n xs) take_xsD in
   Tick.ret xsD.
 
+(* Demand function for [revA].
+   [revA] has to traverse the list: the input demand is the whole list.
+   (Actually, a finer solution is to force only the spine, not the elements,
+   since they are protected by [T], but, simplicity.) *)
+Definition revD {a} (xs : list a) (outD : listA a) : Tick (T (listA a)) :=
+  Tick.MkTick (1 + length xs) (exact xs).
+
 Lemma lsumD_cost (xs : list nat) outD :
   Tick.cost (lsumD xs outD) = 1 + length xs.
 Proof.
   reflexivity. Qed.
+
 
 Lemma takeD_cost (n : nat) (xs : list nat) outD :
   Tick.cost (takeD n xs outD) <= 1 + n.
@@ -338,252 +345,6 @@ Proof.
       rewrite takeD_cost.
       lia.
 Qed.
-
-(* Select and selsort as given by Software Foundations Chapter 3 *)
-Fixpoint select (x: nat) (l: list nat) : nat * list nat :=
-  match l with
-  | [] => (x, [])
-  | h :: t =>
-    if x <=? h
-    then let (j, l') := select x t in (j, h :: l')
-    else let (j, l') := select h t in (j, x :: l')
-  end.
-
-Fixpoint selection_sort (l : list nat) (n : nat) : list nat :=
-  match l, n with
-  | _, 0 => [] (* ran out of fuel *)
-  | [], _ => []
-  | x :: r, S n' => let (y, r') := select x r in y :: selection_sort r' n'
-end.
-
-(* The entire list must be forced to select smallest element *)
-Definition selectD (x : nat) (xs : list nat) (outD : listA nat) : Tick (T (listA nat)) :=
-  Tick.MkTick (1 + length xs) (exact (x::xs)).
-
-(* The entire list is forced one selection at a time*)
-Fixpoint selection_sortD (xs : list nat) (outD : listA nat) : Tick (T (listA nat)) :=
-  Tick.tick >>
-  match xs, outD with
-  | [], _ => Tick.ret (Thunk NilA)
-  | x :: xs', ConsA zD zsD =>
-    let+ _ := thunkD (selection_sortD xs') zsD in
-    let+ xsD := selectD x xs' (exact xs) in
-    Tick.ret xsD (* We invariably force the entire input list *)
-  | _, _ => bottom
-  end.
-
-Lemma sort_produces_element (n : nat) (x : nat) (xs : list nat) :
-  selection_sort (x :: xs) (S n) = fst (select x xs) :: selection_sort (snd (select x xs)) n.
-Proof.
-  simpl. destruct (select x xs). simpl. reflexivity.
-Qed.
-
-Definition head_def {a} (xs : list a) (d : a) : a :=
-  match xs with
-  | [] => d
-  | x :: _ => x
-  end.
-
-(* We force the empty list or the first element only *)
-Definition headD {a} (xs : list a) (d : a) (outD : a) : Tick (T (listA a)) :=
-  Tick.tick >>
-  match xs with
-  | [] => Tick.ret (Thunk NilA)
-  | x :: _ => Tick.ret (Thunk (ConsA (Thunk x) (Undefined)))
-  end.
-
-Definition head_selection_sortD (xs : list nat) (outD : nat) : Tick (T (listA nat)) :=
-  let+ list_headD := headD (selection_sort xs (length xs)) 0 outD in
-  let+ xsD := thunkD (selection_sortD xs) list_headD in
-  Tick.ret xsD.
-
-Lemma head_selection_sortD_cost (xs : list nat) (outD : nat) :
-  outD `is_approx` head_def (selection_sort xs (length xs)) 0 ->
-  forall xsA, xsA = Tick.val (head_selection_sortD xs outD) ->
-  Tick.cost (head_selection_sortD xs outD) <= length xs + 2.
-Proof.
-  intros. rewrite H. destruct xs.
-  - simpl. lia.
-  - unfold head_selection_sortD.
-    assert (H1 : length (n :: xs) = S (length xs)). auto. rewrite H1.
-    rewrite sort_produces_element. simpl. lia.
-Qed.
-
-Definition take_selection_sortD (n : nat) (xs : list nat) (outD : listA nat) :
-  Tick (T (listA nat)) :=
-  let+ list_takeD := takeD n (selection_sort xs (length xs)) outD in
-  let+ xsD := thunkD (selection_sortD xs) list_takeD in
-  Tick.ret xsD.
-
-Lemma selection_sortD_cost (xs : list nat) (outD : listA nat) :
-  Tick.cost (selection_sortD xs outD) <= (sizeX' 1 outD) * (length xs + 2).
-Proof.
-  intros. generalize dependent xs. induction outD;
-  intro; destruct xs; simpl; try rewrite IHoutD; lia.
-Qed.
-
-Lemma headD_demand {a} (xs : list a) (d : a) (outD : a) : 
-  sizeX 1 (Tick.val (headD xs d outD)) = 1.
-Proof.
-  destruct xs; reflexivity.
-Qed.
-
-Theorem head_selection_sortD_cost' (xs : list nat) (outD : nat) :
-  Tick.cost (head_selection_sortD xs outD) <= length xs + 3.
-Proof.
-  unfold head_selection_sortD. unfold Tick.bind. simpl.
-  unfold thunkD. destruct (selection_sort xs (length xs)); simpl;
-  rewrite selection_sortD_cost; simpl; lia.
-Qed.
-
-Lemma takeD_demand {a} (n : nat) (xs : list a) (outD : listA a) :
-  sizeX 1 (Tick.val (takeD n xs outD)) <= sizeX' 1 outD.
-Proof.
-  generalize dependent n. generalize dependent xs.
-  induction outD; intros;
-  destruct n; destruct xs; simpl; try lia.
-  destruct (Tick.val (takeD n xs outD)) eqn : E; try lia.
-  apply le_n_S. assert (H' : sizeX' 1 x = sizeX 1 (Thunk x)). { auto. }
-  rewrite H'. symmetry in E. rewrite E. apply IHoutD.
-Qed.
-
-Theorem take_selection_sortD_cost (n : nat) (xs : list nat) (outD : listA nat) :
-  Tick.cost (take_selection_sortD n xs outD) <= (sizeX' 1 outD) * (length xs + 2) + n + 1.
-Proof.
-  unfold take_selection_sortD. unfold Tick.bind. 
-  simpl. rewrite takeD_cost. unfold thunkD. 
-  destruct (Tick.val (takeD n (selection_sort xs (length xs)) outD)) eqn:  E.
-  - assert (H : sizeX' 1 x = sizeX 1 (Thunk x)). { reflexivity. }
-    symmetry in E. rewrite E in H.
-    rewrite selection_sortD_cost. rewrite H. rewrite takeD_demand. lia.
-  - simpl. lia.
-Qed.
-
-
-(* Now, what if we did the same but with mergesort *)
-
-(* MergeSort and its attendent functions as given by Software Foundations *) 
-
-Fixpoint split {X:Type} (l:list X) : (list X * list X) :=
-  match l with
-  | [] => ([],[])
-  | [x] => ([x],[])
-  | x1 :: x2 :: l' =>
-    let (l1,l2) := split l' in
-    (x1 :: l1, x2 :: l2)
-  end.
-
-Fixpoint merge l1 l2 n :=
-  match l1, l2, n with
-  | _, _, 0 => []
-  | [], _, _ => l2
-  | _, [], _ => l1
-  | a1::l1', a2::l2', S n =>
-      if a1 <=? a2 then a1 :: merge l1' l2 n else a2 :: merge l1 l2' n
-  end.
-
-(* We swapped this to use fuel instead of well-founded induction *)
-Fixpoint mergesort' (l: list nat) (n : nat) : list nat :=
-  match n, l with
-  | 0, _ => [] (* Ran out of fuel *)
-  | _, [] => []
-  | _, [x] => [x]
-  | S n, _ => let (l1,l2) := split l in 
-              merge (mergesort' l1 n) (mergesort' l2 n) (length l)
-  end.
-
-Definition mergesort (l : list nat) : list nat :=
-  mergesort' l (length l).
-
-(* Demand functions for split/merge/mergesort *)
-
-Definition thunkTupleD {a b} `{Bottom b} (f : a * a -> b) (x : T a * T a) (p : a) : b :=
-  match x with
-  | (Thunk x1, Thunk x2) => f (x1, x2)
-  | (Thunk x1, Undefined) => f (x1, p)
-  | (Undefined, Thunk x2) => f (p, x2)
-  | (Undefined, Undefined) => bottom
-  end.
-
-Fixpoint splitD {a : Type} (xs : list a) (outD : listA a * listA a) : Tick (T (listA a)) :=
-  Tick.tick >>
-  match xs, outD with
-  | [], _ => Tick.ret (Thunk NilA)
-  | [x], _ => Tick.ret (Thunk (ConsA (Thunk x) (Thunk NilA)))
-  | x :: x' :: xs, (ConsA zD zsD, ConsA zD' zsD') =>
-    Tick.tick >>
-    let+ xsD := thunkTupleD (splitD xs) (zsD, zsD') (ConsA Undefined Undefined) in
-    Tick.ret (Thunk (ConsA zD (Thunk (ConsA zD' xsD))))
-  | _, _ => bottom
-  end.
-
-Compute splitD [1;2;3;4;5;6;7;8] (exact [1;3;5;7], exact [2;4;6;8]).
-
-Fixpoint mergeD (xs ys : list nat) (outD : listA nat) : Tick (T (listA nat) * T (listA nat)) :=
-  Tick.tick >>
-  match xs, ys, outD with
-  | [], _, _ => Tick.ret (Thunk NilA, Undefined)
-  | _, [], _ => Tick.ret (Undefined, Thunk NilA)
-  | x :: xs, y :: ys, ConsA zD (Thunk (ConsA zD' zsD)) =>
-    Tick.tick >>
-    let+ (xsD, ysD) := thunkD (mergeD xs ys) zsD in
-    Tick.ret (Thunk (ConsA zD xsD), Thunk (ConsA zD' ysD))
-  | _, _, _ => bottom
-  end.
-
-Fixpoint mergesortD' (l : list nat) (n : nat) (outD : listA nat) : Tick (T (listA nat)) :=
-  Tick.tick >>
-  match l, outD, n with
-  | _, _, 0 => Tick.ret Undefined
-  | [], _, _ => Tick.ret (Thunk NilA)
-  | [x], _, _ => Tick.ret (Thunk (ConsA (Thunk x) (Thunk NilA)))
-  | _ :: _, ConsA _ _, S n =>
-    let (xs, ys) := split l in
-    let+ (mxsD, mysD) := mergeD (mergesort xs) (mergesort ys) outD in
-    let+ xsD := thunkD (mergesortD' xs n) mxsD in
-    let+ ysD := thunkD (mergesortD' ys n) mysD in
-    let+ lD := thunkTupleD (splitD l) (xsD, ysD) (ConsA Undefined Undefined) in
-    Tick.ret lD
-  | _, _, _ => bottom
-  end.
-
-Definition merge_sortD (l : list nat) (outD : listA nat) : Tick (T (listA nat)) :=
-  mergesortD' l (length l) outD.
-
-(* Long-term goal:
-   show that   head (selection_sort xs)   in O(n)
-   (also could be merge_sort) *)
-
-(* Demand function for [revA].
-   [revA] has to traverse the list: the input demand is the whole list.
-   (Actually, a finer solution is to force only the spine, not the elements,
-   since they are protected by [T], but, simplicity.) *)
-Definition revD {a} (xs : list a) (outD : listA a) : Tick (T (listA a)) :=
-  Tick.MkTick (1 + length xs) (exact xs).
-
-(* Demand function for [insertA]. 
-   The input list needs to be forced only as long as its elements are <= x. 
-*)
-Fixpoint insertD_ (x:nat) (xs: list nat)  (outD : listA nat) : Tick (T (listA nat)) :=
-  match xs, outD with 
-  | nil, _ => Tick.ret (Thunk NilA)
-  | y :: ys, ConsA zD zsD => 
-     Tick.tick >>
-     if Nat.leb x y then 
-       Tick.tick >>
-       let+ ysD := thunkD (insertD_ x ys) zsD in
-       Tick.ret (Thunk (ConsA (Thunk y) ysD))
-     else 
-       Tick.ret zsD
-  | _ , _ => bottom
-  end.
-
-
-Definition insertD (x:nat) (xs: list nat) (outD : listA nat) : Tick (T nat * T (listA nat)) :=
-  Tick.tick >> Tick.tick >>
-  let+ ysD := insertD_ x xs outD in 
-  Tick.ret (Thunk x, ysD).
-
 
 (* ----------------------------------------------------- *)
 
@@ -1025,166 +786,6 @@ Qed.
 
 End CaseStudyFolds.
 
-Module CaseStudyInsert.
-
-Import CaseStudyFolds.
-
-Definition insertA_pessim_ :
-(** The pessimistic specification of [insertA_]. *)
-forall (xs : list nat) (xsA : (listA nat)) (v : nat),
-  xsA `is_approx` xs ->  
-  (insertA_ v xsA)
-    {{ fun zsA cost => cost <= 2 * length xs }}.
-Proof.
-  intros. revert xsA H.
-  induction xs; intros.
-  - mgo_list.
-  - mgo_list. 
-    destruct (v <=? exact a) eqn:LE.
-    + mgo_. subst. inv H4.
-      relax_apply IHxs; eauto.
-      intros xs' n L.
-      mgo_.
-    + mgo_. 
-Qed.
-
-Definition insertA_pessim :
-(** The pessimistic specification of [foldrA]. *)
-forall (xs : list nat) (xsA : T (listA nat)) (vA : T nat) (v : nat),
-  vA `is_approx` v ->
-  xsA `is_approx` xs ->  
-  (insertA vA xsA)
-    {{ fun zsA cost => cost <= 2 * length xs + 2 }}.
-Proof.
-  intros xs xsA. 
-  destruct xsA; unfold insertA; [|mgo_list].
-  intros. 
-  mgo_. subst. inv H. inv H0.
-  relax_apply insertA_pessim_. eauto.
-  cbn.
-  intros y n h. lia.
-Qed.
-
-Definition sizeT {a} ( x : T a) : nat := 
-  match x with 
-  | Thunk v => 1
-  | Undefined => 0
-  end.
-
-Definition insertSize : T (listA nat) -> nat := sizeAX sizeT 0.
-
-(* I don't know how to give an optimistic specification of insertA.
-   We don't know how many of the list elements need to be evaluated 
-   when we insert. *)
-Theorem insertA_prefix_cost : forall x (xsA : (listA nat)) n,
-    1 <= n <= sizeX' 0 xsA ->
-    (insertA_ x xsA) [[ fun zsA cost => n + 1 = sizeX' 0 zsA /\ cost <= 2 * n ]].
-Proof.
-  intro x.
-  induction xsA; mgo_list.
-Abort.
-
-
-Lemma insertD__approx (x : nat) (xs : list nat) (outD : _)
-  : outD `is_approx` insert x xs -> Tick.val (insertD_ x xs outD) `is_approx` xs.
-Proof.
-  revert outD; induction xs; cbn.
-  - intros; solve_approx.
-  - autorewrite with exact; intros. 
-    destruct (x <=? a) eqn:LE.
-    + inversion H; subst.    
-      inversion H4; subst; cbn. solve_approx.
-      specialize (IHxs _ H2). solve_approx.
-    + inversion H; subst. solve_approx.
-Qed.
-
-Lemma insertD_size x (xs : list nat) (outD : _)
-  : outD `is_approx` insert x xs ->
-    let ins := Tick.val (insertD_ x xs outD) in
-    (sizeX 0 ins) <= sizeX' 0 outD.
-Proof.
-  revert outD; induction xs; cbn; intros. 
-  inversion H; subst; cbn.
-  - destruct xs; lia. 
-  - destruct (x <=? a) eqn:L.
-    + inversion H; subst. cbn.
-      inversion H4. subst. cbn. auto.
-      subst. specialize (IHxs _ H2). cbn in IHxs.
-      cbn. destruct (Tick.val _) eqn:T. unfold sizeX in IHxs. lia. lia.
-    + inversion H. subst. cbn.
-      destruct xs0. simpl. auto. simpl. auto.
-Defined.
-
-
-Lemma insertD_spec x (xs : list nat) (outD : listA nat)
-  : outD `is_approx` insert x xs ->
-    forall xsD dcost, Tick.MkTick dcost xsD = insertD_ x xs outD ->
-    insertA (Thunk x) xsD [[ fun out cost => outD `less_defined` out /\ cost <= dcost ]].
-Proof.
-  unfold insertA.
-  revert outD; induction xs; cbn; intros * Hout *.
-  - unfold Tick.ret. intros h. inversion h. subst. 
-    mgo_.
-Admitted.
-
-End CaseStudyInsert.
-
-
-Lemma less_defined_tail_cons {a} (l : T (listA a)) x xs
-  : l `less_defined` Thunk (ConsA x xs) ->
-    l `less_defined` Thunk (ConsA x (tailX l)).
-Proof.
-  inversion 1; subst; constructor. inversion H2; constructor; cbn; [ auto | reflexivity ].
-Qed.
-
-Fixpoint selectA_ (l : listA nat) : M (option (T (listA nat) * nat)) :=
-  tick >>
-  match l with
-  | NilA => ret None
-  | ConsA x xs =>
-    forcing x (fun x =>
-    forcing xs (fun xs =>
-    let! o := selectA_ xs in
-    match o with
-    | None => ret (Some (Thunk NilA, x))
-    | Some (ys, y) =>
-      if x <? y then
-        ret (Some (Thunk (ConsA (Thunk y) ys), x))
-      else
-        ret (Some (Thunk (ConsA (Thunk x) ys), y))
-    end))
-  end.
-
-(* Invariant: n = length l. n is the decreasing argument. *)
-Fixpoint selectsortA (n : nat) (l : T (listA nat)) : M (listA nat) :=
-  tick >>
-  let! l := force l in
-  let! o := selectA_ l in
-  match n, o with
-  | S n, Some (ys, y) =>
-    let~ zs := selectsortA n ys in
-    ret (ConsA (Thunk y) zs)
-  | _, _ => ret NilA
-  end.
-
-Parameter selectsort : forall (l : list nat), list nat.
-
-Lemma selectsortA_cost {l n}
-  : n = length l ->
-    forall (d : listA nat), d `is_approx` exact (selectsort l) ->
-    let m := sizeX' 1 d in
-    selectsortA n (exact l) [[ fun sorted cost => d `less_defined` sorted /\ cost <= m * (length l + 1) ]].
-Proof.
-Admitted.
-
-Lemma selectsortA_cost' {l n}
-  : n = length l ->
-    forall (d : listA nat), d `is_approx` exact (selectsort l) ->
-    exists (lA : T (listA nat)), lA `is_approx` l /\
-    let m := sizeX' 1 d in
-    selectsortA n lA [[ fun sorted cost => d `less_defined` sorted /\ cost <= m * (length l + 1) ]].
-Proof.
-Admitted.
 
 (* Partial function: we assume that both arguments approximate the same list *)
 Fixpoint lub_listA {a} (xs ys : listA a) : listA a :=
@@ -1214,3 +815,11 @@ Proof.
     1: inversion H; inversion H4; subst; invert_approx; constructor; reflexivity + auto; inversion H8; invert_approx; reflexivity.
     inversion H5; subst; constructor; [ reflexivity | auto ].
 Qed.
+
+Lemma less_defined_tail_cons {a} (l : T (listA a)) x xs
+  : l `less_defined` Thunk (ConsA x xs) ->
+    l `less_defined` Thunk (ConsA x (tailX l)).
+Proof.
+  inversion 1; subst; constructor. inversion H2; constructor; cbn; [ auto | reflexivity ].
+Qed.
+

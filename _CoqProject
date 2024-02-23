@@ -10,6 +10,9 @@ src/FingerTreeM.v
 src/Fix.v
 src/ListA.v
 src/List.v
+src/SelectionSort.v
+src/MergeSort.v
+src/InsertionSort.v
 src/BankersQueue.v
 src/RealtimeBankersQueue.v
 src/Eval.v
