@@ -400,8 +400,12 @@ Lemma pushD_cost {a} (q : Queue a) (x : a) (outD : QueueA a)
     let cost := Tick.cost (pushD q x outD) in
     debt qA + cost <= 7 + debt outD.
 Proof.
-  intros Wq Hout; unfold pushA, pushD. intros. repeat (mforward idtac).
-Admitted.
+  intros Wq Hout; unfold pushA, pushD. simpl. inversion 1; subst.
+  unfold debt, Debitable_T, debt, Debitable_QueueA. simpl.
+  destruct (backA outD) as [outD' | ].
+  - simpl. induction outD'; simpl; lia.
+  - simpl. lia.
+Qed.
 
 (** Cost specification for [pushA] *)
 Lemma pushA_cost {a} (q : Queue a) (x : a) (outD : QueueA a)
@@ -414,6 +418,8 @@ Proof.
   intros * []; split; [ auto | ]. apply pushD_cost in H0; auto.
   lia.
 Qed.
+
+Print Assumptions pushA_cost.
 
 (** Relaxed cost specification *)
 (* Note that there are two ways from [pushD_spec] (above) to [pushA_cost'] (below),
