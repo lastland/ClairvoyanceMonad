@@ -1,6 +1,7 @@
 From Coq Require Import List Arith Psatz.
 
 From Clairvoyance Require Import Core Approx List ListA Tick Misc.
+From Equations Require Import Equations.
 
 Import ListNotations.
 Import Tick.Notations.
@@ -22,9 +23,74 @@ Fixpoint selection_sort (l : list nat) (n : nat) : list nat :=
   | x :: r, S n' => let (y, r') := select x r in y :: selection_sort r' n'
 end.
 
+Fixpoint selectD (x : nat) (l : list nat) (outD : listA nat) : Tick (T (listA nat)) :=
+  Tick.tick >>
+  match l with
+  | [] => match outD with
+        | NilA => Tick.ret (Thunk NilA)
+        | _ => bottom
+        end
+  | h :: t => if x <=? h then 
+            match outD with
+            | ConsA _ t' =>
+                let+ tD := thunkD (selectD x t) t' in
+                Tick.ret (Thunk (ConsA (Thunk h) tD))
+            | _ => bottom
+            end else
+            match outD with
+            | ConsA _ t' =>
+                let+ tD := thunkD (selectD h t) t' in
+                Tick.ret (Thunk (ConsA (Thunk h) tD))
+            | _ => bottom
+            end
+    end.
+           
 (* The entire list must be forced to select smallest element *)
-Definition selectD (x : nat) (xs : list nat) (outD : listA nat) : Tick (T (listA nat)) :=
-  Tick.MkTick (1 + length xs) (exact (x::xs)).
+Definition selectD' (x : nat) (xs : list nat) (outD : listA nat) : Tick (T (listA nat)) :=
+  Tick.MkTick (1 + length xs) (exact xs).
+
+
+Lemma selectD_selectD'_leq : forall x xs outD,
+    Tick.cost (selectD x xs outD) <= Tick.cost (selectD' x xs outD).
+Proof.
+  intros x xs. revert x.
+  induction xs as [|y ys]; intros.
+  - destruct outD; cbn; lia.
+  - destruct outD; cbn; destruct (x <=? y); simpl; try lia.
+    + destruct x2; simpl; try lia.
+      specialize (IHys x x0). unfold selectD' in IHys.
+      simpl in IHys. lia.
+    + destruct x2; simpl; try lia.
+      specialize (IHys y x0). unfold selectD' in IHys.
+      simpl in IHys. lia.
+Qed.
+
+Lemma selectD_selectD'_eq : forall x xs outD,
+    let (_, out) := select x xs in
+    outD = exact out ->
+    selectD x xs outD = selectD' x xs outD.
+Proof.
+  intros x xs. revert x.
+  induction xs as [|y ys]; intros.
+  - destruct outD; cbn; [reflexivity|inversion 1].
+  - destruct outD; cbn; destruct (x <=? y) eqn:Hleq; simpl.
+    + destruct (select x ys); inversion 1.
+    + destruct (select y ys); inversion 1.
+    + unfold Tick.bind. destruct (select x ys) eqn:Hselect.
+      inversion 1; subst. unfold selectD'.
+      unfold exact, Exact_list in H.
+      simp exact_listA in H.
+      simpl. specialize (IHys x (Exact_list l)).
+      rewrite Hselect in IHys. specialize (IHys eq_refl).
+      rewrite IHys. simpl; f_equal. lia.
+    + unfold Tick.bind. destruct (select y ys) eqn:Hselect.
+      inversion 1; subst. unfold selectD'.
+      unfold exact, Exact_list in H.
+      simp exact_listA in H.
+      simpl. specialize (IHys y (Exact_list l)).
+      rewrite Hselect in IHys. specialize (IHys eq_refl).
+      rewrite IHys. simpl; f_equal. lia.
+Qed.
 
 (* The entire list is forced one selection at a time*)
 Fixpoint selection_sortD (xs : list nat) (outD : listA nat) : Tick (T (listA nat)) :=
@@ -72,7 +138,9 @@ Proof.
   - simpl. lia.
   - unfold head_selection_sortD.
     assert (H1 : length (n :: xs) = S (length xs)). auto. rewrite H1.
-    rewrite sort_produces_element. simpl. lia.
+    rewrite sort_produces_element. simpl.
+    pose proof (selectD_selectD'_leq n xs (exact (n :: xs))) as Hle.
+    unfold selectD' in Hle. simpl in Hle. lia.
 Qed.
 
 Definition take_selection_sortD (n : nat) (xs : list nat) (outD : listA nat) :
@@ -85,7 +153,11 @@ Lemma selection_sortD_cost (xs : list nat) (outD : listA nat) :
   Tick.cost (selection_sortD xs outD) <= (sizeX' 1 outD) * (length xs + 2).
 Proof.
   intros. generalize dependent xs. induction outD;
-  intro; destruct xs; simpl; try rewrite IHoutD; lia.
+  intro; destruct xs; simpl; try rewrite IHoutD; try lia.
+  - pose proof (selectD_selectD'_leq n xs (exact (n :: xs))) as Hle.
+    unfold selectD' in Hle. simpl in Hle. lia.
+  - pose proof (selectD_selectD'_leq n xs (exact (n :: xs))) as Hle.
+    unfold selectD' in Hle. simpl in Hle. lia.
 Qed.
 
 Lemma headD_demand {a} (xs : list a) (d : a) (outD : a) : 
