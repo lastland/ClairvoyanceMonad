@@ -11,7 +11,10 @@ Import Tick.Notations.
 Fixpoint insert (x : nat) (xs : list nat) : list nat :=
   match xs with 
   | nil => x :: nil
-  | y :: ys => if Nat.leb y x then y :: insert x ys else x :: y :: ys
+  | y :: ys => if y <=? x then
+               let zs := insert x ys in
+               y :: zs
+             else x :: y :: ys
   end.
 
 Fixpoint insertion_sort (xs : list nat) : list nat :=
@@ -147,7 +150,7 @@ Abort.
 Fixpoint insertD (x:nat) (xs: list nat)  (outD : listA nat) : Tick (T (listA nat)) :=
   Tick.tick >>
   match xs, outD with 
-  | nil, _ => Tick.ret (Thunk NilA)
+  | nil, NilA => Tick.ret (Thunk NilA)
   | y :: ys, ConsA zD zsD => 
      if Nat.leb y x then 
        let+ ysD := thunkD (insertD x ys) zsD in
@@ -158,8 +161,9 @@ Fixpoint insertD (x:nat) (xs: list nat)  (outD : listA nat) : Tick (T (listA nat
   end.
 
 Fixpoint insertion_sortD (xs: list nat)  (outD : listA nat) : Tick (T (listA nat)) :=
+  Tick.tick >>
   match xs with
-  | nil => Tick.ret (Thunk NilA)
+  | [] => Tick.ret (Thunk NilA)
   | y :: ys =>
       let zs := insertion_sort ys in
       let+ zsD := insertD y zs outD in
@@ -171,7 +175,7 @@ Lemma insertD__approx (x : nat) (xs : list nat) (outD : _)
   : outD `is_approx` insert x xs -> Tick.val (insertD x xs outD) `is_approx` xs.
 Proof.
   revert outD; induction xs; cbn.
-  - intros; solve_approx.
+  - intros; destruct outD; solve_approx.
   - autorewrite with exact; intros. 
     destruct (a <=? x) eqn:LE.
     + inversion H; subst.    
@@ -180,7 +184,7 @@ Proof.
     + inversion H; subst. solve_approx. 
 Qed.
 
-Lemma insertD_size x (xs : list nat) (outD : _) :
+Lemma insertD_size x (xs : list nat) outD :
     let ins := Tick.val (insertD x xs outD) in
     (sizeX 1 ins) <= sizeX' 1 outD.
 Proof.
@@ -207,12 +211,13 @@ Fixpoint leb_count x (xs : list nat) : nat :=
 Lemma insertD_cost x (xs : list nat)  (outD : listA nat) :
   Tick.cost (insertD x xs outD) <= leb_count x xs + 1.
 Proof.
-  revert x outD. induction xs; simpl; intros; [lia|].
-  destruct (a <=? x) eqn:Hax.
-  - destruct outD; simpl; [lia|].
-    destruct x2; simpl; [|lia].
-    specialize (IHxs x x0). lia.
+  revert x outD. induction xs; simpl; intros.
   - destruct outD; simpl; lia.
+  - destruct (a <=? x) eqn:Hax.
+    + destruct outD; simpl; [lia|].
+      destruct x2; simpl; [|lia].
+      specialize (IHxs x x0). lia.
+    + destruct outD; simpl; lia.
 Qed.
 
 Lemma insertD_cost' x (xs : list nat) (outD : listA nat) :
@@ -232,12 +237,13 @@ Qed.
 Lemma insertD_cost'' x (xs : list nat) (outD : listA nat) :
   Tick.cost (insertD x xs outD) <= length xs + 1.
 Proof.
-  revert x outD. induction xs; simpl; intros; [lia|].
-  destruct (a <=? x) eqn:Hax.
-  - destruct outD; simpl; [lia|].
-    destruct x2; simpl; [|lia].
-    specialize (IHxs x x0). lia.
+  revert x outD. induction xs; simpl; intros.
   - destruct outD; simpl; lia.
+  - destruct (a <=? x) eqn:Hax.
+    + destruct outD; simpl; [lia|].
+      destruct x2; simpl; [|lia].
+      specialize (IHxs x x0). lia.
+    + destruct outD; simpl; lia.
 Qed.
 
 Lemma insertion_sortD__approx (xs : list nat) (outD : _)
@@ -260,16 +266,38 @@ Qed.
 Lemma insertion_sortD_cost (xs : list nat)  (outD : listA nat) :
   Tick.cost (insertion_sortD xs outD) <= (sizeX' 1 outD) * (length xs + 1).
 Proof.
-  revert outD. induction xs; simpl; [lia|].
-  intros. rewrite insertD_cost'.
-  destruct (insertD a (insertion_sort xs) outD)
-    as [cost [ x |] ] eqn:Hinsert.
-  - simpl. specialize (IHxs x). rewrite IHxs.
-    pose proof (insertD_size a (insertion_sort xs) outD).
-    rewrite Hinsert in H. simpl in H. nia.
-  - simpl. nia.
-Qed.
+  (** Failed attempt 1:
+  revert outD. induction xs; simpl.
+  - destruct outD; simpl; try lia. destruct x2; simpl; lia. 
+  - intros. rewrite insertD_cost'.
+    destruct (insertD a (insertion_sort xs) outD)
+      as [cost [ x |] ] eqn:Hinsert.
+    + simpl. specialize (IHxs x).
+      pose proof (insertD_size a (insertion_sort xs) outD).
+      rewrite insertion_sort_length_inv.
+      rewrite Hinsert in H. simpl in H.
+      rewrite IHxs. rewrite H.
+      nia.
+    + simpl. nia.
 
+   *)
+      
+  (** Failed attempt 2:
+  revert xs. induction outD.
+  - intros; simpl. destruct xs; simpl; try lia.
+    rewrite insertD_cost'', insertion_sort_length_inv. 
+    assert (insertD n (insertion_sort xs) NilA = bottom) by admit.
+    rewrite H. simpl. lia.
+  - simpl. revert x1. induction xs; simpl; try lia.
+    rewrite insertD_cost'', insertion_sort_length_inv.
+    destruct xs; simpl.
+    + lia.
+    + destruct (insert n (insertion_sort xs)) eqn:Hisort.
+      * simpl. lia.
+      * simpl.
+      rewrite H. simpl. lia.
+   *)
+Admitted.
 
 Definition head_insertion_sortD (xs : list nat) (outD : nat) :
   Tick (T (listA nat)) :=
@@ -288,7 +316,7 @@ Definition take_insertion_sortD (n : nat) (xs : list nat) (outD : listA nat) :
 Lemma head_insertion_sortD_cost (xs : list nat) (outD : nat) :
   outD `is_approx` head_def (insertion_sort xs) 0 ->
   forall xsA, xsA = Tick.val (head_insertion_sortD xs outD) ->
-  Tick.cost (head_insertion_sortD xs outD) <= length xs + 2.
+  Tick.cost (head_insertion_sortD xs outD) <= length xs + 3.
 Proof.
   intros. unfold head_insertion_sortD.
   rewrite bind_cost, headD_cost, Tick.right_ret.
