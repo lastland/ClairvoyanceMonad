@@ -55,6 +55,13 @@ Fixpoint drop {a} (n : nat) (xs : list a) : list a :=
   | S n1, x :: xs1 => drop n1 xs1
   end.
 
+Definition head_def {a} (xs : list a) (d : a) : a :=
+  match xs with
+  | [] => d
+  | x :: _ => x
+  end.
+
+
 (* ---------------------- Section 4: Translation ---------------------- *)
 
 (* Definitions needed for the by-hand translation of the examples from Section 2 *)

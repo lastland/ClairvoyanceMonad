@@ -1,35 +1,41 @@
 From Coq Require Import List Arith Psatz.
 
-From Clairvoyance Require Import Core Approx ApproxM List ListA Tick Misc.
+From Clairvoyance Require Import
+  Core Approx ApproxM List ListA Tick Misc TickCost.
+
+From Equations Require Import Equations.
 
 Import ListNotations.
 Import Tick.Notations.
 
 Fixpoint insert (x : nat) (xs : list nat) : list nat :=
   match xs with 
-  | y :: ys => if Nat.leb x y then y :: insert x ys else x :: y :: ys
   | nil => x :: nil
+  | y :: ys => if Nat.leb y x then y :: insert x ys else x :: y :: ys
   end.
 
-Definition insert_sort (xs : list nat) : list nat :=
-  foldr nil insert xs.
+Fixpoint insertion_sort (xs : list nat) : list nat :=
+  match xs with
+  | nil => nil
+  | y :: ys =>
+      let zs := insertion_sort ys in
+      insert y zs
+  end.
 
 Fixpoint insertA_ (x : nat) (xs : listA nat) : M (listA nat) :=
+  tick >>
   match xs with 
   | ConsA y ys => 
-      tick >>
       forcing y (fun y' =>
       if Nat.leb x y' then 
-        tick >>
         forcing ys (fun ys' => 
         let~ t := insertA_ x ys' in
-        ret (ConsA y t)) else ret (ConsA (Thunk x) (Thunk (ConsA y ys))))
+        ret (ConsA y t))
+      else ret (ConsA (Thunk x) (Thunk (ConsA y ys))))
   | NilA => ret (ConsA (Thunk x) (Thunk NilA))
   end.
 
 Definition insertA (x:T nat) (xs : T(listA nat)) : M (listA nat) :=
-  tick >>
-  tick >>
   let! x' := force x in
   let! xs' := force xs in 
   insertA_ x' xs'.
@@ -43,7 +49,6 @@ Qed.
 
 #[global] Hint Resolve insertA__mon : mon.
 
-
 Lemma insertA_mon (v1 v2 :T nat) (xsA xsA' : T (listA nat))
   : v1 `less_defined` v2 -> xsA `less_defined` xsA' ->
     insertA v1 xsA `less_defined` insertA v2 xsA'.
@@ -53,7 +58,23 @@ Qed.
 
 #[global] Hint Resolve insertA_mon : mon.
 
+Lemma insert_length_inv : forall x xs,
+    length (insert x xs) = length xs + 1.
+Proof.
+  intros x xs. revert x. induction xs.
+  - simpl. lia.
+  - simpl; intros.
+    destruct (a <=? x) eqn:Hax; simpl; [|lia].
+    specialize (IHxs x). lia.
+Qed.
 
+Lemma insertion_sort_length_inv : forall xs,
+    length (insertion_sort xs) = length xs.
+Proof.
+  induction xs; simpl; [lia|].
+  rewrite insert_length_inv. lia.
+Qed.
+  
 Module CaseStudyInsert.
 
 Import CaseStudyFolds.
@@ -63,7 +84,7 @@ Definition insertA_pessim_ :
 forall (xs : list nat) (xsA : (listA nat)) (v : nat),
   xsA `is_approx` xs ->  
   (insertA_ v xsA)
-    {{ fun zsA cost => cost <= 2 * length xs }}.
+    {{ fun zsA cost => cost <= 2 * length xs + 1 }}.
 Proof.
   intros. revert xsA H.
   induction xs; intros.
@@ -83,15 +104,13 @@ forall (xs : list nat) (xsA : T (listA nat)) (vA : T nat) (v : nat),
   vA `is_approx` v ->
   xsA `is_approx` xs ->  
   (insertA vA xsA)
-    {{ fun zsA cost => cost <= 2 * length xs + 2 }}.
+    {{ fun zsA cost => cost <= 2 * length xs + 1 }}.
 Proof.
   intros xs xsA. 
   destruct xsA; unfold insertA; [|mgo_list].
   intros. 
   mgo_. subst. inv H. inv H0.
   relax_apply insertA_pessim_. eauto.
-  cbn.
-  intros y n h. lia.
 Qed.
 
 Definition sizeT {a} ( x : T a) : nat := 
@@ -116,60 +135,169 @@ Abort.
 (* Demand function for [insertA]. 
    The input list needs to be forced only as long as its elements are <= x. 
 *)
-Fixpoint insertD_ (x:nat) (xs: list nat)  (outD : listA nat) : Tick (T (listA nat)) :=
+Fixpoint insertD (x:nat) (xs: list nat)  (outD : listA nat) : Tick (T (listA nat)) :=
+  Tick.tick >>
   match xs, outD with 
   | nil, _ => Tick.ret (Thunk NilA)
   | y :: ys, ConsA zD zsD => 
-     Tick.tick >>
-     if Nat.leb x y then 
-       Tick.tick >>
-       let+ ysD := thunkD (insertD_ x ys) zsD in
+     if Nat.leb y x then 
+       let+ ysD := thunkD (insertD x ys) zsD in
        Tick.ret (Thunk (ConsA (Thunk y) ysD))
      else 
        Tick.ret zsD
   | _ , _ => bottom
   end.
 
-
-Definition insertD (x:nat) (xs: list nat) (outD : listA nat) : Tick (T nat * T (listA nat)) :=
-  Tick.tick >> Tick.tick >>
-  let+ ysD := insertD_ x xs outD in 
-  Tick.ret (Thunk x, ysD).
+Fixpoint insertion_sortD (xs: list nat)  (outD : listA nat) : Tick (T (listA nat)) :=
+  match xs with
+  | nil => Tick.ret (Thunk NilA)
+  | y :: ys =>
+      let zs := insertion_sort ys in
+      let+ zsD := insertD y zs outD in
+      thunkD (insertion_sortD ys) zsD
+  end.
 
 Lemma insertD__approx (x : nat) (xs : list nat) (outD : _)
-  : outD `is_approx` insert x xs -> Tick.val (insertD_ x xs outD) `is_approx` xs.
+  : outD `is_approx` insert x xs -> Tick.val (insertD x xs outD) `is_approx` xs.
 Proof.
   revert outD; induction xs; cbn.
   - intros; solve_approx.
   - autorewrite with exact; intros. 
-    destruct (x <=? a) eqn:LE.
+    destruct (a <=? x) eqn:LE.
     + inversion H; subst.    
       inversion H4; subst; cbn. solve_approx.
       specialize (IHxs _ H2). solve_approx.
-    + inversion H; subst. solve_approx.
+    + inversion H; subst. solve_approx. 
 Qed.
 
-Lemma insertD_size x (xs : list nat) (outD : _)
-  : outD `is_approx` insert x xs ->
-    let ins := Tick.val (insertD_ x xs outD) in
-    (sizeX 0 ins) <= sizeX' 0 outD.
+Lemma insertD_size x (xs : list nat) (outD : _) :
+    let ins := Tick.val (insertD x xs outD) in
+    (sizeX 1 ins) <= sizeX' 1 outD.
 Proof.
-  revert outD; induction xs; cbn; intros. 
-  inversion H; subst; cbn.
-  - destruct xs; lia. 
-  - destruct (x <=? a) eqn:L.
-    + inversion H; subst. cbn.
-      inversion H4. subst. cbn. auto.
-      subst. specialize (IHxs _ H2). cbn in IHxs.
-      cbn. destruct (Tick.val _) eqn:T. unfold sizeX in IHxs. lia. lia.
-    + inversion H. subst. cbn.
-      destruct xs0. simpl. auto. simpl. auto.
-Defined.
+  revert outD; induction xs; cbn; intros.
+  - destruct outD; simpl. lia. destruct x2; lia.
+  - destruct (a <=? x) eqn:L.
+    + destruct outD; simpl; try lia.
+      destruct x2; simpl; try lia.
+      specialize (IHxs x0).
+      destruct (insertD x xs x0); simpl in *.
+      destruct val; simpl in *; lia.
+    + destruct outD; simpl; try lia.
+      destruct x2; simpl; lia.
+Qed.
 
+Fixpoint leb_count x (xs : list nat) : nat :=
+  match xs with
+  | [] => 0
+  | (y::ys) => if Nat.leb y x
+             then 1 + leb_count x ys
+             else 0
+  end.
+
+Lemma insertD_cost x (xs : list nat)  (outD : listA nat) :
+  Tick.cost (insertD x xs outD) <= leb_count x xs + 1.
+Proof.
+  revert x outD. induction xs; simpl; intros; [lia|].
+  destruct (a <=? x) eqn:Hax.
+  - destruct outD; simpl; [lia|].
+    destruct x2; simpl; [|lia].
+    specialize (IHxs x x0). lia.
+  - destruct outD; simpl; lia.
+Qed.
+
+Lemma insertD_cost' x (xs : list nat) (outD : listA nat) :
+  Tick.cost (insertD x xs outD) <= sizeX' 1 outD.
+Proof.
+  revert x outD. induction xs; simpl; intros.
+  - destruct outD; simpl. lia.
+    destruct x2; simpl; lia.
+  - destruct (a <=? x) eqn:Hax.
+    + destruct outD; simpl; [lia|].
+      destruct x2; simpl; [|lia].
+      specialize (IHxs x x0). lia.
+    + destruct outD; simpl. lia.
+      destruct x2; simpl; lia.
+Qed.
+
+Lemma insertD_cost'' x (xs : list nat) (outD : listA nat) :
+  Tick.cost (insertD x xs outD) <= length xs + 1.
+Proof.
+  revert x outD. induction xs; simpl; intros; [lia|].
+  destruct (a <=? x) eqn:Hax.
+  - destruct outD; simpl; [lia|].
+    destruct x2; simpl; [|lia].
+    specialize (IHxs x x0). lia.
+  - destruct outD; simpl; lia.
+Qed.
+
+Lemma insertion_sortD__approx (xs : list nat) (outD : _)
+  : outD `is_approx` insertion_sort xs ->
+    Tick.val (insertion_sortD xs outD) `is_approx` xs.
+Proof.
+Admitted.
+
+Lemma insertion_sortD_cost (xs : list nat)  (outD : listA nat) :
+  Tick.cost (insertion_sortD xs outD) <= (sizeX' 1 outD) * (length xs + 1).
+Proof.
+  revert outD. induction xs; simpl; [lia|].
+  intros. rewrite insertD_cost'.
+  destruct (insertD a (insertion_sort xs) outD)
+    as [cost [ x |] ] eqn:Hinsert.
+  - simpl. specialize (IHxs x). rewrite IHxs.
+    pose proof (insertD_size a (insertion_sort xs) outD).
+    rewrite Hinsert in H. simpl in H. nia.
+  - simpl. nia.
+Qed.
+
+
+Definition head_insertion_sortD (xs : list nat) (outD : nat) :
+  Tick (T (listA nat)) :=
+  let res := insertion_sort xs in
+  let+ list_headD := headD res 0 outD in
+  let+ xsD := thunkD (insertion_sortD xs) list_headD in
+  Tick.ret xsD.
+
+Definition take_insertion_sortD (n : nat) (xs : list nat) (outD : listA nat) :
+  Tick (T (listA nat)) :=
+  let res := insertion_sort xs in
+  let+ list_takeD := takeD n res outD in
+  let+ xsD := thunkD (insertion_sortD xs) list_takeD in
+  Tick.ret xsD.
+
+Lemma head_insertion_sortD_cost (xs : list nat) (outD : nat) :
+  outD `is_approx` head_def (insertion_sort xs) 0 ->
+  forall xsA, xsA = Tick.val (head_insertion_sortD xs outD) ->
+  Tick.cost (head_insertion_sortD xs outD) <= length xs + 2.
+Proof.
+  intros. unfold head_insertion_sortD.
+  rewrite bind_cost, headD_cost, Tick.right_ret.
+  destruct (insertion_sort xs) eqn:Hsort.
+  - simpl. rewrite insertion_sortD_cost; simpl; lia.
+  - simpl. rewrite insertion_sortD_cost; simpl; lia.
+Qed.  
+
+Theorem take_insertion_sortD_cost (n : nat) (xs : list nat) (outD : listA nat) :
+  Tick.cost (take_insertion_sortD n xs outD) <=
+    n * (length xs + 2) + 1.
+Proof.
+  intros. unfold take_insertion_sortD.
+  rewrite bind_cost, takeD_cost, Tick.right_ret.
+  destruct (insertion_sort xs) eqn:Hsort.
+  - pose proof (@takeD_length _ n [] outD).
+    destruct (takeD n [] outD) eqn:HtD; destruct val; simpl.
+    + specialize (H x eq_refl).
+      rewrite insertion_sortD_cost. destruct H; nia.
+    + lia.
+  - pose proof (@takeD_length _ n (n0 :: l) outD).
+    destruct (takeD n (n0 :: l) outD) eqn:HtD; destruct val; simpl.
+    + specialize (H x eq_refl).
+      rewrite insertion_sortD_cost. destruct H; nia.
+    + lia.
+Qed.
 
 Lemma insertD_spec x (xs : list nat) (outD : listA nat)
   : outD `is_approx` insert x xs ->
-    forall xsD dcost, Tick.MkTick dcost xsD = insertD_ x xs outD ->
+    forall xsD dcost, Tick.MkTick dcost xsD = insertD x xs outD ->
     insertA (Thunk x) xsD [[ fun out cost => outD `less_defined` out /\ cost <= dcost ]].
 Proof.
   unfold insertA.

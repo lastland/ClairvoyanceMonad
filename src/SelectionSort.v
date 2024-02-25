@@ -25,13 +25,6 @@ Fixpoint selection_sort (l : list nat) (n : nat) : list nat :=
   | x :: r, S n' => let (y, r') := select x r in y :: selection_sort r' n'
 end.
 
-Definition head_def {a} (xs : list a) (d : a) : a :=
-  match xs with
-  | [] => d
-  | x :: _ => x
-  end.
-
-
 (** * Demand functions *)
 
 Inductive prodA (A B : Type) : Type :=
@@ -201,27 +194,6 @@ Proof.
         f_equal. lia.
 Qed.
 
-(*
-Lemma selection_sortD_sortD' (xs : list nat) (outD : listA nat) :
-  forall n, n >= length xs ->
-  Tick.cost (selection_sortD xs n outD) =
-    Tick.cost (selection_sortD' xs outD).
-Proof.
-  revert outD. induction xs as [| x xs]; simpl; intros.
-  - destruct n, outD; simpl; lia.
-  - destruct n, outD; simpl; try lia.
-    destruct (select x xs) eqn:Hselect.
-    destruct x2; simpl.
-    + admit.
-    + pose proof (selectD_selectD'_eq x xs (exact l)) as Hdd'.
-      rewrite Hselect in Hdd'. specialize (Hdd' (exact n0) bottom).
-      assert (selectD x xs (pairA (exact n0) bottom) = selectD' x xs (exact l)).
-      { apply Hdd'; solve_approx. }
-      unfold AO_Exact in H0. simpl in H0.
-      rewrite H0. reflexivity.
-Admitted.
-*)
-
 Lemma selection_sortD_cost (xs : list nat) (n : nat) (outD : listA nat) :
   n >= length xs ->
   Tick.cost (selection_sortD xs n outD) <= (sizeX' 1 outD) * (length xs + 1).
@@ -255,7 +227,7 @@ Qed.
 
 Theorem take_selection_sortD_cost (n : nat) (xs : list nat) (outD : listA nat) :
   Tick.cost (take_selection_sortD n xs outD) <=
-    n * (length xs + 1) + n + 1.
+    n * (length xs + 2) + 1.
 Proof.
   intros. unfold take_selection_sortD.
   rewrite bind_cost, takeD_cost, Tick.right_ret.
