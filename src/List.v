@@ -220,7 +220,7 @@ Definition lsumD (xs : list nat) (outD : nat) : Tick (T (listA nat)) :=
 Fixpoint takeD {a} (n : nat) (xs : list a) (outD : listA a) : Tick (T (listA a)) :=
   Tick.tick >>
   match n, xs, outD with
-  | 0, _, _ => Tick.ret (Undefined)
+  | 0, _, _ => Tick.ret Undefined
   | _, nil, _ => Tick.ret (Thunk NilA)
   | S m, y :: ys, ConsA zD zsD =>
     let+ ysD := thunkD (takeD m ys) zsD in

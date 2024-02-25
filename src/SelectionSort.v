@@ -1,4 +1,4 @@
-From Coq Require Import List Arith Psatz.
+From Coq Require Import List Arith Psatz RelationClasses.
 
 From Clairvoyance Require Import Core Approx List ListA Tick Misc.
 From Equations Require Import Equations.
@@ -276,7 +276,24 @@ Qed.
 Lemma takeD_cost : forall {A : Type} (n : nat) (xs : list A) (outD : listA A),
     Tick.cost (takeD n xs outD) <= sizeX' 1 outD.
 Proof.
-Admitted.
+  induction n; destruct xs, outD; simpl; try lia;
+    destruct x2; simpl; try lia.
+  specialize (IHn xs x). lia.  
+Qed.
+
+Lemma takeD_length : forall {A : Type}
+                            (n : nat) (xs : list A) (outD ys : listA A),
+    Tick.val (takeD n xs outD) = Thunk ys ->
+    sizeX' 1 ys  <= sizeX' 1 outD /\ sizeX' 1 ys <= n.
+Proof.
+  induction n; destruct xs, outD; simpl; intros;
+    inversion H; subst; simpl; try lia.
+  - destruct x2; lia.
+  - destruct x2; simpl; try lia.
+    destruct (Tick.val (takeD n xs x)) eqn:Htake.
+    + specialize (IHn _ _ _ Htake). lia.
+    + lia.
+Qed.
 
 Lemma thunkD_cost : forall {A B : Type} `{LessDefined A} `{Bottom B}
                       (x : A) (y : T A) (f : A -> Tick B),
@@ -299,81 +316,19 @@ Proof.
 Qed.  
 
 Theorem take_selection_sortD_cost (n : nat) (xs : list nat) (outD : listA nat) :
-  Tick.cost (take_selection_sortD n xs outD) <= (sizeX' 1 outD) * (length xs + 2) + n + 1.
+  Tick.cost (take_selection_sortD n xs outD) <= n * (length xs + 1) + sizeX' 1 outD + 1.
 Proof.
   intros. unfold take_selection_sortD.
   rewrite bind_cost, takeD_cost, right_ret.
   destruct (selection_sort xs (length xs)) eqn:Hsort.
-Admitted.
-
-
-Theorem head_selection_sortD_cost' (xs : list nat) (outD : nat) :
-  Tick.cost (head_selection_sortD xs outD) <= length xs + 3.
-Proof.
-  unfold head_selection_sortD. unfold Tick.bind. simpl.
-  unfold thunkD. destruct (selection_sort xs (length xs)); simpl;
-  rewrite selection_sortD_cost; simpl; lia.
+  - pose proof (takeD_length n [] outD).
+    destruct (takeD n [] outD) eqn:HtD; destruct val; simpl.
+    + specialize (H x eq_refl).
+      rewrite selection_sortD_cost; [|lia]. destruct H; nia.
+    + lia.
+  - pose proof (takeD_length n (n0 :: l) outD).
+    destruct (takeD n (n0 :: l) outD) eqn:HtD; destruct val; simpl.
+    + specialize (H x eq_refl).
+      rewrite selection_sortD_cost; [|lia]. destruct H; nia.
+    + lia.
 Qed.
-
-Lemma takeD_demand {a} (n : nat) (xs : list a) (outD : listA a) :
-  sizeX 1 (Tick.val (takeD n xs outD)) <= sizeX' 1 outD.
-Proof.
-  generalize dependent n. generalize dependent xs.
-  induction outD; intros;
-  destruct n; destruct xs; simpl; try lia.
-  destruct (Tick.val (takeD n xs outD)) eqn : E; try lia.
-  apply le_n_S. assert (H' : sizeX' 1 x = sizeX 1 (Thunk x)). { auto. }
-  rewrite H'. symmetry in E. rewrite E. apply IHoutD.
-Qed.
-
-(* I'm not sure if we need these... *)
-
-(*
-Fixpoint selectA_ (l : listA nat) : M (option (T (listA nat) * nat)) :=
-  tick >>
-  match l with
-  | NilA => ret None
-  | ConsA x xs =>
-    forcing x (fun x =>
-    forcing xs (fun xs =>
-    let! o := selectA_ xs in
-    match o with
-    | None => ret (Some (Thunk NilA, x))
-    | Some (ys, y) =>
-      if x <? y then
-        ret (Some (Thunk (ConsA (Thunk y) ys), x))
-      else
-        ret (Some (Thunk (ConsA (Thunk x) ys), y))
-    end))
-  end.
-
-(* Invariant: n = length l. n is the decreasing argument. *)
-Fixpoint selectsortA (n : nat) (l : T (listA nat)) : M (listA nat) :=
-  tick >>
-  let! l := force l in
-  let! o := selectA_ l in
-  match n, o with
-  | S n, Some (ys, y) =>
-    let~ zs := selectsortA n ys in
-    ret (ConsA (Thunk y) zs)
-  | _, _ => ret NilA
-  end.
-
-Parameter selectsort : forall (l : list nat), list nat.
-
-Lemma selectsortA_cost {l n}
-  : n = length l ->
-    forall (d : listA nat), d `is_approx` exact (selectsort l) ->
-    let m := sizeX' 1 d in
-    selectsortA n (exact l) [[ fun sorted cost => d `less_defined` sorted /\ cost <= m * (length l + 1) ]].
-Proof.
-Admitted.
-
-Lemma selectsortA_cost' {l n}
-  : n = length l ->
-    forall (d : listA nat), d `is_approx` exact (selectsort l) ->
-    exists (lA : T (listA nat)), lA `is_approx` l /\
-    let m := sizeX' 1 d in
-    selectsortA n lA [[ fun sorted cost => d `less_defined` sorted /\ cost <= m * (length l + 1) ]].
-Proof.
-Admitted.
