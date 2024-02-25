@@ -216,6 +216,14 @@ Fixpoint lsum (xs : list nat) : nat :=
 Definition lsumD (xs : list nat) (outD : nat) : Tick (T (listA nat)) :=
   Tick.MkTick (1 + length xs) (exact xs).
 
+Definition headD {a} (xs : list a) (d : a) (outD : a) : Tick (T (listA a)) :=
+  Tick.tick >>
+  match xs with
+  | [] => Tick.ret (Thunk NilA)
+  | x :: _ => Tick.ret (Thunk (ConsA (Thunk x) Undefined))
+  end.
+
+
 (* We force the list until n = 0 or we run out of list *)
 Fixpoint takeD {a} (n : nat) (xs : list a) (outD : listA a) : Tick (T (listA a)) :=
   Tick.tick >>
@@ -245,6 +253,31 @@ Lemma lsumD_cost (xs : list nat) outD :
 Proof.
   reflexivity. Qed.
 
+Lemma headD_demand {a} (xs : list a) (d : a) (outD : a) : 
+  sizeX 1 (Tick.val (headD xs d outD)) = 1.
+Proof.
+  destruct xs; reflexivity.
+Qed.
+
+Lemma headD_cost : forall {A : Type} (xs : list A) (d x : A),
+    Tick.cost (headD xs d x) = 1.
+Proof.
+  destruct xs; reflexivity.
+Qed.
+
+Lemma takeD_length : forall {A : Type}
+                            (n : nat) (xs : list A) (outD ys : listA A),
+    Tick.val (takeD n xs outD) = Thunk ys ->
+    sizeX' 1 ys  <= sizeX' 1 outD /\ sizeX' 1 ys <= n.
+Proof.
+  induction n; destruct xs, outD; simpl; intros;
+    inversion H; subst; simpl; try lia.
+  - destruct x2; lia.
+  - destruct x2; simpl; try lia.
+    destruct (Tick.val (takeD n xs x)) eqn:Htake.
+    + specialize (IHn _ _ _ Htake). lia.
+    + lia.
+Qed.
 
 Lemma takeD_cost (n : nat) (xs : list nat) outD :
   Tick.cost (takeD n xs outD) <= 1 + n.
@@ -274,6 +307,16 @@ Proof.
         -- rewrite IHn. lia.
         -- lia.
 Qed.
+
+
+Lemma takeD_cost' : forall {A : Type} (n : nat) (xs : list A) (outD : listA A),
+    Tick.cost (takeD n xs outD) <= sizeX' 1 outD.
+Proof.
+  induction n; destruct xs, outD; simpl; try lia;
+    destruct x2; simpl; try lia.
+  specialize (IHn xs x). lia.  
+Qed.
+
 
 Lemma length_take_Sn_leq_1Sn (n n0 : nat) (xs : list nat) :
   length (take n (n0 :: xs)) <= S n -> length (take (S n) (n0 :: xs)) <= 1 + S n.
@@ -772,4 +815,3 @@ Lemma less_defined_tail_cons {a} (l : T (listA a)) x xs
 Proof.
   inversion 1; subst; constructor. inversion H2; constructor; cbn; [ auto | reflexivity ].
 Qed.
-

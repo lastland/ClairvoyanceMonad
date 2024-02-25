@@ -35,6 +35,13 @@ Notation "u >> v" := (bind u (fun _ => v%tick)) (at level 61, left associativity
 
 End Notations.
 
+Lemma right_ret : forall {A : Type} (m : Tick A),
+  (bind m (fun x => ret x)) = m.
+Proof.
+  intros. unfold bind. destruct m; simpl.
+  f_equal. apply plus_0_r.
+Qed.
+
 #[global] Instance LessDefined_Tick {a} `{LessDefined a} : LessDefined (Tick a) :=
   fun x y => cost x <= cost y /\ val x `less_defined` val y.
 
@@ -72,4 +79,5 @@ Proof.
   - apply Nat.add_le_mono; [ apply Hu | apply Hk, Hu ].
   - apply Hk, Hu.
 Qed.
-  
+
+
