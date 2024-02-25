@@ -95,6 +95,12 @@ Definition head_selection_sortD (xs : list nat) (outD : nat) : Tick (T (listA na
   let+ xsD := thunkD (selection_sortD xs (length xs)) list_headD in
   Tick.ret xsD.
 
+Definition take_selection_sortD (n : nat) (xs : list nat) (outD : listA nat) :
+  Tick (T (listA nat)) :=
+  let res := selection_sort xs (length xs) in
+  let+ list_takeD := takeD n res outD in
+  let+ xsD := thunkD (selection_sortD xs (length xs)) list_takeD in
+  Tick.ret xsD.
 
 (** * Alternative defs (specs) *)
 
@@ -102,7 +108,7 @@ Definition head_selection_sortD (xs : list nat) (outD : nat) : Tick (T (listA na
 Definition selectD' (x : nat) (xs : list nat) (outD : listA nat) : Tick (T (listA nat)) :=
   Tick.MkTick (1 + length xs) (exact xs).
 
-(* The entire list is forced one selection at a time*)
+(* 
 Fixpoint selection_sortD' (xs : list nat) (outD : listA nat) :
   Tick (T (listA nat)) :=
   Tick.tick >>
@@ -119,8 +125,24 @@ Definition head_selection_sortD' (xs : list nat) (outD : nat) : Tick (T (listA n
   let+ list_headD := headD (selection_sort xs (length xs)) 0 outD in
   let+ xsD := thunkD (selection_sortD' xs) list_headD in
   Tick.ret xsD.
+*)
 
 (** * Theorem for pure functions *)
+
+Lemma select_length_inv : forall x xs y ys,
+    select x xs = (y, ys) ->
+    length xs = length ys.
+Proof.
+  intros x xs. revert x. induction xs; simpl.
+  - inversion 1; subst; reflexivity.
+  - intros. destruct (x <=? a) eqn:Hxa.
+    + destruct (select x xs) eqn:Hselect; subst.
+      inversion H; subst. simpl.
+      specialize (IHxs x y l Hselect). lia.
+    + destruct (select a xs) eqn:Hselect; subst.
+      inversion H; subst. simpl.
+      specialize (IHxs a y l Hselect). lia.
+Qed.
 
 Lemma sort_produces_element (n : nat) (x : nat) (xs : list nat) :
   selection_sort (x :: xs) (S n) = fst (select x xs) :: selection_sort (snd (select x xs)) n.
@@ -130,16 +152,14 @@ Qed.
 
 (** * Equivalence between demand functions and specs *)
 
-Lemma selectD_selectD'_leq : forall x xs yD ysD outD,
-    Tick.cost (selectD x xs (pairA yD ysD)) <= Tick.cost (selectD' x xs outD).
+Lemma selectD_cost : forall x xs yD ysD,
+    Tick.cost (selectD x xs (pairA yD ysD)) <= (1 + length xs).
 Proof.
   intros x xs. revert x.
   induction xs as [|y ys]; intros; simpl; try lia.
   destruct (x <=? y); simpl.
-  - specialize (IHys x (id yD) (tailX ysD) outD).
-    unfold selectD' in IHys. simpl in IHys. lia.
-  - specialize (IHys y (id yD) (tailX ysD) outD).
-    unfold selectD' in IHys. simpl in IHys. lia.
+  - specialize (IHys x (id yD) (tailX ysD)); lia.
+  - specialize (IHys y (id yD) (tailX ysD)); lia.
 Qed.
 
 Lemma selectD_selectD'_eq : forall x xs outD,
@@ -188,37 +208,82 @@ Proof.
         f_equal. lia.
 Qed.
 
+(*
 Lemma selection_sortD_sortD' (xs : list nat) (outD : listA nat) :
   forall n, n >= length xs ->
   Tick.cost (selection_sortD xs n outD) =
     Tick.cost (selection_sortD' xs outD).
 Proof.
-  induction xs as [| x xs]; simpl; intros.
+  revert outD. induction xs as [| x xs]; simpl; intros.
   - destruct n, outD; simpl; lia.
   - destruct n, outD; simpl; try lia.
     destruct (select x xs) eqn:Hselect.
     destruct x2; simpl.
-    + admit.      
+    + admit.
     + pose proof (selectD_selectD'_eq x xs (exact l)) as Hdd'.
       rewrite Hselect in Hdd'. specialize (Hdd' (exact n0) bottom).
       assert (selectD x xs (pairA (exact n0) bottom) = selectD' x xs (exact l)).
       { apply Hdd'; solve_approx. }
       unfold AO_Exact in H0. simpl in H0.
       rewrite H0. reflexivity.
-Admitted.    
+Admitted.
+*)
 
-(** TODO: Finish this. *)
-
-(*
-Lemma selection_sortD_cost (xs : list nat) (outD : listA nat) :
-  Tick.cost (selection_sortD xs outD) <= (sizeX' 1 outD) * (length xs + 2).
+Lemma selection_sortD_cost (xs : list nat) (n : nat) (outD : listA nat) :
+  n >= length xs ->
+  Tick.cost (selection_sortD xs n outD) <= (sizeX' 1 outD) * (length xs + 1).
 Proof.
-  intros. generalize dependent xs. induction outD;
-  intro; destruct xs; simpl; try rewrite IHoutD; try lia.
-  - pose proof (selectD_selectD'_leq n xs (exact (n :: xs))) as Hle.
-    unfold selectD' in Hle. simpl in Hle. lia.
-  - pose proof (selectD_selectD'_leq n xs (exact (n :: xs))) as Hle.
-    unfold selectD' in Hle. simpl in Hle. lia.
+  revert xs outD. induction n.
+  - simpl. destruct outD; destruct xs; simpl; try lia; destruct x2; lia.
+  - simpl. destruct xs; destruct outD; simpl; try lia; destruct x2; try lia.
+    + destruct (select n0 xs) eqn:Hselect. intros.
+      simpl. specialize (IHn l x).
+      pose proof (select_length_inv n0 xs n1 l Hselect).
+      assert (n >= length l) by lia. rewrite H0. specialize (IHn H1).
+      rewrite selectD_cost. lia.
+    + destruct (select n0 xs) eqn:Hselect. intros.
+      simpl. specialize (IHn l NilA).
+      pose proof (select_length_inv n0 xs n1 l Hselect).
+      assert (n >= length l) by lia. rewrite H0. specialize (IHn H1).
+      rewrite selectD_cost. lia.
+Qed.
+
+Open Scope tick_scope.
+
+Lemma bind_cost : forall {A B : Type} (m : Tick A) (k : A -> Tick B),
+  Tick.cost (let+ x := m in k x) = Tick.cost m + Tick.cost (k (Tick.val m)).
+Proof. reflexivity. Qed.
+
+Lemma right_ret : forall {A : Type} (m : Tick A),
+  (let+ x := m in Tick.ret x) = m.
+Proof.
+  intros. unfold Tick.bind. destruct m; simpl.
+  f_equal. lia.
+Qed.
+
+Lemma headD_demand {a} (xs : list a) (d : a) (outD : a) : 
+  sizeX 1 (Tick.val (headD xs d outD)) = 1.
+Proof.
+  destruct xs; reflexivity.
+Qed.
+
+Lemma headD_cost : forall {A : Type} (xs : list A) (d x : A),
+    Tick.cost (headD xs d x) = 1.
+Proof.
+  destruct xs; reflexivity.
+Qed.
+
+Lemma takeD_cost : forall {A : Type} (n : nat) (xs : list A) (outD : listA A),
+    Tick.cost (takeD n xs outD) <= sizeX' 1 outD.
+Proof.
+Admitted.
+
+Lemma thunkD_cost : forall {A B : Type} `{LessDefined A} `{Bottom B}
+                      (x : A) (y : T A) (f : A -> Tick B),
+  y = Thunk x \/ y = Undefined ->
+  Tick.cost (thunkD f y) <= Tick.cost (f x).
+Proof.
+  intros. destruct H1; subst; simpl; lia.
 Qed.
 
 Lemma head_selection_sortD_cost (xs : list nat) (outD : nat) :
@@ -226,26 +291,21 @@ Lemma head_selection_sortD_cost (xs : list nat) (outD : nat) :
   forall xsA, xsA = Tick.val (head_selection_sortD xs outD) ->
   Tick.cost (head_selection_sortD xs outD) <= length xs + 2.
 Proof.
-  intros. rewrite H. destruct xs.
-  - simpl. lia.
-  - unfold head_selection_sortD.
-    assert (H1 : length (n :: xs) = S (length xs)). auto. rewrite H1.
-    rewrite sort_produces_element. simpl.
-    pose proof (selectD_selectD'_leq n xs (exact (n :: xs))) as Hle.
-    unfold selectD' in Hle. simpl in Hle. lia.
-Qed.
+  intros. unfold head_selection_sortD.
+  rewrite bind_cost, headD_cost, right_ret.
+  destruct (selection_sort xs (length xs)) eqn:Hsort.
+  - simpl. rewrite selection_sortD_cost; simpl; lia.
+  - simpl. rewrite selection_sortD_cost; simpl; lia.
+Qed.  
 
-Definition take_selection_sortD (n : nat) (xs : list nat) (outD : listA nat) :
-  Tick (T (listA nat)) :=
-  let+ list_takeD := takeD n (selection_sort xs (length xs)) outD in
-  let+ xsD := thunkD (selection_sortD xs) list_takeD in
-  Tick.ret xsD.
-
-Lemma headD_demand {a} (xs : list a) (d : a) (outD : a) : 
-  sizeX 1 (Tick.val (headD xs d outD)) = 1.
+Theorem take_selection_sortD_cost (n : nat) (xs : list nat) (outD : listA nat) :
+  Tick.cost (take_selection_sortD n xs outD) <= (sizeX' 1 outD) * (length xs + 2) + n + 1.
 Proof.
-  destruct xs; reflexivity.
-Qed.
+  intros. unfold take_selection_sortD.
+  rewrite bind_cost, takeD_cost, right_ret.
+  destruct (selection_sort xs (length xs)) eqn:Hsort.
+Admitted.
+
 
 Theorem head_selection_sortD_cost' (xs : list nat) (outD : nat) :
   Tick.cost (head_selection_sortD xs outD) <= length xs + 3.
@@ -265,19 +325,6 @@ Proof.
   apply le_n_S. assert (H' : sizeX' 1 x = sizeX 1 (Thunk x)). { auto. }
   rewrite H'. symmetry in E. rewrite E. apply IHoutD.
 Qed.
-
-Theorem take_selection_sortD_cost (n : nat) (xs : list nat) (outD : listA nat) :
-  Tick.cost (take_selection_sortD n xs outD) <= (sizeX' 1 outD) * (length xs + 2) + n + 1.
-Proof.
-  unfold take_selection_sortD. unfold Tick.bind. 
-  simpl. rewrite takeD_cost. unfold thunkD. 
-  destruct (Tick.val (takeD n (selection_sort xs (length xs)) outD)) eqn:  E.
-  - assert (H : sizeX' 1 x = sizeX 1 (Thunk x)). { reflexivity. }
-    symmetry in E. rewrite E in H.
-    rewrite selection_sortD_cost. rewrite H. rewrite takeD_demand. lia.
-  - simpl. lia.
-Qed.
-*)
 
 (* I'm not sure if we need these... *)
 
@@ -330,5 +377,3 @@ Lemma selectsortA_cost' {l n}
     selectsortA n lA [[ fun sorted cost => d `less_defined` sorted /\ cost <= m * (length l + 1) ]].
 Proof.
 Admitted.
-
-*)
