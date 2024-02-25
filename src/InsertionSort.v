@@ -74,6 +74,15 @@ Proof.
   induction xs; simpl; [lia|].
   rewrite insert_length_inv. lia.
 Qed.
+
+Lemma insert_is_cons : forall x xs,
+    exists y ys, insert x xs = y :: ys.
+Proof.
+  intros x xs. revert x. induction xs; intros.
+  - simpl. exists x. exists []. reflexivity.
+  - simpl. destruct (a <=? x);
+    do 2 eapply ex_intro; reflexivity.
+Qed.
   
 Module CaseStudyInsert.
 
@@ -154,7 +163,8 @@ Fixpoint insertion_sortD (xs: list nat)  (outD : listA nat) : Tick (T (listA nat
   | y :: ys =>
       let zs := insertion_sort ys in
       let+ zsD := insertD y zs outD in
-      thunkD (insertion_sortD ys) zsD
+      let+ ysD := thunkD (insertion_sortD ys) zsD in
+      Tick.ret (Thunk (ConsA (Thunk y) ysD))
   end.
 
 Lemma insertD__approx (x : nat) (xs : list nat) (outD : _)
@@ -234,7 +244,18 @@ Lemma insertion_sortD__approx (xs : list nat) (outD : _)
   : outD `is_approx` insertion_sort xs ->
     Tick.val (insertion_sortD xs outD) `is_approx` xs.
 Proof.
-Admitted.
+  revert outD. induction xs.
+  - simpl; solve_approx.
+  - simpl. destruct outD; intros H.
+    + pose proof (insert_is_cons a (insertion_sort xs)).
+      destruct H0 as [y [ ys Hic] ]. rewrite Hic in H.
+      autorewrite with exact in H. inversion H.
+    + pose proof (insertD__approx a (insertion_sort xs) (ConsA x1 x2) H).
+      inversion H0; subst.
+      * solve_approx.
+      * specialize (IHxs x H3). simpl.
+        solve_approx.
+Qed.        
 
 Lemma insertion_sortD_cost (xs : list nat)  (outD : listA nat) :
   Tick.cost (insertion_sortD xs outD) <= (sizeX' 1 outD) * (length xs + 1).
