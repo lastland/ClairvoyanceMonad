@@ -204,10 +204,10 @@ Proof.
   unfold Transitive. eauto.
 Qed.
 
-#[global] Instance PreOrder_LessDefined_FrontA A `{LessDefined A, PreOrder A less_defined} :
+#[global] Instance PreOrder_LessDefined_FrontA A `{LDA : LessDefined A, PreOrder A LDA} :
   PreOrder (@less_defined (FrontA A) _).
 Proof.
-  destruct H0. constructor; eauto.
+  destruct H. constructor; eauto.
 Qed.
 
 Lemma LessDefined_FrontA_antisym A `{LessDefined A} :
@@ -318,10 +318,10 @@ Proof.
   unfold Transitive. eauto.
 Qed.
 
-#[global] Instance PreOrder_LessDefined_RearA A `{LessDefined A, PreOrder A less_defined} :
+#[global] Instance PreOrder_LessDefined_RearA A `{LDA : LessDefined A, PreOrder A LDA} :
   PreOrder (@less_defined (RearA A) _).
 Proof.
-  destruct H0. constructor; eauto.
+  destruct H. constructor; eauto.
 Qed.
 
 Lemma LessDefined_RearA_antisym A `{LessDefined A} :
@@ -1170,19 +1170,17 @@ Inductive op (A : Type) : Type :=
 #[global] Instance Demand_Queue (A : Type) : Demand (op A) (Queue A) (T (QueueA A)) :=
   fun op args argsA =>
     match op, args, argsA with
-    | Empty, [], _ => Tick.ret (bottom_of (exact args))
-    | Push x, [q], [outD] =>
-        let outD := forceD (bottom_of (exact (push q x))) outD in
+    | Empty, [], [_] => Tick.ret []
+    | Push x, [q], [Undefined] => Tick.ret [Undefined]
+    | Push x, [q], [Thunk outD] =>
         let+ (qD, _) := pushD q x outD in
         Tick.ret [qD]
-    | Pop, [q], outD =>
-        let outD' := match outD with
-                     | [] => None
-                     | [qD'] => Some (Undefined, qD')
-                     | _ => None
-                     end in
-        let+ qD := popD q outD' in
-        Tick.ret [qD]
+    | Pop, [q], [] =>
+        let+ inD := popD q None in
+        Tick.ret [inD]
+    | Pop, [q], [qD] =>
+        let+ inD := popD q (Some (Undefined, qD)) in
+        Tick.ret [inD]
     | _, _, _ => Tick.ret []
     end.
 
@@ -1199,51 +1197,56 @@ Theorem physicist's_argumentD :
       _ _ _ _ _ _.
 Proof.
   unfold Physicist'sArgumentD.
-  intros A LDA HPreOrder LBA HLubLaw o args.
-  refine (match o, args with
-          | Empty, [] => _
-          | Push x, [q] => _
-          | Pop, [q] => _
-          | _, _ => _
-          end); try solve [ invert_clear 2; invert_clear 1; simpl; lia ].
-  - intros Hwf output Hld input n.
-    revert Hld. simpl. refine (match output with
-                               | [] => _
-                               | [outD] => _
-                               | _ :: _ :: _ => _
-                               end); try solve [ invert_clear 2; simpl; lia ].
-    invert_clear 1. invert_clear H as [ | outD' ? Hld ].
-    + assert (exists f m r, push q x = Deep f m r)
-        as [ f [ m [ r Hpush ] ] ]
-          by apply push_is_Deep. rewrite Hpush in *.
-      invert_clear 1. destruct q; try destruct r0; simpl; lia.
-    + simpl. pose proof (pushD_cost _ _ Hld) as Hcost.
-      destruct (pushD q x outD'). destruct val.
-      cbn in *. invert_clear 1. simpl. destruct t; unfold debt in *; simpl in *; lia.
-  - intros Hwf output Hld input n.
-    revert Hld. simpl. refine (match output with
-                               | [] => _
-                               | [qD'] => _
-                               | _ :: _ :: _ => _
-                               end);
-      try solve [ destruct (pop q); try destruct p; invert_clear 1; invert_clear 1;
-                  destruct q; teardown; simpl; lia ].
-    invert_clear 1. subst. invert_clear H0.
-    destruct (pop q) eqn:Hpop; try solve [ invert_clear H3 ]. destruct p.
-    invert_clear H3.
-    pose proof (@popD_cost _ _ q (Some (Undefined, qD'))).
+  intros A LDA HPreOrder LBA HLubLaw o args _ output.
+  refine (match o, args, output with
+          | Empty, [], [_] => _
+          | Push x, [q], [Undefined] => _
+          | Push x, [q], [Thunk outD] => _
+          | Pop, [q], [] => _
+          | Pop, [q], [qD] => _
+          | _, _, _ => _
+          end); try solve [ do 2 invert_clear 1; simpl in *; lia ].
+  - invert_clear 1 as [ | ? ? ? ? HoutD _ ]. invert_clear HoutD as [ | ? ? HoutD ].
+    pose proof (pushD_cost _ _ HoutD) as Hcost. cbn in Hcost.
+    invert_clear 1.
+    destruct (Tick.val (pushD q x outD)) as [ qD xD ]. simpl.
+    change (Potential_Queue qD) with (debt qD). lia.
+  - invert_clear 1. destruct (pop q). try solve [ destruct p; invert_clear H ].
+    invert_clear 1. simpl. destruct q; teardown; simpl; lia.
+  - simpl. invert_clear 1. destruct (pop q) as [ [ x' q' ] | ] eqn:Hpop; invert_clear H3.
+    pose proof (@popD_cost _ _ q (Some (Undefined, qD))).
     assert (@less_defined _ (@LessDefined_option (T A * T (QueueA A)) _)
-              (Some (Undefined, qD'))
+              (Some (Undefined, qD))
               (exact (pop q)))
       by (unfold less_defined, exact, Exact_option;
           rewrite Hpop; repeat constructor; simpl; auto).
-    specialize (H0 H1). simpl in H0.
-    invert_clear 1. invert_clear H; simpl.
-    + unfold Potential_Queue. destruct q; try destruct f; simpl; lia.
-    + destruct q.
-      * simpl. lia.
-      * unfold Potential_Queue.
-        destruct (Tick.val (popD (Deep f q r) (Some (Undefined, Thunk x))));
-          unfold debt, Debitable_T in H0; lia.
+    specialize (H3 H4). simpl in H3.
+    invert_clear 1. simpl.
+    change (Potential_Queue (Tick.val (popD q (Some (Undefined, qD)))))
+      with
+      (debt (Tick.val (popD q (Some (Undefined, qD))))).
+    change (Potential_Queue qD) with (debt qD). lia.
 Qed.
 #[export] Existing Instance physicist's_argumentD.
+
+Lemma pd (A : Type)
+  `{LDA : LessDefined A, PA : PreOrder A LDA, LBA : Lub A, LLA : @LubLaw A LBA LDA} :
+  @PureDemand (op A) (Queue A) (T (QueueA A))
+    IsApproxAlgebra_QueueA
+    Eval_Queue
+    Demand_Queue.
+Proof.
+  unfold PureDemand, pure_demand.
+  intros o args output.
+  set (o' := o). revert o'.
+  set (args' := args). revert args'.
+  set (output' := output). revert output'.
+  refine (match o, args, output with
+          | Empty, [], [_] => _
+          | Push x, [q], [Undefined] => _
+          | Push x, [q], [Thunk outD] => _
+          | Pop, [q], [] => _
+          | Pop, [q], [qD] => _
+          | _, _, _ => _
+          end).
+Admitted.
