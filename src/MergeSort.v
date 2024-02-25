@@ -63,7 +63,7 @@ Fixpoint splitD {a : Type} (xs : list a)
     Tick.ret (Thunk (ConsA (Thunk x) (Thunk (ConsA (Thunk x') xsD))))
   end.
 
-Compute splitD [1;2;3;4;5;6;7;8] (pairA (exact [1;3;5;7]) (exact [2;4;6;8])).
+(* Compute splitD [1;2;3;4;5;6;7;8] (pairA (exact [1;3;5;7]) (exact [2;4;6;8])). *)
 
 Fixpoint mergeD (xs ys : list nat) (n : nat)
   (outD : listA nat) : Tick (T (listA nat) * T (listA nat)) :=
@@ -82,7 +82,7 @@ Fixpoint mergeD (xs ys : list nat) (n : nat)
   | _, _, _, _ => bottom
   end.
 
-Compute mergeD [1;3;5] [2;4;6] 3 (ConsA (Thunk 1) (Thunk (ConsA (Thunk 2) (Thunk (ConsA (Thunk 3) Undefined))))).
+(* Compute mergeD [1;3;5] [2;4;6] 3 (ConsA (Thunk 1) (Thunk (ConsA (Thunk 2) (Thunk (ConsA (Thunk 3) Undefined))))). *)
 
 Fixpoint mergesort'D (l : list nat) (n : nat) (outD : listA nat) : Tick (T (listA nat)) :=
   Tick.tick >>
@@ -104,7 +104,13 @@ Fixpoint mergesort'D (l : list nat) (n : nat) (outD : listA nat) : Tick (T (list
 Definition merge_sortD (l : list nat) (outD : listA nat) : Tick (T (listA nat)) :=
   mergesort'D l (length l) outD.
 
-(* Long-term goal:
-   show that   head (selection_sort xs)   in O(n)
-   (also could be merge_sort) *)
-
+Lemma splitD__approx (x : nat) (xs : list nat) (outD : _)
+  : outD `is_approx` split xs ->
+    Tick.val (splitD xs outD) `is_approx` xs.
+Proof.
+  revert x outD. induction xs; intros.
+  - solve_approx.
+  - destruct xs.
+    + solve_approx.
+    + admit. (* I need a different induction principle. *) 
+Admitted.
