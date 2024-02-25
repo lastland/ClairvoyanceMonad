@@ -1040,7 +1040,11 @@ Definition size_RearA (A : Type) (rA : RearA A) : nat :=
     match qA with
     | NilA => 0
     | DeepA fD mD rD =>
-        T_rect _ size_FrontA 1 fD - T_rect _ size_RearA 0 rD + @Debitable_T _ (debt_QueueA _) mD
+        let c := match fD, mD with
+                 | Undefined, Undefined => 0
+                 | _, _ => T_rect _ size_FrontA 1 fD - T_rect _ size_RearA 0 rD
+                 end
+        in c + @Debitable_T _ (debt_QueueA _) mD
     end.
 
 Lemma pushD_cost : forall (A : Type) `{LessDefined A} (q : Queue A) (x : A) (outD : QueueA A),
@@ -1066,7 +1070,7 @@ Proof.
   - intros until outD. refine (match outD with
                                | DeepA fD mD (Thunk (ROneA xD)) => _
                                | _ => _
-                               end); repeat (unfold debt; simpl); lia.
+                               end); repeat (unfold debt; simpl); teardown; simpl; lia.
   - intros ? ? ? ? ? IH ? ? Happrox. invert_clear Happrox.
     invert_clear H1. 1: simpl; lia.
     invert_clear H1. invert_clear H0.
@@ -1078,7 +1082,7 @@ Proof.
       simpl. destruct val.
       destruct t0; try destruct x1;
         do 3 (unfold debt at 1; simpl in * );
-              destruct f1; try destruct x1; simpl; change (Debitable_T t) with (debt t); lia.
+        destruct f1; try destruct x1; simpl; change (Debitable_T t) with (debt t); teardown; lia.
 Qed.
 
 Lemma popD_cost : forall (A : Type) `{LessDefined A} (q : Queue A) (outD : option (T A * T (QueueA A))),
@@ -1181,7 +1185,7 @@ Inductive op (A : Type) : Type :=
     | Pop, [q], [qD] =>
         let+ inD := popD q (Some (Undefined, qD)) in
         Tick.ret [inD]
-    | _, _, _ => Tick.ret []
+    | _, _, _ => Tick.ret (bottom_of (exact args))
     end.
 
 #[global] Instance Potential_Queue (A : Type) : Potential (T (QueueA A)) :=
@@ -1190,14 +1194,30 @@ Inductive op (A : Type) : Type :=
             | Undefined => 0
             end.
 
+Lemma potential_bottom_of (A : Type) (q : Queue A) :
+  Potential_Queue (bottom_of (exact q)) = 0.
+Proof.
+  destruct q; reflexivity.
+Qed.
+#[global] Hint Resolve potential_bottom_of : core.
+
+Lemma sumof_potential_bottom_of (A : Type) (qs : list (Queue A)) :
+  sumof Potential_Queue (bottom_of (exact qs)) = 0.
+Proof.
+  induction qs; auto.
+Qed.
+#[global] Hint Resolve sumof_potential_bottom_of : core.
+
 Theorem physicist's_argumentD :
   forall (A : Type) `{LDA : LessDefined A, PreOrder A LDA, LBA : Lub A, @LubLaw A LBA LDA},
     @Physicist'sArgumentD
       (op A) (Queue A) (T (QueueA A))
       _ _ _ _ _ _.
 Proof.
+  intro A. pose proof (@sumof_potential_bottom_of A) as Hpb.
+  unfold bottom_of, exact in Hpb.
   unfold Physicist'sArgumentD.
-  intros A LDA HPreOrder LBA HLubLaw o args _ output.
+  intros LDA HPreOrder LBA HLubLaw o args _ output.
   refine (match o, args, output with
           | Empty, [], [_] => _
           | Push x, [q], [Undefined] => _
@@ -1205,7 +1225,7 @@ Proof.
           | Pop, [q], [] => _
           | Pop, [q], [qD] => _
           | _, _, _ => _
-          end); try solve [ do 2 invert_clear 1; simpl in *; lia ].
+          end); try solve [ do 2 invert_clear 1; simpl in *; try (rewrite Hpb); lia ].
   - invert_clear 1 as [ | ? ? ? ? HoutD _ ]. invert_clear HoutD as [ | ? ? HoutD ].
     pose proof (pushD_cost _ _ HoutD) as Hcost. cbn in Hcost.
     invert_clear 1.
@@ -1248,5 +1268,22 @@ Proof.
           | Pop, [q], [] => _
           | Pop, [q], [qD] => _
           | _, _, _ => _
-          end).
-Admitted.
+          end); try solve [ repeat constructor +
+                              invert_clear 1; try apply bottom_is_least; reflexivity ].
+  - simpl. invert_clear 1. invert_clear H. apply pushD_approx in H.
+    destruct (pushD q x outD). invert_clear H. destruct val. repeat constructor. auto.
+  - simpl. destruct (pop q) eqn:Hpop; try solve [ destruct p; invert_clear 1 ].
+    apply pop_None_inv in Hpop. subst. repeat constructor.
+  - simpl. destruct (pop q) eqn:Hpop; try solve [ invert_clear 1 ].
+    destruct p. invert_clear 1.
+    Check (pop q).
+    Print LessDefined.
+    assert (less_defined
+              (Some (Undefined, qD))
+              (@exact
+                 (option (A * Queue A))
+                 (option (T A * T (QueueA A))) _
+                 (pop q)))
+      by (rewrite Hpop; repeat constructor; auto).
+    apply popD_approx in H1. constructor; auto.
+Qed.
