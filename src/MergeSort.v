@@ -104,13 +104,66 @@ Fixpoint mergesort'D (l : list nat) (n : nat) (outD : listA nat) : Tick (T (list
 Definition merge_sortD (l : list nat) (outD : listA nat) : Tick (T (listA nat)) :=
   mergesort'D l (length l) outD.
 
+Lemma split_ind {A} :
+  forall (P : list A -> Prop),
+    P [] ->
+    (forall x, P [x]) ->
+    (forall x1 x2 xs, P xs -> P (x1 :: x2 :: xs)) ->
+    forall xs, P xs.
+Admitted.
+
 Lemma splitD__approx (x : nat) (xs : list nat) (outD : _)
   : outD `is_approx` split xs ->
     Tick.val (splitD xs outD) `is_approx` xs.
 Proof.
-  revert x outD. induction xs; intros.
-  - solve_approx.
-  - destruct xs.
-    + solve_approx.
-    + admit. (* I need a different induction principle. *) 
+  revert x outD.
+  apply split_ind with (xs:=xs); intros;
+    try solve [solve_approx]. 
+  simpl in H0. specialize (H x).
+  destruct (split xs0) eqn:Hsplit.
+  simpl. destruct outD; simpl.
+  unfold exact, Exact_prodA in H0. inversion H0.
+  autorewrite with exact in H1.
+  autorewrite with exact in H2.
+  inversion H1; inversion H2; subst.
+  - simpl. solve_approx.
+    apply H. solve_approx.
+  - simpl. destruct x3; solve_approx.
+    + apply H. solve_approx.
+    + apply H. solve_approx.
+      inversion H7; subst. assumption.
+  - simpl. destruct x0; solve_approx.
+    + apply H. solve_approx.
+    + apply H. solve_approx.
+      inversion H5; subst. assumption.
+  - simpl. destruct x0; destruct x3; solve_approx;
+      try (apply H; solve_approx).
+    + inversion H8; assumption.
+    + inversion H5; assumption.
+    + inversion H5; assumption.
+    + inversion H8; assumption.
+Qed.
+
+Ltac destruct_lia :=
+  match goal with
+  | [ |- context[match ?x with |_ => _ end] ] =>
+      let H := fresh "Hdes" in
+       destruct x eqn:H; simpl; try lia
+  end.
+
+Lemma splitD_cost (x : nat) (xs : list nat) outD ys zs :
+  pairA ys zs = outD ->
+  Tick.cost (splitD xs outD) <= max 1 (max (sizeX 1 ys) (sizeX 1 zs)). 
+Proof.
+  revert x outD ys zs.
+  apply split_ind with (xs:=xs); intros.
+  - simpl. repeat destruct_lia.
+  - simpl. repeat destruct_lia.
+  - simpl. repeat destruct_lia.
+    + rewrite <- H0. simpl.
+      specialize (H x (pairA (tailX ys) (tailX zs)) _ _ eq_refl).
+      admit. (* Should be provable with H and Hdes. *)
+    + rewrite <- H0. simpl.
+      specialize (H x (pairA (tailX ys) (tailX zs)) _ _ eq_refl).
+      admit. (* Might need some extra lemmas here. *)
 Admitted.
