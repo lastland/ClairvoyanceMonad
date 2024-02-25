@@ -1,6 +1,7 @@
 From Coq Require Import List Arith Psatz RelationClasses.
 
-From Clairvoyance Require Import Core Approx List ListA Tick Misc TickCost.
+From Clairvoyance Require Import
+  Core Approx List ListA Prod Tick Misc TickCost.
 From Equations Require Import Equations.
 
 Import ListNotations.
@@ -26,19 +27,6 @@ Fixpoint selection_sort (l : list nat) (n : nat) : list nat :=
 end.
 
 (** * Demand functions *)
-
-Inductive prodA (A B : Type) : Type :=
-  | pairA : T A -> T B -> prodA A B.
-
-Arguments pairA {A} {B}.
-
-Check thunkD.
-
-Definition prodD {A B C D} (f : T A -> T C) (g : T B -> T D)
-  (p : prodA A B) : prodA C D :=
-  match p with
-  | pairA a b => pairA (f a) (g b)
-  end.
 
 Fixpoint selectD (x : nat) (l : list nat) (outD : prodA nat (listA nat)) : Tick (T (listA nat)) :=
   Tick.tick >>

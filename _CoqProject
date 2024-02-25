@@ -10,6 +10,7 @@ src/FingerTreeM.v
 src/Fix.v
 src/ListA.v
 src/List.v
+src/Prod.v
 src/SelectionSort.v
 src/MergeSort.v
 src/InsertionSort.v
