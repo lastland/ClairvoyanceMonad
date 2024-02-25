@@ -254,7 +254,8 @@ Proof.
 Qed.  
 
 Theorem take_selection_sortD_cost (n : nat) (xs : list nat) (outD : listA nat) :
-  Tick.cost (take_selection_sortD n xs outD) <= n * (length xs + 1) + sizeX' 1 outD + 1.
+  Tick.cost (take_selection_sortD n xs outD) <=
+    n * (length xs + 1) + n + 1.
 Proof.
   intros. unfold take_selection_sortD.
   rewrite bind_cost, takeD_cost, Tick.right_ret.
