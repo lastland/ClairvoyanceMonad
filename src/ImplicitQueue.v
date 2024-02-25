@@ -691,6 +691,20 @@ Proof.
       repeat constructor; simpl; auto.
 Qed.
 
+Definition pushA (A : Type) (q : T (QueueA A)) (x : T A) : M (QueueA A) :=
+  let fix pushA_ (A : Type) (qA : QueueA A) (x : T A) : M (QueueA A) :=
+    bind tick (fun _ =>
+                 match qA with
+                 | NilA => ret (DeepA (Thunk (FOneA x)) (Thunk NilA) (Thunk RZeroA))
+                 | DeepA f m (Thunk RZeroA) => ret (DeepA f m (Thunk (ROneA x)))
+                 | DeepA f m (Thunk (ROneA y)) => let~ m' := (fun m => pushA_ _ m (zipT y x)) $! m in
+                                                  ret (DeepA f m' (Thunk RZeroA))
+                 | _ => bottom
+                 end)
+  in (fun q => pushA_ _ q x) $! q.
+
+(* pop *)
+
 Fixpoint pop (A : Type) (q : Queue A) : option (A * Queue A) :=
   match q with
   | Nil => None
@@ -815,6 +829,40 @@ Proof.
     + apply H. invert_clear H1; invert_clear H2; repeat constructor; auto.
     + apply H. invert_clear H1; invert_clear H4; repeat constructor; auto.
 Qed.
+
+Definition popA (A : Type) (q : T (QueueA A)) : M (option (T A * T (QueueA A))) :=
+  let fix popA_ (A : Type) (q : QueueA A) : M (option (T A * T (QueueA A))) :=
+    bind tick (fun _ =>
+                 match q with
+                 | NilA => ret None
+                 | DeepA f m r =>
+                     forcing f
+                       (fun f =>
+                          match f with
+                          | FOneA x =>
+                              let! p := popA_ _ $! m in
+                              match p with
+                              | None =>
+                                  forcing r
+                                    (fun r =>
+                                       match r with
+                                       | RZeroA => ret (Some (x, Thunk NilA))
+                                       | ROneA y =>
+                                           ret (Some (x, Thunk (DeepA (Thunk (FOneA y)) (Thunk NilA) (Thunk RZeroA))))
+                                       end)
+                              | Some (p, m) =>
+                                  forcing p
+                                    (fun p =>
+                                       match p with
+                                       | (y, z) =>
+                                           ret (Some (x, Thunk (DeepA (Thunk (FTwoA (Thunk y) (Thunk z))) m r)))
+                                       end)
+                              end
+                          | FTwoA x y =>
+                              ret (Some (x, Thunk (DeepA (Thunk (FOneA y)) m r)))
+                          end)
+                 end)
+  in popA_ _ $! q.
 
 (* Length of a queue. *)
 Fixpoint length (A : Type) (q : Queue A) : nat :=
