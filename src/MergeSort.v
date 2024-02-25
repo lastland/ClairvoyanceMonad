@@ -1,6 +1,7 @@
 From Coq Require Import List Arith Psatz.
 
-From Clairvoyance Require Import Core Approx List ListA Tick.
+From Clairvoyance Require Import
+  Core Approx List ListA Prod Tick.
 
 Import ListNotations.
 Import Tick.Notations.
@@ -50,50 +51,58 @@ Definition thunkTupleD {a b} `{Bottom b} (f : a * a -> b) (x : T a * T a) (p : a
   | (Undefined, Undefined) => bottom
   end.
 
-Fixpoint splitD {a : Type} (xs : list a) (outD : listA a * listA a) : Tick (T (listA a)) :=
+Fixpoint splitD {a : Type} (xs : list a)
+  (outD : prodA (listA a) (listA a)) :
+  Tick (T (listA a)) :=
   Tick.tick >>
   match xs, outD with
   | [], _ => Tick.ret (Thunk NilA)
   | [x], _ => Tick.ret (Thunk (ConsA (Thunk x) (Thunk NilA)))
-  | x :: x' :: xs, (ConsA zD zsD, ConsA zD' zsD') =>
-    Tick.tick >>
-    let+ xsD := thunkTupleD (splitD xs) (zsD, zsD') (ConsA Undefined Undefined) in
-    Tick.ret (Thunk (ConsA zD (Thunk (ConsA zD' xsD))))
-  | _, _ => bottom
+  | x :: x' :: xs, p =>
+    let+ xsD := splitD xs (prodD tailX tailX p) in
+    Tick.ret (Thunk (ConsA (Thunk x) (Thunk (ConsA (Thunk x') xsD))))
   end.
 
-(* Compute splitD [1;2;3;4;5;6;7;8] (exact [1;3;5;7], exact [2;4;6;8]). *)
+Compute splitD [1;2;3;4;5;6;7;8] (pairA (exact [1;3;5;7]) (exact [2;4;6;8])).
 
-Fixpoint mergeD (xs ys : list nat) (outD : listA nat) : Tick (T (listA nat) * T (listA nat)) :=
+Fixpoint mergeD (xs ys : list nat) (n : nat)
+  (outD : listA nat) : Tick (T (listA nat) * T (listA nat)) :=
   Tick.tick >>
-  match xs, ys, outD with
-  | [], _, _ => Tick.ret (Thunk NilA, Undefined)
-  | _, [], _ => Tick.ret (Undefined, Thunk NilA)
-  | x :: xs, y :: ys, ConsA zD (Thunk (ConsA zD' zsD)) =>
-    Tick.tick >>
-    let+ (xsD, ysD) := thunkD (mergeD xs ys) zsD in
-    Tick.ret (Thunk (ConsA zD xsD), Thunk (ConsA zD' ysD))
-  | _, _, _ => bottom
+  match xs, ys, n, outD with
+  | _,  _, 0, _ => Tick.ret (Undefined, Undefined) 
+  | [], _, _, _ => Tick.ret (Thunk NilA, Undefined)
+  | _, [], _, _ => Tick.ret (Undefined, Thunk NilA)
+  | x' :: xs', y' :: ys', S n', ConsA zD zsD =>
+      if x' <=? y' then
+        let+ (xsD, ysD) := thunkD (mergeD xs' ys n') zsD in
+        Tick.ret (Thunk (ConsA (Thunk x') xsD), ysD)
+      else 
+        let+ (xsD, ysD) := thunkD (mergeD xs ys' n') zsD in
+        Tick.ret (xsD, Thunk (ConsA (Thunk y') ysD))
+  | _, _, _, _ => bottom
   end.
 
-Fixpoint mergesortD' (l : list nat) (n : nat) (outD : listA nat) : Tick (T (listA nat)) :=
+Compute mergeD [1;3;5] [2;4;6] 3 (ConsA (Thunk 1) (Thunk (ConsA (Thunk 2) (Thunk (ConsA (Thunk 3) Undefined))))).
+
+Fixpoint mergesort'D (l : list nat) (n : nat) (outD : listA nat) : Tick (T (listA nat)) :=
   Tick.tick >>
-  match l, outD, n with
-  | _, _, 0 => Tick.ret Undefined
-  | [], _, _ => Tick.ret (Thunk NilA)
-  | [x], _, _ => Tick.ret (Thunk (ConsA (Thunk x) (Thunk NilA)))
-  | _ :: _, ConsA _ _, S n =>
+  match n, l with
+  | 0, _ => Tick.ret Undefined
+  | _, [] => Tick.ret (Thunk NilA)
+  | _, [x] => Tick.ret (Thunk (ConsA (Thunk x) (Thunk NilA)))
+  | S n, _ =>
     let (xs, ys) := split l in
-    let+ (mxsD, mysD) := mergeD (mergesort xs) (mergesort ys) outD in
-    let+ xsD := thunkD (mergesortD' xs n) mxsD in
-    let+ ysD := thunkD (mergesortD' ys n) mysD in
-    let+ lD := thunkTupleD (splitD l) (xsD, ysD) (ConsA Undefined Undefined) in
+    let xs' := mergesort' xs n in
+    let ys' := mergesort' ys n in
+    let+ (mxsD, mysD) := mergeD xs' ys' (length l) outD in
+    let+ xsD := thunkD (mergesort'D xs n) mxsD in
+    let+ ysD := thunkD (mergesort'D ys n) mysD in
+    let+ lD := splitD l (pairA xsD ysD) in
     Tick.ret lD
-  | _, _, _ => bottom
   end.
 
 Definition merge_sortD (l : list nat) (outD : listA nat) : Tick (T (listA nat)) :=
-  mergesortD' l (length l) outD.
+  mergesort'D l (length l) outD.
 
 (* Long-term goal:
    show that   head (selection_sort xs)   in O(n)
