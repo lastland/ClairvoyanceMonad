@@ -265,40 +265,19 @@ Proof.
 Qed.        
 
 Lemma insertion_sortD_cost (xs : list nat)  (outD : listA nat) :
-  Tick.cost (insertion_sortD xs outD) <= (sizeX' 1 outD) * (length xs + 1).
+  Tick.cost (insertion_sortD xs outD) <= (sizeX' 1 outD + 1) * (length xs + 1).
 Proof.
-  (** Failed attempt 1:
   revert outD. induction xs; simpl.
-  - destruct outD; simpl; try lia. destruct x2; simpl; lia. 
+  - destruct outD; simpl; try lia. 
   - intros. rewrite insertD_cost'.
     destruct (insertD a (insertion_sort xs) outD)
       as [cost [ x |] ] eqn:Hinsert.
     + simpl. specialize (IHxs x).
       pose proof (insertD_size a (insertion_sort xs) outD).
-      rewrite insertion_sort_length_inv.
       rewrite Hinsert in H. simpl in H.
-      rewrite IHxs. rewrite H.
-      nia.
+      rewrite IHxs. rewrite H. nia.
     + simpl. nia.
-
-   *)
-      
-  (** Failed attempt 2:
-  revert xs. induction outD.
-  - intros; simpl. destruct xs; simpl; try lia.
-    rewrite insertD_cost'', insertion_sort_length_inv. 
-    assert (insertD n (insertion_sort xs) NilA = bottom) by admit.
-    rewrite H. simpl. lia.
-  - simpl. revert x1. induction xs; simpl; try lia.
-    rewrite insertD_cost'', insertion_sort_length_inv.
-    destruct xs; simpl.
-    + lia.
-    + destruct (insert n (insertion_sort xs)) eqn:Hisort.
-      * simpl. lia.
-      * simpl.
-      rewrite H. simpl. lia.
-   *)
-Admitted.
+Qed.
 
 Definition head_insertion_sortD (xs : list nat) (outD : nat) :
   Tick (T (listA nat)) :=
@@ -317,7 +296,7 @@ Definition take_insertion_sortD (n : nat) (xs : list nat) (outD : listA nat) :
 Lemma head_insertion_sortD_cost (xs : list nat) (outD : nat) :
   outD `is_approx` head_def (insertion_sort xs) 0 ->
   forall xsA, xsA = Tick.val (head_insertion_sortD xs outD) ->
-  Tick.cost (head_insertion_sortD xs outD) <= length xs + 3.
+  Tick.cost (head_insertion_sortD xs outD) <= 2 * length xs + 3.
 Proof.
   intros. unfold head_insertion_sortD.
   rewrite bind_cost, headD_cost, Tick.right_ret.
@@ -328,7 +307,7 @@ Qed.
 
 Theorem take_insertion_sortD_cost (n : nat) (xs : list nat) (outD : listA nat) :
   Tick.cost (take_insertion_sortD n xs outD) <=
-    n * (length xs + 2) + 1.
+    (n + 1) * (length xs + 2) + 1.
 Proof.
   intros. unfold take_insertion_sortD.
   rewrite bind_cost, takeD_cost, Tick.right_ret.
@@ -357,4 +336,3 @@ Proof.
 Admitted.
 
 End CaseStudyInsert.
-
