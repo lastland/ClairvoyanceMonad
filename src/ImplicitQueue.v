@@ -693,14 +693,20 @@ Qed.
 
 Definition pushA (A : Type) (q : T (QueueA A)) (x : T A) : M (QueueA A) :=
   let fix pushA_ (A : Type) (qA : QueueA A) (x : T A) : M (QueueA A) :=
-    bind tick (fun _ =>
-                 match qA with
-                 | NilA => ret (DeepA (Thunk (FOneA x)) (Thunk NilA) (Thunk RZeroA))
-                 | DeepA f m (Thunk RZeroA) => ret (DeepA f m (Thunk (ROneA x)))
-                 | DeepA f m (Thunk (ROneA y)) => let~ m' := (fun m => pushA_ _ m (zipT y x)) $! m in
-                                                  ret (DeepA f m' (Thunk RZeroA))
-                 | _ => bottom
-                 end)
+    bind tick
+      (fun _ =>
+         match qA with
+         | NilA => ret (DeepA (Thunk (FOneA x)) (Thunk NilA) (Thunk RZeroA))
+         | DeepA f m r =>
+             forcing r
+               (fun r =>
+                  match r with
+                  | RZeroA => ret (DeepA f m (Thunk (ROneA x)))
+                  | ROneA y =>
+                      let~ m' := (fun m => pushA_ _ m (zipT y x)) $! m in
+                      ret (DeepA f m' (Thunk RZeroA))
+                  end)
+         end)
   in (fun q => pushA_ _ q x) $! q.
 
 (* pop *)
