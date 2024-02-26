@@ -1276,8 +1276,6 @@ Proof.
     apply pop_None_inv in Hpop. subst. repeat constructor.
   - simpl. destruct (pop q) eqn:Hpop; try solve [ invert_clear 1 ].
     destruct p. invert_clear 1.
-    Check (pop q).
-    Print LessDefined.
     assert (less_defined
               (Some (Undefined, qD))
               (@exact
