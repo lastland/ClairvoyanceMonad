@@ -150,14 +150,15 @@ Abort.
 Fixpoint insertD (x:nat) (xs: list nat)  (outD : listA nat) : Tick (T (listA nat)) :=
   Tick.tick >>
   match xs, outD with 
-  | nil, NilA => Tick.ret (Thunk NilA)
+  | [], ConsA zD zsD =>
+      Tick.ret (Thunk NilA)
   | y :: ys, ConsA zD zsD => 
      if Nat.leb y x then 
        let+ ysD := thunkD (insertD x ys) zsD in
        Tick.ret (Thunk (ConsA (Thunk y) ysD))
      else 
        Tick.ret zsD
-  | _ , _ => bottom
+  | _ , _ => bottom (* absurdity case *)
   end.
 
 Fixpoint insertion_sortD (xs: list nat)  (outD : listA nat) : Tick (T (listA nat)) :=
