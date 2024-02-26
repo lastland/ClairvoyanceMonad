@@ -1287,3 +1287,16 @@ Proof.
       by (rewrite Hpop; repeat constructor; auto).
     apply popD_approx in H1. constructor; auto.
 Qed.
+
+Definition Exec_QueueA (A : Type) : Exec (op A) (T (QueueA A)) :=
+  fun o args => match o, args with
+                | Empty, [] => let! q := emptyA in ret [Thunk q]
+                | Push x, [q] => let! q' := pushA q (Thunk x) in ret [Thunk q']
+                | Pop, [q] =>
+                    let! pop_q := popA q in
+                    match pop_q with
+                    | None => ret []
+                    | Some (x, q) => ret [q]
+                    end
+                | _, _ => ret []
+                end.
