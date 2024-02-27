@@ -593,7 +593,16 @@ Defined.
 
 Definition empty (A : Type) : Queue A := Nil.
 
-Definition emptyA (A : Type) : M (QueueA A) := ret NilA.
+Definition emptyD (A : Type) (outD : QueueA A) : Tick unit :=
+  Tick.tick >>
+    match outD with
+    | NilA => Tick.ret tt
+    | _ => bottom
+    end.
+
+From Clairvoyance Require Import Core.
+
+Definition emptyA (A : Type) : M (QueueA A) := tick >> ret NilA.
 
 (* push *)
 
