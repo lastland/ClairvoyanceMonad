@@ -631,6 +631,15 @@ Proof.
   - apply H3. apply SELF.
 Qed.
 
+Lemma push_is_Deep (A : Type) (q : Queue A) (x : A) : exists f m r, push q x = Deep f m r.
+Proof.
+  refine (match q with
+          | Nil => _
+          | Deep f m RZero => _
+          | Deep f m (ROne y) => _
+          end); simpl; eauto.
+Qed.
+
 Fixpoint pushD (A : Type) (q : Queue A) (x : A) (outD : QueueA A) : Tick (T (QueueA A) * T A) :=
   Tick.tick >>
     match q with
@@ -652,15 +661,6 @@ Fixpoint pushD (A : Type) (q : Queue A) (x : A) (outD : QueueA A) : Tick (T (Que
                            | _ => bottom
                            end
     end.
-
-Lemma push_is_Deep (A : Type) (q : Queue A) (x : A) : exists f m r, push q x = Deep f m r.
-Proof.
-  refine (match q with
-          | Nil => _
-          | Deep f m RZero => _
-          | Deep f m (ROne y) => _
-          end); simpl; eauto.
-Qed.
 
 Lemma pushD_approx : forall (A : Type) `{LessDefined A} (q : Queue A) (x : A) (outD : QueueA A),
     outD `is_approx` push q x -> Tick.val (pushD q x outD) `is_approx` (q, x).
