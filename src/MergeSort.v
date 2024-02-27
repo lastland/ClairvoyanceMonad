@@ -104,13 +104,22 @@ Fixpoint mergesort'D (l : list nat) (n : nat) (outD : listA nat) : Tick (T (list
 Definition merge_sortD (l : list nat) (outD : listA nat) : Tick (T (listA nat)) :=
   mergesort'D l (length l) outD.
 
-Lemma split_ind {A} :
+  Lemma split_ind {A} :
   forall (P : list A -> Prop),
     P [] ->
     (forall x, P [x]) ->
     (forall x1 x2 xs, P xs -> P (x1 :: x2 :: xs)) ->
     forall xs, P xs.
-Admitted.
+Proof.
+  intros. apply induction_ltof1 with (f := @length A). intros.
+  rename x into ys. destruct ys.
+  - apply H.
+  - destruct ys.
+    + apply H0.
+    + enough (length ys < length (a :: a0 :: ys)).
+      * apply H1. apply H2. apply H3.
+      * destruct ys; simpl; auto.
+Qed.
 
 Lemma splitD__approx (x : nat) (xs : list nat) (outD : _)
   : outD `is_approx` split xs ->
