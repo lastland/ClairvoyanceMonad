@@ -648,18 +648,19 @@ Fixpoint pushD (A : Type) (q : Queue A) (x : A) (outD : QueueA A) : Tick (T (Que
                  Tick.ret (Thunk NilA, xD)
              | _ => bottom
              end
-    | Deep f m RZero => match outD with
-                        | DeepA fD mD (Thunk (ROneA xD)) =>
-                            Tick.ret (Thunk (DeepA fD mD (Thunk RZeroA)), xD)
-                        | _ => bottom
-                        end
-    | Deep f m (ROne y) => match outD with
-                           | DeepA fD mD (Thunk RZeroA) =>
-                               let+ (mD, pD) := thunkD (pushD m (y, x)) mD in
-                               let (yD, xD) := unzipT pD in
-                               Tick.ret (Thunk (DeepA fD mD (Thunk (ROneA yD))), xD)
-                           | _ => bottom
-                           end
+    | Deep f m r => match outD with
+                    | DeepA fD mD rD => let+ (rD, xD) :=
+                                          match r, rD with
+                                          | RZero, Thunk (ROneA xD) => Tick.ret (Thunk RZeroA, xD)
+                                          | ROne y, Thunk RZeroA =>
+                                              let+ (mD, pD) := thunkD (pushD m (y, x)) mD in
+                                              let (yD, xD) := unzipT pD in
+                                              Tick.ret (Thunk (ROneA yD), xD)
+                                          | _, _ => bottom
+                                          end
+                                        in Tick.ret (Thunk (DeepA fD mD rD), xD)
+                    | _ => bottom
+                    end
     end.
 
 Lemma pushD_approx : forall (A : Type) `{LessDefined A} (q : Queue A) (x : A) (outD : QueueA A),
@@ -707,16 +708,43 @@ Definition pushA (A : Type) (q : T (QueueA A)) (x : T A) : M (QueueA A) :=
          match qA with
          | NilA => ret (DeepA (Thunk (FOneA x)) (Thunk NilA) (Thunk RZeroA))
          | DeepA f m r =>
-             forcing r
-               (fun r =>
-                  match r with
-                  | RZeroA => ret (DeepA f m (Thunk (ROneA x)))
-                  | ROneA y =>
-                      let~ m' := (fun m => pushA_ _ m (zipT y x)) $! m in
-                      ret (DeepA f m' (Thunk RZeroA))
-                  end)
+             let~ g := forcing r (fun r => match r with
+                                           | RZeroA => ret (DeepA f m (Thunk (ROneA x)))
+                                           | ROneA y =>
+                                               let~ m' := (fun m => pushA_ _ m (zipT y x)) $! m in
+                                               ret (DeepA f m' (Thunk RZeroA))
+                                           end)
+             in force g
          end)
   in (fun q => pushA_ _ q x) $! q.
+
+Lemma pushD_spec (A : Type) `{LDA : LessDefined A, Reflexive A LDA}
+  (q : Queue A) (x : A) (outD : QueueA A)
+  : outD `is_approx` push q x ->
+    forall qD xD, (qD, xD) = Tick.val (pushD q x outD) ->
+                  qD <> Undefined ->
+    let dcost := Tick.cost (pushD q x outD) in
+    pushA qD xD [[ fun out cost => outD `less_defined` out /\ cost <= dcost ]].
+Proof.
+Admitted.
+(*   refine (match q, outD with *)
+(*           | Nil, DeepA (Thunk (FOneA xD)) (Thunk NilA) (Thunk RZeroA) => _ *)
+(*           | Deep f m RZero, DeepA fD mD (Thunk (ROneA xD)) => _ *)
+(*           | Deep f m (ROne y), DeepA fD mD (Thunk RZeroA) => _ *)
+(*           | _, _ => _ *)
+(*           end); try solve [ intros; *)
+(*                             repeat match goal with *)
+(*                               | H : ?x `less_defined` ?y |- _ => *)
+(*                                   (head_is_constructor x + head_is_constructor y); *)
+(*                                   invert_clear H *)
+(*                               end ]. *)
+(*   - do 2 invert_clear 1. unfold pushA. mgo'. *)
+(*   - invert_clear 1. simpl invert_clear 1. *)
+
+(* simpl. invert_clear 2. mgo'. unfold pushA. simpl. *)
+
+
+
 
 (* pop *)
 
@@ -1344,3 +1372,144 @@ Definition Exec_QueueA (A : Type) : Exec (op A) (T (QueueA A)) :=
                     end
                 | _, _ => ret []
                 end.
+
+Lemma cd (A : Type)
+  `{LDA : LessDefined A, PA : PreOrder A LDA, LBA : Lub A, LLA : @LubLaw A LBA LDA} :
+  @CvDemand (op A) (Queue A) (T (QueueA A))
+    IsApproxAlgebra_QueueA
+    Eval_Queue
+    Exec_QueueA
+    Demand_Queue.
+Proof.
+  unfold CvDemand, cv_demand.
+  intros o x yD Hld n xD. revert Hld.
+  (* refine (match o, x, yD with *)
+  (*         | Empty, [], [_] => _ *)
+  (*         | Push x, [q], [outD] => _ *)
+  (*         | Pop, [q], [] => _ *)
+  (*         | Pop, [q], [qD] => _ *)
+  (*         | _, _, _ => _ *)
+  (*         end); *)
+  (*   try solve [ do 2 invert_clear 1; *)
+  (*               match goal with *)
+  (*               | H : list_rel less_defined ?x ?y |- _ => invert_clear H *)
+  (*               | H : ?x `less_defined` ?y |- _ => invert_clear H *)
+  (*               | _ => idtac *)
+  (*               end; repeat eexists; repeat constructor; auto ]. *)
+  (* - do 2 invert_clear 1. *)
+  (*   exists [Thunk NilA], 1. repeat split. *)
+  (*   + exists NilA, 1, 0. repeat split. *)
+  (*     exists tt, 1, 0. repeat split. *)
+  (*   + repeat constructor. auto. *)
+  (*   + lia. *)
+  (* - invert_clear 1. simpl. *)
+  (*   invert_clear 1. *)
+  (*   destruct (Tick.val (pushD q x (forceD (bottom_of (exact (push q x))) outD))) eqn:HpushD. *)
+  (*   simpl. *)
+  (*   admit. *)
+  (* - simpl. destruct (pop q) eqn:Hpop; try solve [ destruct p; invert_clear 1 ]. *)
+  (*   invert_clear 2. apply pop_None_inv in Hpop. subst. mgo_. *)
+  (* - simpl. destruct (pop q) eqn:Hpop; try solve [ invert_clear 1 ]. *)
+  (*   destruct p. invert_clear 1. destruct (popD q (Some (Undefined, qD))) eqn:HpopD. *)
+  (*   invert_clear 1. destruct val. *)
+  (*   + admit. *)
+  (*   + revert HpopD Hpop H. *)
+  (*     refine (match q, qD with *)
+  (*             | Deep (FOne x) m r, Thunk NilA => _ *)
+  (*             | Deep (FOne x) m r, Thunk (DeepA (Thunk (FOneA yD)) (Thunk NilA) (Thunk RZeroA)) => _ *)
+  (*             | Deep (FOne x) m r, Thunk (DeepA (Thunk (FTwoA yD zD)) mD rD) => _ *)
+  (*             | Deep (FTwo x y) m r, Thunk (DeepA (Thunk (FOneA yD)) mD rD) => _ *)
+  (*             | _, _ => _ *)
+  (*             end); try solve [ invert_clear 1 + invert_clear 2 ]; simpl. *)
+  (*     * invert_clear 1. invert_clear 1. destruct (pop q1) eqn:Hpop. *)
+  (*       -- destruct p. destruct p. invert_clear 1. invert_clear H. invert_clear H. *)
+  (*          invert_clear H. *)
+  (*       -- destruct r. *)
+  (*          ++ invert_clear 1. invert_clear H. *)
+  (*          ++ invert_clear 1. invert_clear H. invert_clear H2. invert_clear H2. *)
+  (*     * *)
+
+
+
+
+
+
+
+
+
+  refine (match o, x, xD, yD with
+          | Empty, [], [], [_] => _
+          | Push x, [q], [q'], [outD] => _
+          | Pop, [q], [q'], [] => _
+          | Pop, [q], [q'], [qD] => _
+          | _, _, _, _ => _
+          end);
+    try solve [ do 2 invert_clear 1;
+                match goal with
+                | H : list_rel less_defined ?x ?y |- _ => invert_clear H
+                | H : ?x `less_defined` ?y |- _ => invert_clear H
+                | _ => idtac
+                end; repeat eexists; repeat constructor; auto ].
+  - do 2 invert_clear 1. invert_clear H.
+    + repeat (unfold optimistic, bind, ret; simpl).
+      exists [exact NilA], 1. repeat split; repeat constructor.
+      exists NilA, 1, 0. repeat split; auto.
+      exists tt, 1, 0. repeat split; auto.
+    + repeat (unfold optimistic, bind, ret; simpl).
+      eexists [Thunk NilA], 1. repeat split.
+      * exists NilA, 1, 0. repeat split. unfold emptyA, bind, ret.
+        exists tt, 1, 0. repeat split.
+      * repeat constructor; auto.
+      * lia.
+  - intros. mgo_. invert_clear Hld.
+    invert_clear H0; invert_clear H1; invert_clear H; invert_clear H1; invert_clear H.
+  - intros. mgo_. destruct yD.
+    + split.
+      * constructor.
+      * lia.
+    + destruct yD.
+      * destruct (pushD q a (forceD (bottom_of (exact (push q a))) t)).
+        generalize dependent ({| Tick.cost := cost; Tick.val := val |}).
+        invert_clear 1. destruct (Tick.val t0). invert_clear H0.
+      * invert_clear H.
+  - destruct (pushD q x (forceD (bottom_of (exact (push q x))) outD)) eqn:HpushD.
+    invert_clear 1.
+    destruct val. simpl.
+    destruct (push_is_Deep q x) as [ f [ m [ r Hpush ] ] ].
+    rewrite Hpush.
+    unfold exact, bottom_of. simpl. unfold forceD.
+    invert_clear H.
+    +
+
+
+  - simpl. invert_clear 1. invert_clear 1. destruct xs.
+    + generalize dependent (pushD q a (forceD (bottom_of (exact (push q a))) x0)).
+      destruct t1. invert_clear 1. destruct val. invert_clear H2.
+    + invert_clear H1.
+  - destruct yD.
+    + invert_clear 1. destruct (pop q) eqn:Hpop; try solve [ destruct p; invert_clear H ].
+      mgo_. split; repeat constructor; lia.
+    + simpl. destruct (pop q) eqn:Hpop; try solve [ invert_clear 1 ].
+      destruct p. invert_clear 1. invert_clear H0.
+      invert_clear 1.
+  - simpl. destruct (pop q) eqn:Hpop.
+    + destruct p. invert_clear 1.
+    + simpl. revert Hpop.
+      refine (match q with
+              | Nil => _
+              | Deep (FOne x) m r => _
+              | Deep (FTwo x y) m r => _
+              end); invert_clear 1.
+      simpl. do 2 invert_clear 1. mgo_. split; reflexivity.
+  - simpl. destruct (pop q) eqn:Hpop; try solve [ invert_clear 1 ].
+    destruct p. invert_clear 1.
+    admit.
+  - invert_clear 1. destruct (pop q) eqn:Hpop.
+    + destruct p. invert_clear H3. invert_clear H0.
+    + invert_clear H3.
+  - simpl. destruct (pop q) eqn:Hpop.
+    + destruct p. invert_clear 1. invert_clear 1. destruct xs.
+      * invert_clear H1.
+      * invert_clear H0.
+    + invert_clear 1. destruct (popD q None) eqn:HpopD. invert_clear 1.
+Qed.
