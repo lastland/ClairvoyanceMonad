@@ -1190,8 +1190,8 @@ Inductive op (A : Type) : Type :=
   fun op args argsA =>
     match op, args, argsA with
     | Empty, [], [_] => Tick.ret []
-    | Push x, [q], [Undefined] => Tick.ret [Undefined]
-    | Push x, [q], [Thunk outD] =>
+    | Push x, [q], [outD] =>
+        let outD := forceD (bottom_of (exact (push q x))) outD in
         let+ (qD, _) := pushD q x outD in
         Tick.ret [qD]
     | Pop, [q], [] =>
@@ -1223,6 +1223,19 @@ Proof.
 Qed.
 #[global] Hint Resolve sumof_potential_bottom_of : core.
 
+Lemma potential_pushD_bottom_of (A : Type) (q : Queue A) (x : A) :
+  let inD := pushD q x (bottom_of (exact (push q x))) in
+  let (qD, _) := Tick.val inD in
+  Tick.cost inD = 1 /\ Potential_Queue qD = 0.
+Proof.
+  refine (match q with
+          | Nil => _
+          | Deep f m RZero => _
+          | Deep f m (ROne y) => _
+          end); simpl; auto.
+Qed.
+#[global] Hint Resolve potential_pushD_bottom_of : core.
+
 Theorem physicist's_argumentD :
   forall (A : Type) `{LDA : LessDefined A, PreOrder A LDA, LBA : Lub A, @LubLaw A LBA LDA},
     @Physicist'sArgumentD
@@ -1235,17 +1248,21 @@ Proof.
   intros LDA HPreOrder LBA HLubLaw o args _ output.
   refine (match o, args, output with
           | Empty, [], [_] => _
-          | Push x, [q], [Undefined] => _
-          | Push x, [q], [Thunk outD] => _
+          | Push x, [q], [outD] => _
           | Pop, [q], [] => _
           | Pop, [q], [qD] => _
           | _, _, _ => _
-          end); try solve [ do 2 invert_clear 1; simpl in *; try (rewrite Hpb); lia ].
+          end); try solve [ do 2 invert_clear 1; simpl in *;
+                            try (rewrite Hpb); lia ].
   - invert_clear 1 as [ | ? ? ? ? HoutD _ ]. invert_clear HoutD as [ | ? ? HoutD ].
-    pose proof (pushD_cost _ _ HoutD) as Hcost. cbn in Hcost.
-    invert_clear 1.
-    destruct (Tick.val (pushD q x outD)) as [ qD xD ]. simpl.
-    change (Potential_Queue qD) with (debt qD). lia.
+    + invert_clear 1.
+      pose proof (potential_pushD_bottom_of q x). cbn in H.
+      destruct (Tick.val (pushD q x (bottom_of (exact (push q x))))) eqn:HpushD.
+      simpl. lia.
+    + pose proof (pushD_cost _ _ HoutD) as Hcost. cbn in Hcost.
+      invert_clear 1.
+      destruct (Tick.val (pushD q x x0)) as [ qD xD ]. simpl.
+      change (Potential_Queue qD) with (debt qD). lia.
   - invert_clear 1. destruct (pop q). try solve [ destruct p; invert_clear H ].
     invert_clear 1. simpl. destruct q; teardown; simpl; lia.
   - simpl. invert_clear 1. destruct (pop q) as [ [ x' q' ] | ] eqn:Hpop; invert_clear H3.
@@ -1278,15 +1295,26 @@ Proof.
   set (output' := output). revert output'.
   refine (match o, args, output with
           | Empty, [], [_] => _
-          | Push x, [q], [Undefined] => _
-          | Push x, [q], [Thunk outD] => _
+          | Push x, [q], [outD] => _
           | Pop, [q], [] => _
           | Pop, [q], [qD] => _
           | _, _, _ => _
           end); try solve [ repeat constructor +
                               invert_clear 1; try apply bottom_is_least; reflexivity ].
-  - simpl. invert_clear 1. invert_clear H. apply pushD_approx in H.
-    destruct (pushD q x outD). invert_clear H. destruct val. repeat constructor. auto.
+  - simpl. invert_clear 1. invert_clear H.
+    + simpl.
+      destruct (Tick.val (pushD q x (bottom_of (exact (push q x))))) eqn:HpushD.
+      constructor; auto.
+      replace t with (fst (Tick.val (pushD q x (bottom_of (exact (push q x)))))).
+      * apply pushD_approx, bottom_is_least. reflexivity.
+      * destruct (Tick.val (pushD q x (bottom_of (exact (push q x))))).
+        invert_clear HpushD. auto.
+    + simpl.
+      destruct (Tick.val (pushD q x x0)) eqn:HpushD. simpl.
+      constructor; auto.
+      replace t with (fst (Tick.val (pushD q x x0))).
+      * apply pushD_approx. auto.
+      * destruct (Tick.val (pushD q x x0)). invert_clear HpushD. auto.
   - simpl. destruct (pop q) eqn:Hpop; try solve [ destruct p; invert_clear 1 ].
     apply pop_None_inv in Hpop. subst. repeat constructor.
   - simpl. destruct (pop q) eqn:Hpop; try solve [ invert_clear 1 ].
