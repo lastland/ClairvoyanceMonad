@@ -1189,7 +1189,9 @@ Inductive op (A : Type) : Type :=
 #[global] Instance Demand_Queue (A : Type) : Demand (op A) (Queue A) (T (QueueA A)) :=
   fun op args argsA =>
     match op, args, argsA with
-    | Empty, [], [_] => Tick.ret []
+    | Empty, [], [outD] =>
+        let outD := forceD (bottom_of (exact empty)) outD in
+        emptyD outD >> Tick.ret []
     | Push x, [q], [outD] =>
         let outD := forceD (bottom_of (exact (push q x))) outD in
         let+ (qD, _) := pushD q x outD in
@@ -1254,6 +1256,7 @@ Proof.
           | _, _, _ => _
           end); try solve [ do 2 invert_clear 1; simpl in *;
                             try (rewrite Hpb); lia ].
+  - invert_clear 1. invert_clear 1. simpl. invert_clear H; try invert_clear H; simpl; lia.
   - invert_clear 1 as [ | ? ? ? ? HoutD _ ]. invert_clear HoutD as [ | ? ? HoutD ].
     + invert_clear 1.
       pose proof (potential_pushD_bottom_of q x). cbn in H.
