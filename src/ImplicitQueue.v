@@ -643,23 +643,30 @@ Qed.
 Fixpoint pushD (A : Type) (q : Queue A) (x : A) (outD : QueueA A) : Tick (T (QueueA A) * T A) :=
   Tick.tick >>
     match q with
-    | Nil => match outD with
-             | DeepA (Thunk (FOneA xD)) (Thunk NilA) (Thunk RZeroA) =>
-                 Tick.ret (Thunk NilA, xD)
-             | _ => bottom
-             end
-    | Deep f m RZero => match outD with
-                        | DeepA fD mD (Thunk (ROneA xD)) =>
-                            Tick.ret (Thunk (DeepA fD mD (Thunk RZeroA)), xD)
-                        | _ => bottom
-                        end
-    | Deep f m (ROne y) => match outD with
-                           | DeepA fD mD (Thunk RZeroA) =>
-                               let+ (mD, pD) := thunkD (pushD m (y, x)) mD in
-                               let (yD, xD) := unzipT pD in
-                               Tick.ret (Thunk (DeepA fD mD (Thunk (ROneA yD))), xD)
-                           | _ => bottom
-                           end
+    | Nil =>
+        let xD := match outD with
+                  | DeepA (Thunk (FOneA xD)) _ _ => xD
+                  | _ => bottom
+                  end in
+        Tick.ret (Thunk NilA, xD)
+    | Deep f m RZero =>
+        match outD with
+        | DeepA fD mD rD =>
+            let xD := match rD with
+                      | Thunk (ROneA xD) => xD
+                      | _ => bottom
+                      end in
+            Tick.ret (Thunk (DeepA fD mD (Thunk RZeroA)), xD)
+        | _ => bottom
+        end
+    | Deep f m (ROne y) =>
+        match outD with
+        | DeepA fD mD _ =>
+            let+ (mD, pD) := thunkD (pushD m (y, x)) mD in
+            let (yD, xD) := unzipT pD in
+            Tick.ret (Thunk (DeepA fD mD (Thunk (ROneA yD))), xD)
+        | _ => bottom
+        end
     end.
 
 Lemma pushD_approx : forall (A : Type) `{LessDefined A} (q : Queue A) (x : A) (outD : QueueA A),
@@ -671,7 +678,7 @@ Proof.
                        Tick.val (pushD q x outD) `less_defined` exact (q, x)));
     intros until outD.
   - refine (match outD with
-            | DeepA (Thunk (FOneA xD)) (Thunk NilA) (Thunk RZeroA) => _
+            | DeepA (Thunk (FOneA xD)) _ _ => _
             | _ => _
             end); intro Happrox;
       repeat match goal with
@@ -679,15 +686,15 @@ Proof.
             (head_is_constructor_or_proj x + head_is_constructor_or_proj y); invert_clear H
         end; repeat constructor; simpl; repeat constructor; auto.
   - refine (match outD with
-            | DeepA fD mD (Thunk (ROneA xD)) => _
+            | DeepA fD mD _ => _
             | _ => bottom
-            end); intro Happrox;
+            end); intro Happrox; teardown;
       repeat match goal with
         | H : ?x `less_defined` ?y |- _ =>
             (head_is_constructor_or_proj x + head_is_constructor_or_proj y); invert_clear H
         end; repeat constructor; auto.
   - refine (match outD with
-            | DeepA fD mD' (Thunk RZeroA) => _
+            | DeepA fD mD' _ => _
             | _ => _
             end); try solve [ repeat constructor ].
     intro Happrox.
@@ -717,6 +724,63 @@ Definition pushA (A : Type) (q : T (QueueA A)) (x : T A) : M (QueueA A) :=
                   end)
          end)
   in (fun q => pushA_ _ q x) $! q.
+
+Lemma pushD_spec (A : Type) `{LDA : LessDefined A, !Reflexive LDA}
+  (q : Queue A) (x : A) (outD : QueueA A)
+  : outD `is_approx` push q x ->
+    forall qD xD, (qD, xD) = Tick.val (pushD q x outD) ->
+    let dcost := Tick.cost (pushD q x outD) in
+    pushA qD xD [[ fun out cost => outD `less_defined` out /\ cost <= dcost ]].
+Proof.
+  intros. revert A q x LDA Reflexive0 outD H qD xD H0 dcost.
+  apply (push_ind
+           (fun A q x q' =>
+              forall `{LDA : LessDefined A, !Reflexive LDA},
+                forall outD,
+                  outD `is_approx` q' ->
+                  forall qD xD,
+                    (qD, xD) = Tick.val (pushD q x outD) ->
+                    let dcost := Tick.cost (pushD q x outD) in
+                    pushA qD xD [[fun (out : QueueA A) (cost : nat) =>
+                                    outD `less_defined` out /\ cost <= dcost]]));
+    intros; revert H H0 dcost.
+  - assert (@Reflexive (T A) less_defined) by apply Reflexive_LessDefined_T.
+    refine (match outD with
+            | DeepA (Thunk (FOneA xD)) _ _ => _
+            | _ => _
+            end); mgo'; repeat constructor; auto.
+  - assert (@Reflexive (T (FrontA A)) less_defined) by apply Reflexive_LessDefined_T.
+    assert (@Reflexive (T (QueueA (A * A))) less_defined) by apply Reflexive_LessDefined_T.
+    refine (match outD with
+            | DeepA fD mD _ => _
+            | _ => _
+            end); mgo'; destruct t; mgo'; repeat constructor; auto.
+  - assert (@Reflexive (T (FrontA A)) less_defined) by apply Reflexive_LessDefined_T.
+    revert H1. refine (match outD with
+                       | DeepA fD mD _ => _
+                       | _ => _
+                       end); mgo_.
+    + mgo'.
+    + invert_clear H2. invert_clear H3.
+      * mgo'. apply optimistic_skip. mgo'.
+      * simpl in *.
+        destruct (Tick.val (pushD m (y, x) x0)) as [ mD pD ] eqn: HpushD.
+        symmetry in HpushD.
+        destruct (H0 _ _ _ H3 _ _ HpushD) as [ ? [ ? [ ? [ ? ? ] ] ] ].
+        destruct pD as [ [ ? ? ] | ]; simpl in *.
+        -- invert_clear H1. mgo_.
+           apply optimistic_thunk_go.
+           repeat eexists.
+           ++ exact H5.
+           ++ auto.
+           ++ lia.
+        -- invert_clear H1. mgo_.
+           apply optimistic_thunk_go.
+           repeat eexists.
+           ++ exact H5.
+           ++ auto.
+           ++ lia.
+Qed.
 
 (* pop *)
 
@@ -937,97 +1001,93 @@ Lemma pushD_cost_worstcase :
     outD `is_approx` push q x ->
     Tick.cost (pushD q x outD) <= heightA outD.
 Proof.
-  fix SELF 4. intros ? ? HReflexive ? ? ?.
-  refine (match q with
-          | Nil => _
-          | Deep f m RZero => _
-          | Deep f m (ROne y) => _
-          end); intro Happrox.
-  1, 2: invert_clear Happrox; teardown; simpl; lia.
-  invert_clear Happrox as [ | fD ? mD ? rD ? HfD HmD HrD ].
-  invert_clear HrD as [ | rA ? HrA ]. 1: simpl; lia.
-  invert_clear HrA. invert_clear HmD as [ | mA ? HmA ]. 1: simpl; lia.
-  simpl. replace (Tick.cost (let
-                        '(mD, pD) := Tick.val (pushD m (y, x) mA) in
-                      let (yD, xD) := unzipT pD in
-                      Tick.ret (Thunk (DeepA fD mD (Thunk (ROneA yD))), xD)))
-    with 0. 2: destruct (Tick.val (pushD m (y, x) mA)) as [mD pD], (unzipT pD); auto.
-  specialize (SELF _ _ _ _ _ _ HmA). lia.
+  intros. revert A q x LDA H outD H0.
+  apply (push_ind (fun A q x q' =>
+                     forall `{LDA : LessDefined A, !Reflexive LDA} outD,
+                       outD `less_defined` exact (push q x) ->
+                       Tick.cost (pushD q x outD) <= heightA outD));
+    try solve [ invert_clear 2; teardown; lia ].
+  simpl. invert_clear 3.
+  invert_clear H1; simpl; try solve [ lia ].
+  destruct (Tick.val (pushD m (y, x) x0)) as [ mD pD ] eqn:HpushD.
+  specialize (H _ _ _ H1).
+  destruct pD as [ [ yD xD ] | ]; simpl in *; lia.
 Qed.
 
-(* TODO Can this be derived from pushD_cost_worstcase? *)
-Lemma push_cost_worstcase (A : Type) `{LDA : LessDefined A} `{Reflexive A LDA}
-  (q : Queue A) (x : A) (outD : QueueA A) :
-  outD `is_approx` push q x ->
-  Tick.cost (pushD q x outD) <= Nat.log2 (2 + length q).
-Proof.
-  transitivity (Tick.cost (pushD q x (exact (push q x)))).
-  - apply pushD_cost_exact_maximal. assumption.
-  - clear dependent outD.
-    revert dependent A. fix SELF 4. intros.
-    refine (match q with
-            | Nil => _
-            | Deep f m RZero => _
-            | Deep f m (ROne y) => _
-            end).
-    + auto.
-    + simpl. change 1 with (Nat.log2 2). pose Nat.log2_le_mono. auto with arith.
-    + simpl.
-      destruct (Tick.val (pushD m (y, x) (Exact_Queue (push m (y, x))))).
-      destruct (unzipT t0).
-      simpl. rewrite Nat.add_0_r.
-      transitivity (1 + Nat.log2 (2 + length m)).
-      * apply le_n_S, (SELF _ LessDefined_prod Reflexive_LessDefined_prod).
-      * transitivity (Nat.log2 (4 + 2 * length m)).
-        -- replace (4 + 2 * length m) with (2 * (2 + length m)).
-           ++ rewrite Nat.log2_double; auto with arith.
-           ++ lia.
-        -- apply Nat.log2_le_mono. destruct f; auto with arith.
-Qed.
+(* (* TODO Can this be derived from pushD_cost_worstcase? *) *)
+(* Lemma push_cost_worstcase (A : Type) `{LDA : LessDefined A} `{Reflexive A LDA} *)
+(*   (q : Queue A) (x : A) (outD : QueueA A) : *)
+(*   outD `is_approx` push q x -> *)
+(*   Tick.cost (pushD q x outD) <= Nat.log2 (2 + length q). *)
+(* Proof. *)
+(*   transitivity (Tick.cost (pushD q x (exact (push q x)))). *)
+(*   - apply pushD_cost_exact_maximal. assumption. *)
+(*   - clear dependent outD. *)
+(*     revert dependent A. fix SELF 4. intros. *)
+(*     refine (match q with *)
+(*             | Nil => _ *)
+(*             | Deep f m RZero => _ *)
+(*             | Deep f m (ROne y) => _ *)
+(*             end). *)
+(*     + auto. *)
+(*     + simpl. change 1 with (Nat.log2 2). pose Nat.log2_le_mono. auto with arith. *)
+(*     + simpl. *)
+(*       destruct (Tick.val (pushD m (y, x) (Exact_Queue (push m (y, x))))). *)
+(*       destruct (unzipT t0). *)
+(*       simpl. rewrite Nat.add_0_r. *)
+(*       transitivity (1 + Nat.log2 (2 + length m)). *)
+(*       * apply le_n_S, (SELF _ LessDefined_prod Reflexive_LessDefined_prod). *)
+(*       * transitivity (Nat.log2 (4 + 2 * length m)). *)
+(*         -- replace (4 + 2 * length m) with (2 * (2 + length m)). *)
+(*            ++ rewrite Nat.log2_double; auto with arith. *)
+(*            ++ lia. *)
+(*         -- apply Nat.log2_le_mono. destruct f; auto with arith. *)
+(* Qed. *)
 
-Lemma popD_cost_worstcase :
-  forall (A : Type) `{LDA : LessDefined A} `{Reflexive A LDA}
-         (q : Queue A) (outD : option (T A * T (QueueA A))),
-    outD `is_approx` pop q ->
-    Tick.cost (popD q outD) <= 1 + match outD with
-                                   | None | Some (_, Undefined) => 0
-                                   | Some (_, Thunk qA) => heightA qA
-                                   end.
-Proof.
-  fix SELF 4. intros ? ? HReflexive ? ?. refine (match q with
-                                                 | Nil => _
-                                                 | Deep (FOne x) m r => _
-                                                 | Deep (FTwo x y) m r => _
-                                                 end).
-  1, 3: invert_clear 1; teardown; simpl; lia.
-  refine (match outD with
-          | Some (xD, Thunk NilA) => _
-          | Some (xD, Thunk (DeepA (Thunk (FOneA yD)) (Thunk NilA) (Thunk RZeroA))) => _
-          | Some (xD, Thunk (DeepA (Thunk (FTwoA yD zD)) mD rD)) => _
-          | _ => _
-          end); simpl; try lia.
-  clear q0 t0 f0.
-  invert_clear 1 as [ | ? ? HmA ]. invert_clear HmA as [ Hx HqoutD ].
-  invert_clear HqoutD as [ | ? ? HqoutA ].
-  specialize (SELF _ _ _ m). revert SELF. revert HqoutA.
-  refine (match pop m with
-          | Some (y, z, m) => _
-          | _ => _
-          end).
-  clear p0 p1.
-  2: destruct r; intros;
-  repeat match goal with
-    | H : ?x `less_defined` ?y |- _ =>
-        (head_is_constructor x + head_is_constructor y); invert_clear H
-    end.
-  intro HqoutA.
-  assert (Some (zipT yD zD, mD) `less_defined` exact (Some (y, z, m))) as Hyzm.
-  - invert_clear HqoutA as [ | ? ? ? ? ? ? HyzD HmD HrD ].
-    invert_clear HyzD as [ | ? ? HyzA ].
-    invert_clear HyzA as [ | ? ? ? ? HyD HzD ].
-    invert_clear HyD; invert_clear HzD; repeat constructor; auto.
-  - intro SELF. specialize (SELF _ Hyzm). lia.
-Qed.
+(* Lemma popD_cost_worstcase : *)
+(*   forall (A : Type) `{LDA : LessDefined A} `{Reflexive A LDA} *)
+(*          (q : Queue A) (outD : option (T A * T (QueueA A))), *)
+(*     outD `is_approx` pop q -> *)
+(*     Tick.cost (popD q outD) <= 1 + match outD with *)
+(*                                    | None | Some (_, Undefined) => 0 *)
+(*                                    | Some (_, Thunk qA) => heightA qA *)
+(*                                    end. *)
+(* Proof. *)
+(*   intros. revert A q x LDA H outD H0. *)
+(*   fix SELF 4. intros ? ? HReflexive ? ?. refine (match q with *)
+(*                                                  | Nil => _ *)
+(*                                                  | Deep (FOne x) m r => _ *)
+(*                                                  | Deep (FTwo x y) m r => _ *)
+(*                                                  end). *)
+(*   1, 3: invert_clear 1; teardown; simpl; lia. *)
+(*   refine (match outD with *)
+(*           | Some (xD, Thunk NilA) => _ *)
+(*           | Some (xD, Thunk (DeepA (Thunk (FOneA yD)) (Thunk NilA) (Thunk RZeroA))) => _ *)
+(*           | Some (xD, Thunk (DeepA (Thunk (FTwoA yD zD)) mD rD)) => _ *)
+(*           | _ => _ *)
+(*           end); simpl; try lia. *)
+(*   clear q0 t0 f0. *)
+(*   invert_clear 1 as [ | ? ? HmA ]. invert_clear HmA as [ Hx HqoutD ]. *)
+(*   invert_clear HqoutD as [ | ? ? HqoutA ]. *)
+(*   specialize (SELF _ _ _ m). revert SELF. revert HqoutA. *)
+(*   refine (match pop m with *)
+(*           | Some (y, z, m) => _ *)
+(*           | _ => _ *)
+(*           end). *)
+(*   clear p0 p1. *)
+(*   2: destruct r; intros; *)
+(*   repeat match goal with *)
+(*     | H : ?x `less_defined` ?y |- _ => *)
+(*         (head_is_constructor x + head_is_constructor y); invert_clear H *)
+(*     end. *)
+(*   intro HqoutA. *)
+(*   assert (Some (zipT yD zD, mD) `less_defined` exact (Some (y, z, m))) as Hyzm. *)
+(*   - invert_clear HqoutA as [ | ? ? ? ? ? ? HyzD HmD HrD ]. *)
+(*     invert_clear HyzD as [ | ? ? HyzA ]. *)
+(*     invert_clear HyzA as [ | ? ? ? ? HyD HzD ]. *)
+(*     invert_clear HyD; invert_clear HzD; repeat constructor; auto. *)
+(*   - intro SELF. specialize (SELF _ Hyzm). lia. *)
+(* Qed. *)
 
 Class Debitable (A : Type) :=
   debt : A -> nat.
@@ -1079,13 +1139,54 @@ Proof.
                        let (qD, _) := Tick.val inM in
                        debt qD + cost <= 2 + debt outD)).
   - intros until outD. refine (match outD with
-                               | DeepA (Thunk (FOneA xD)) (Thunk NilA) (Thunk RZeroA) => _
+                               | DeepA (Thunk (FOneA xD)) _ _ => _
                                | _ => _
                                end); repeat (unfold debt; simpl); lia.
   - intros until outD. refine (match outD with
                                | DeepA fD mD (Thunk (ROneA xD)) => _
                                | _ => _
                                end); repeat (unfold debt; simpl); teardown; simpl; lia.
+  - intros until outD. refine (match outD with
+                               | DeepA fD mD _ => _
+                               | _ => _
+                               end); invert_clear 1.
+    invert_clear H1.
+    + repeat (unfold debt, T_rect, size_FrontA, size_RearA; teardown; simpl); lia.
+    + specialize (H _ _ H1). simpl in *.
+      destruct (Tick.val (pushD m (y, x) x0))
+        as [ mD' [ [ yD xD ] | ] ]
+             eqn:HpushD.
+      * unfold debt. simpl. unfold T_rect, size_FrontA, size_RearA. teardown_eqns;
+          unfold debt; simpl;
+          change (Debitable_T mD') with (debt mD');
+          change (Debitable_QueueA x0) with (debt x0); try lia.
+        -- destruct t.
+           ++ destruct x2.
+              ** invert_clear H5.
+              ** invert_clear H5.
+
+          
+try lia.
+
+
+    destruct pD as [ [ yD xD ] | ]; simpl in *.
+    + admit.
+    +
+repeat (unfold debt, T_rect, size_FrontA, size_RearA; teardown); simpl; try lia.
+        unfold debt; teardown.
+    + invert_clear H1.
+      * invert_clear HpushD.
+      * specialize (H _ _ H1). simpl in *.
+        repeat rewrite HpushD in H.
+        unfold debt. teardown; unfold T_rect; teardown; lia.
+    specialize (H _ _ _ H1).
+
+    + invet_
+intros until outD. refine (match outD with
+                               | DeepA fD mD rD => _
+                               | _ => _
+                               end).
+  -
   - intros ? ? ? ? ? IH ? ? Happrox. invert_clear Happrox.
     invert_clear H1. 1: simpl; lia.
     invert_clear H1. invert_clear H0.
