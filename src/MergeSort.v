@@ -118,7 +118,7 @@ Proof.
     + apply H0.
     + enough (length ys < length (a :: a0 :: ys)).
       * apply H1. apply H2. apply H3.
-      * destruct ys; simpl; auto.
+      * cbn. lia.
 Qed.
 
 Lemma splitD__approx (x : nat) (xs : list nat) (outD : _)
