@@ -324,15 +324,4 @@ Proof.
     + lia.
 Qed.
 
-Lemma insertD_spec x (xs : list nat) (outD : listA nat)
-  : outD `is_approx` insert x xs ->
-    forall xsD dcost, Tick.MkTick dcost xsD = insertD x xs outD ->
-    insertA (Thunk x) xsD [[ fun out cost => outD `less_defined` out /\ cost <= dcost ]].
-Proof.
-  unfold insertA.
-  revert outD; induction xs; cbn; intros * Hout *.
-  - unfold Tick.ret. intros h. inversion h. subst. 
-    mgo_.
-Admitted.
-
 End CaseStudyInsert.
