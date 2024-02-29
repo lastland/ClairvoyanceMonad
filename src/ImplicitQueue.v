@@ -1119,8 +1119,16 @@ Definition size_RearA (A : Type) (rA : RearA A) : nat :=
                  | Undefined, Undefined => 0
                  | _, _ => T_rect _ size_FrontA 1 fD - T_rect _ size_RearA 0 rD
                  end
-        in c + @Debitable_T _ (debt_QueueA _) mD
+        in c + 2 * @Debitable_T _ (debt_QueueA _) mD
     end.
+
+Lemma pushD_mono : forall (A : Type) `{LessDefined A} (q : Queue A) (x : A) (outD : QueueA A) fD mD rD,
+    (* outD `is_approx` push q x -> *)
+    outD = DeepA fD mD rD ->
+    rD `is_approx` RZero ->
+    let (qD, _) := Tick.val (pushD q x outD) in
+    debt qD <= debt mD.
+Admitted.
 
 Lemma pushD_cost : forall (A : Type) `{LessDefined A} (q : Queue A) (x : A) (outD : QueueA A),
     outD `is_approx` push q x ->
@@ -1129,8 +1137,64 @@ Lemma pushD_cost : forall (A : Type) `{LessDefined A} (q : Queue A) (x : A) (out
     let (qD, _) := Tick.val inM in
     debt qD + cost <= 2 + debt outD.
 Proof.
+  induction q.
+  - simpl. lia.
+  - simpl pushD. destruct r.
+    + invert_clear 1. invert_clear H2.
+      * destruct f1.
+        -- simpl. unfold debt, Debitable_T, debt, Debitable_QueueA. simpl.
+           lia.
+        -- simpl. unfold debt, Debitable_T, debt, Debitable_QueueA. simpl.
+           lia.
+      * destruct f1.
+        -- invert_clear H2. simpl.
+           unfold debt, Debitable_T, debt, Debitable_QueueA. simpl.
+           lia.
+        -- invert_clear H2. simpl.
+           unfold debt, Debitable_T, debt, Debitable_QueueA. simpl.
+           teardown; lia.
+    + invert_clear 1. invert_clear H1.
+      * simpl.
+        -- destruct f1.
+           ++ simpl. unfold debt, Debitable_T, debt, Debitable_QueueA. simpl.
+              invert_clear H2.
+              ** simpl. lia.
+              ** invert_clear H1. simpl. lia.
+           ++ simpl. lia.
+      * specialize (IHq _ _ _ H1). simpl in IHq.
+        simpl.
+        destruct (Tick.val (pushD q (a, x) x0))
+          as [ mD' [ [ yD xD ] | ] ]
+               eqn:HpushD.
+        -- destruct f1.
+           ++ simpl.
+              ** unfold debt, Debitable_T, debt, Debitable_QueueA. simpl.
+                 destruct x1, mD'; simpl; try lia.
+                 unfold debt, Debitable_T at 1 in IHq.
+                 change (Debitable_QueueA x0) with (debt x0) in IHq.
+
+
+
+           unfold size_FrontA, Debitable_T. teardown_eqns; try lia.
+           Focus 2.
+        -- simpl. unfold debt, Debitable_T, debt, Debitable_QueueA. simpl.
+           lia.
+
+
+
   (* Rearrange hypotheses to make the types work out. *)
-  intros ? LDA ? ?. revert A q x LDA.
+  intros ? LDA ? ?. remember (push q x) as Q.
+  induction Q.
+  - invert_clear 1. destruct q.
+    * invert_clear HeqQ.
+    * destruct r; invert_clear HeqQ.
+  - invert_clear 1. simpl in *. destruct q.
+    * simpl in *. lia.
+    * simpl in *. teardown_eqns.
+      -- destruct r1.
+         ++ destruct x0. simpl in *.
+
+
   apply (push_ind (fun (A : Type) (q : Queue A) (x : A) (q' : Queue A) =>
                      forall LDA outD,
                        outD `is_approx` q' ->
@@ -1146,10 +1210,7 @@ Proof.
                                | DeepA fD mD (Thunk (ROneA xD)) => _
                                | _ => _
                                end); repeat (unfold debt; simpl); teardown; simpl; lia.
-  - intros until outD. refine (match outD with
-                               | DeepA fD mD _ => _
-                               | _ => _
-                               end); invert_clear 1.
+  - destruct outD as [ | fD mD rD ] eqn:HoutD; invert_clear 1.
     invert_clear H1.
     + repeat (unfold debt, T_rect, size_FrontA, size_RearA; teardown; simpl); lia.
     + specialize (H _ _ H1). simpl in *.
@@ -1159,7 +1220,11 @@ Proof.
       * unfold debt. simpl. unfold T_rect, size_FrontA, size_RearA. teardown_eqns;
           unfold debt; simpl;
           change (Debitable_T mD') with (debt mD');
-          change (Debitable_QueueA x0) with (debt x0); try lia.
+          change (Debitable_QueueA x0) with (debt x0). invert_clear H2.
+        -- pose proof (@pushD_mono _ _ a x _ _ _ _ HoutD).
+        -- lia.
+        --
+
         -- destruct t.
            ++ destruct x2.
               ** invert_clear H5.
