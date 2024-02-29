@@ -26,7 +26,6 @@ src/QueueTrace.v
 src/FingerTreeInterface.v
 src/Tick.v
 src/TickCost.v
-src/TwoListQueue.v
 src/Relations.v
 src/Setoid.v
 src/DemandLogic.v
