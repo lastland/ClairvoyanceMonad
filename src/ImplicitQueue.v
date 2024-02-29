@@ -761,6 +761,85 @@ Proof.
            ++ lia.
 Qed.
 
+(* pop *)
+
+Fixpoint pop (A : Type) (q : Queue A) : option (A * Queue A) :=
+  match q with
+  | Nil => None
+  | Deep f m r =>
+      match f with
+      | FOne x =>
+          let q :=
+            let p := pop m in
+            match p with
+            | None =>
+                match r with
+                | RZero => Nil
+                | ROne y => Deep (FOne y) Nil RZero
+                end
+            | Some ((y, z), m') => Deep (FTwo y z) m' r
+            end
+          in Some (x, q)
+      | FTwo x y => Some (x, Deep (FOne y) m r)
+      end
+  end.
+
+Fixpoint popD (A : Type) (q : Queue A) (outD : option (T A * T (QueueA A))) :
+  Tick (T (QueueA A)) :=
+  Tick.tick >>
+    match q with
+    | Nil => Tick.ret (Thunk NilA)
+    | Deep f m r =>
+        match f with
+        | FOne x =>
+            match outD with
+            | Some (xD, Thunk NilA) =>
+                let+ mD := popD m None in
+                Tick.ret (Thunk (DeepA (Thunk (FOneA xD)) mD (Thunk RZeroA)))
+            | Some (xD, Thunk (DeepA (Thunk (FOneA yD)) _ _)) =>
+                let+ mD := popD m None in
+                Tick.ret (Thunk (DeepA (Thunk (FOneA xD)) mD (Thunk (ROneA yD))))
+            | Some (xD, Thunk (DeepA (Thunk (FTwoA yD zD)) mD' rD)) =>
+                let+ mD := popD m (Some (zipT yD zD, mD')) in
+                Tick.ret (Thunk (DeepA (Thunk (FOneA xD)) mD (Thunk (ROneA yD))))
+            | _ => bottom
+            end
+        | FTwo x y =>
+            match outD with
+            | Some (xD, Thunk (DeepA (Thunk (FOneA yD)) mD rD)) =>
+                Tick.ret (Thunk (DeepA (Thunk (FTwoA xD yD)) mD rD))
+            | _ => bottom
+            end
+        end
+    end.
+
+Definition popA (A : Type) (q : T (QueueA A)) : M (option (T A * T (QueueA A))) :=
+  let fix popA_ (A : Type) (q : QueueA A) : M (option (T A * T (QueueA A))) :=
+    match q with
+    | NilA => ret None
+    | DeepA f m r =>
+        let! f := force f in
+        match f with
+        | FOneA x =>
+            let~ q :=
+              let! p := popA_ _ $! m in
+              match p with
+              | None =>
+                  let! r := force r in
+                  match r with
+                  | RZeroA => ret NilA
+                  | ROneA y => ret (DeepA (Thunk (FOneA y)) (Thunk NilA) (Thunk RZeroA))
+                  end
+              | Some (yz, m') =>
+                  let (y, z) := unzipT yz in
+                  ret (DeepA (Thunk (FTwoA y z)) m' r)
+              end
+            in ret (Some (x, q))
+        | FTwoA x y => ret (Some (x, Thunk (DeepA (Thunk (FOneA y)) m r)))
+        end
+    end
+  in popA_ _ $! q.
+
 (* Length of a queue. *)
 Fixpoint length (A : Type) (q : Queue A) : nat :=
   match q with
