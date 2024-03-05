@@ -12,6 +12,7 @@ src/ListA.v
 src/List.v
 src/Prod.v
 src/SelectionSort.v
+src/MergeSort.v
 src/InsertionSort.v
 src/BankersQueue.v
 src/RealtimeBankersQueue.v
@@ -33,3 +34,4 @@ src/DemandLogic.v
 src/BinomialHeap.v
 src/ImplicitQueue.v
 src/Demand2.v
+# src/DemandSemantics.v
