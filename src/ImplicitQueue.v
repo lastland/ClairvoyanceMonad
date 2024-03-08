@@ -8,6 +8,8 @@ Set Implicit Arguments.
 Set Contextual Implicit.
 Set Maximal Implicit Insertion.
 
+#[local] Existing Instance Exact_id | 1.
+
 (* Auxiliary stuff *)
 
 (* Tear a goal down by destructing on every case that the goal matches on. *)
@@ -144,7 +146,16 @@ Proof.
 Qed.
 #[global] Hint Resolve zipT_less_defined : core.
 
-#[local] Existing Instance Exact_id | 1.
+Lemma zipT_less_defined_approx A B `{LessDefined A, LessDefined B}
+  (aD : T A) (a : A) (bD : T B) (b : B) :
+  aD `is_approx` a ->
+  bD `is_approx` b ->
+  zipT aD bD `is_approx` (a, b).
+Proof.
+  change (exact (a, b)) with (zipT (Thunk a) (Thunk b)).
+  apply zipT_less_defined.
+Qed.
+#[global] Hint Resolve zipT_less_defined_approx : core.
 
 Definition forceD {a} (y : a) (u : T a) : a :=
   match u with
@@ -764,6 +775,7 @@ Qed.
 
 (* pop *)
 
+(* Note that this definition is structured so as to appear maximally lazy. *)
 Fixpoint pop (A : Type) (q : Queue A) : option (A * Queue A) :=
   match q with
   | Nil => None
@@ -773,19 +785,48 @@ Fixpoint pop (A : Type) (q : Queue A) : option (A * Queue A) :=
           let q :=
             let p := pop m in
             match p with
+            | Some (yz, m') =>
+                let (y, z) := yz in
+                Deep (FTwo y z) m' r
             | None =>
                 match r with
                 | RZero => Nil
                 | ROne y => Deep (FOne y) Nil RZero
                 end
-            | Some (yz, m') =>
-                let (y, z) := yz in
-                Deep (FTwo y z) m' r
             end
           in Some (x, q)
       | FTwo x y => Some (x, Deep (FOne y) m r)
       end
   end.
+
+Fixpoint popA' (A : Type) (q : QueueA A) : M (option (T A * T (QueueA A))) :=
+  tick >>
+    match q with
+    | NilA => ret None
+    | DeepA f m r =>
+        let! f := force f in
+        match f with
+        | FOneA x =>
+            let~ q :=
+              let! p := popA' $! m in
+              match p with
+              | Some (yz, m') =>
+                  let (y, z) := unzipT yz in
+                  ret (DeepA (Thunk (FTwoA y z)) m' r)
+              | None =>
+                  let! r := force r in
+                  match r with
+                  | RZeroA => ret NilA
+                  | ROneA y => ret (DeepA (Thunk (FOneA y)) (Thunk NilA) (Thunk RZeroA))
+                  end
+              end
+            in ret (Some (x, q))
+        | FTwoA x y => ret (Some (x, Thunk (DeepA (Thunk (FOneA y)) m r)))
+        end
+    end.
+
+Definition popA (A : Type) (q : T (QueueA A)) : M (option (T A * T (QueueA A))) :=
+  popA' $! q.
 
 Fixpoint popD (A : Type) (q : Queue A) (outD : option (T A * T (QueueA A))) :
   Tick (T (QueueA A)) :=
@@ -797,64 +838,57 @@ Fixpoint popD (A : Type) (q : Queue A) (outD : option (T A * T (QueueA A))) :
         | FOne x =>
             let p := pop m in
             match p with
+            | Some (yz, m') =>
+                match outD with
+                | Some (xD, qD) =>
+                    let+ (mD, rD) :=
+                      match qD with
+                      | Thunk (DeepA fD mD' rD) =>
+                          let pD :=
+                            match fD with
+                            (* XXX This is wrong! *)
+                            | Thunk (FTwoA yD zD) => zipT yD zD
+                            | _ => bottom
+                            end in
+                          let+ mD := popD m (Some (pD, mD')) in
+                          Tick.ret (mD, rD)
+                      | _ => bottom
+                      end in
+                    Tick.ret (Thunk (DeepA (Thunk (FOneA xD)) mD rD))
+                | _ => bottom
+                end
             | None =>
                 match r with
                 | RZero =>
                     match outD with
                     | Some (xD, _) =>
                         let+ mD := popD m None in
-                        Tick.ret (Thunk (FOneA xD), mD, (Thunk RZeroA))
+                        Tick.ret (Thunk (DeepA (Thunk (FOneA xD)) mD (Thunk RZeroA)))
                     | _ => bottom
                     end
                 | ROne y =>
-                    let+ mD := popD m None in
-                    Tick.ret (Thunk (FOneA xD), mD, Thunk (ROneA yD))
+                    match outD with
+                    | Some (xD, Thunk (DeepA (Thunk (FOneA yD)) _ _)) =>
+                        let+ mD := popD m None in
+                        Tick.ret (Thunk (DeepA (Thunk (FOneA xD)) mD (Thunk (ROneA yD))))
+                    | _ => bottom
+                    end
                 end
-            | Some (yz, m') =>
-                match outD with
-                | Some (xD,
-            (* let+ (fD, mD, rD) := *)
-            (* match outD with *)
-            (*   | Some (xD, Thunk NilA) => *)
-            (*       let+ mD := popD m None in *)
-            (*       Tick.ret (Thunk (FOneA xD), mD, (Thunk RZeroA)) *)
-            (*   | Some (xD, Thunk (DeepA (Thunk (FOneA yD)) _ _)) => *)
-            (*       let+ mD := popD m None in *)
-            (*       Tick.ret (Thunk (FOneA xD), mD, Thunk (ROneA yD)) *)
-            (*   | Some (xD, Thunk (DeepA (Thunk (FTwoA yD zD)) mD' rD)) => *)
-            (*       let+ mD := popD m (Some (zipT yD zD, mD')) in *)
-            (*       Tick.ret (Thunk (FOneA xD), mD, rD) *)
-            (*   | _ => bottom *)
-            (*   end in *)
-            (* Tick.ret (Thunk (DeepA fD mD rD)) *)
-            (* match outD with *)
-            (* | Some (xD, Thunk NilA) => *)
-            (*     let+ mD := popD m None in *)
-            (*     Tick.ret (Thunk (DeepA (Thunk (FOneA xD)) mD (Thunk RZeroA))) *)
-            (* | Some (xD, Thunk (DeepA (Thunk (FOneA yD)) _ _)) => *)
-            (*     let+ mD := popD m None in *)
-            (*     Tick.ret (Thunk (DeepA (Thunk (FOneA xD)) mD (Thunk (ROneA yD)))) *)
-            (* | Some (xD, Thunk (DeepA (Thunk (FTwoA yD zD)) mD' rD)) => *)
-            (*     let+ mD := popD m (Some (zipT yD zD, mD')) in *)
-            (*     Tick.ret (Thunk (DeepA (Thunk (FOneA xD)) mD rD)) *)
-            (* | _ => bottom *)
-            (* | Some (xD, qD) => *)
-            (*     let+ (mD, rD) := *)
-            (*       match qD with *)
-            (*       | Thunk (DeepA fD mD' rD) => *)
-            (*           let+ mD := *)
-            (*             match fD with *)
-            (*             | Thunk (FTwoA yD zD) => popD m (Some (zipT yD zD, mD')) *)
-            (*             | _ => bottom *)
-            (*             end in *)
-            (*           Tick.ret (mD, rD) *)
-            (*       end in *)
-            (*     Tick.ret (Thunk (DeepA (Thunk (FOneA xD)) mD rD)) *)
-            (* | _ => bottom *)
             end
         | FTwo x y =>
             match outD with
-            | Some (xD, Thunk (DeepA (Thunk (FOneA yD)) mD rD)) =>
+            | Some (xD, qD) =>
+                let '(yD, mD, rD) :=
+                  match qD with
+                  | Thunk (DeepA fD mD rD) =>
+                      let yD :=
+                        match fD with
+                        | Thunk (FOneA yD) => yD
+                        | _ => bottom
+                        end in
+                      (yD, mD, rD)
+                  | _ => bottom
+                  end in
                 Tick.ret (Thunk (DeepA (Thunk (FTwoA xD yD)) mD rD))
             | _ => bottom
             end
@@ -902,60 +936,69 @@ Fixpoint popD (A : Type) (q : Queue A) (outD : option (T A * T (QueueA A))) :
 (*       inversion_clear HfA as [ yD ? HyD | ]. simpl. repeat constructor; auto. *)
 (* Qed. *)
 
-Definition popA (A : Type) (q : T (QueueA A)) : M (option (T A * T (QueueA A))) :=
-  let fix popA_ (A : Type) (q : QueueA A) : M (option (T A * T (QueueA A))) :=
-    match q with
-    | NilA => ret None
-    | DeepA f m r =>
-        let! f := force f in
-        match f with
-        | FOneA x =>
-            let~ q :=
-              let! p := popA_ _ $! m in
-              match p with
-              | None =>
-                  let! r := force r in
-                  match r with
-                  | RZeroA => ret NilA
-                  | ROneA y => ret (DeepA (Thunk (FOneA y)) (Thunk NilA) (Thunk RZeroA))
-                  end
-              | Some (yz, m') =>
-                  let (y, z) := unzipT yz in
-                  ret (DeepA (Thunk (FTwoA y z)) m' r)
-              end
-            in ret (Some (x, q))
-        | FTwoA x y => ret (Some (x, Thunk (DeepA (Thunk (FOneA y)) m r)))
-        end
-    end
-  in popA_ _ $! q.
-
-Lemma popD_spec (A : Type) `{LessDefined A} (q : Queue A) (outD : option (T A * T (QueueA A)))
-  : outD `is_approx` pop q ->
+(* XXX This is probably unprovable right now. *)
+Lemma popD_spec :
+  forall (A : Type) `{LDA : LessDefined A, !Reflexive LDA}
+         (q : Queue A) (outD : option (T A * T (QueueA A))),
+    outD `is_approx` pop q ->
     forall qD, qD = Tick.val (popD q outD) ->
     let dcost := Tick.cost (popD q outD) in
     popA qD [[ fun out cost => outD `less_defined` out /\ cost <= dcost ]].
 Proof.
-  induction q.
+  intros A HRefl_A LDA q outD.
+  induction q eqn:Hq.
   - mgo'. repeat constructor; auto.
-  - simpl. destruct f.
-    (* f is FOne *)
-    + destruct (pop q) eqn:Hpop.
-      (* pop q is Some *)
-      (* As a consequence, we must be in the case where we return Deep (FTwo y z) m' r. *)
-      * destruct p. destruct p. inversion_clear 1.
-        inversion_clear H1. destruct x.
-        simpl in *. inversion_clear snd_rel.
-        (* snd outD is Undefined *)
-        -- intros. assert (qD = (Thunk (DeepA (Thunk (FOneA bottom)) bottom bottom))) by admit.
-           clear H0. subst. mgo_. apply optimistic_thunk_go. mgo_.
-
-        -- mgo_.
-        (* outD
-        --
-        mgo_. subst. mgo_.
-        apply optimistic_thunk_go. mgo_.
-
-
+  - assert (@Reflexive (T A) less_defined)
+      as HRefl_T_A
+        by apply Reflexive_LessDefined_T.
+    assert (@Reflexive (T (FrontA A)) less_defined)
+      as HRefl_T_FrontA_A
+        by apply Reflexive_LessDefined_T.
+    assert (@Reflexive (T (QueueA (A * A))) less_defined)
+      as HRefl_T_QueueA_A_A
+        by apply Reflexive_LessDefined_T.
+    assert (@Reflexive (T (RearA A)) less_defined)
+      as HRefl_T_RearA_A
+        by apply Reflexive_LessDefined_T.
+    simpl. destruct f eqn:Hf.
+    + destruct (pop q0) eqn:Hpop.
+      * destruct p as [ [ y z ] m' ].
+        inversion_clear 1 as [ | [ xD qD ] ? [ HxD HqD ] ]. simpl in *.
+        inversion_clear HqD.
+        -- intros. subst. mgo_.
+           apply optimistic_skip. mgo_. repeat constructor; auto.
+        -- inversion_clear H. inversion_clear H0.
+           ++ simpl. inversion_clear 1. mgo_.
+              apply optimistic_thunk_go. mgo_.
+              specialize (IHq0 _ _ q0 (Some (bottom, q1))
+                            ltac:(auto) ltac:(repeat constructor; auto)
+                                               (Tick.val (popD q0 (Some (bottom, q1))))
+                                               ltac:(auto)).
+              eapply optimistic_mon; eauto.
+              inversion_clear 1.
+              inversion_clear H0.
+              destruct y0.
+              inversion_clear H. simpl in *.
+              destruct t.
+              ** simpl. destruct x1. mgo_.
+                 split; lia + (repeat constructor; auto).
+              ** simpl. mgo_.
+                 split; lia + (repeat constructor; auto).
+           ++ inversion_clear H.
+              ** simpl. inversion_clear 1. mgo_.
+                 apply optimistic_thunk_go. mgo_.
+                 specialize (IHq0 _ _ q0 (Some (zipT x1 y1, q1))
+                               ltac:(auto) ltac:(repeat constructor; simpl; auto with * )
+                                                  (Tick.val (popD q0 (Some (zipT x1 y1, q1))))
+                                                  ltac:(auto)).
+                 eapply optimistic_mon; eauto.
+                 inversion_clear 1. inversion_clear H4.
+                 destruct y0. destruct t.
+                 --- destruct x3. mgo_.
+                     inversion_clear H. simpl in *.
+                     destruct IHq0 as [ ? [ ? [ ? [ ? ? ] ] ] ].
+                     split; repeat constructor; auto.
+Admitted.
 
 (* Length of a queue. *)
 Fixpoint length (A : Type) (q : Queue A) : nat :=
