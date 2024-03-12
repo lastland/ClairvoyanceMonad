@@ -1,5 +1,5 @@
 From Coq Require Import Arith Psatz Relations RelationClasses.
-From Clairvoyance Require Import Core Approx Tick.
+From Clairvoyance Require Import Core Approx Tick Prod Option.
 
 Import Tick.Notations.
 Open Scope tick_scope.
