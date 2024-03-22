@@ -1316,7 +1316,7 @@ Proof.
   intros Cb Cn g g' Eg. induction a; intros a' Ea; inv Ea; cbn in *.
   - apply (pessimistic_mon (minimal_univ Cn g Eg)).
     intros b'' n F b' Hb; specialize (F b' Hb).
-    etransitivity; [ apply less_defined_bind with (k := ?[k]) (k' := ?k); [ apply F | ] | ].
+    etransitivity; [ eapply less_defined_bind with (k := ?[k]) (k' := ?k); [ apply F | ] | ].
     { intros; apply less_defined_ret; constructor; [ auto | constructor ]. }
     constructor; cbn. { lia. } { reflexivity. }
   - apply pessimistic_bind. apply pessimistic_thunk; cycle 1.
