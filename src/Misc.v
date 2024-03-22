@@ -8,6 +8,17 @@ Definition option_bind {A B} (o : option A) (k : A -> option B) : option B :=
   | Some a => k a
   end.
 
+Module Option.
+Definition ret {A : Type} : A -> option A := Some.
+Notation bind := option_bind.
+Module Notation.
+Declare Scope option_scope.
+Delimit Scope option_scope with option.
+Notation "'let?' x := u 'in' v" := (bind u (fun x => v))
+  (x pattern, at level 200) : option_scope.
+End Notation.
+End Option.
+
 #[global] Instance Proper_add_le : Proper (le ==> le ==> le) Nat.add.
 Proof.
   unfold Proper, respectful; intros; apply Nat.add_le_mono; assumption.
