@@ -32,7 +32,7 @@ The artifact supports the claims in the paper in two ways:
 - The artifact contains the formalization of our translation (presented in
   Section 4 of the paper), and a proof of equivalence between our translation
   and the operational semantics of Hackett & Hutton (2019). This part is
-  contained in file Translation.v."""
+  contained in file FormalTranslation.v."""
 
 build: [make "-j%{jobs}%"]
 install: [make "install"]

@@ -19,7 +19,7 @@ The artifact supports the claims in the paper in two ways:
 - The artifact contains the formalization of our translation (presented in
   Section 4 of the paper), and a proof of equivalence between our translation
   and the operational semantics of Hackett & Hutton (2019). This part is
-  contained in file `Translation.v`.
+  contained in file `FormalTranslation.v`.
 
 ## How to use this artifact
 
@@ -52,7 +52,7 @@ make
 ```
 
 This will invoke Coq to check the proofs in files `Clairvoyance.v` and
-`Translation.v`.
+`FormalTranslation.v`.
 
 The actual execution time may vary depending on the machine and the Coq version
 you are using. We have seen the process takes 8-20 seconds on different
@@ -61,7 +61,7 @@ computers with different Coq versions.
 ### Checking axioms
 
 The proofs in `Clairvoyance.v` does not rely on any additional axioms. The
-proofs in `Translation.v` rely on axioms for functional and propositional
+proofs in `FormalTranslation.v` rely on axioms for functional and propositional
 extensionality.
 
 The artifact does not contain any unfinished/admitted proofs. There are two ways
@@ -79,7 +79,7 @@ the `admit` and `Admitted` keywords are covered.)
 
 (2) You can use the `Print Assumptions` command [provided by
 Coq](https://coq.inria.fr/refman/proof-engine/vernacular-commands.html#coq:cmd.Print-Assumptions). For
-example, you can add the following line to the end of the `Translation.v` file:
+example, you can add the following line to the end of the `FormalTranslation.v` file:
 
 ``` coq
 Print Assumptions Lambda.soundess_and_adequacy.
@@ -101,7 +101,7 @@ implemented in the Coq files.
 If you are looking for the code corresponding to a figure, you can search the
 figure label in one of the two files. For example, if you are looking for the
 formalization of the monadic translation presented in Fig. 8, you can find it by
-searching "Figure 8" in the `Translation.v` file.
+searching "Figure 8" in the `FormalTranslation.v` file.
 
 ### The clairvoyance monad
 
@@ -117,7 +117,7 @@ In Section 4 of the paper, we define a translation from pure programs to monadic
 programs.
 
 - The calculus defined in Fig. 6 can be found after the comment "the calculus
-  with folds" in the `Lambda` module of the file `Translation.v`.
+  with folds" in the `Lambda` module of the file `FormalTranslation.v`.
 - The type translation presented in Fig. 7 can be found in the `toType` function
   within the same module.
 - The term translation presented in Fig. 8 can be found in the `eval` function
@@ -128,7 +128,7 @@ programs.
 - The operational semantics of Hackett & Hutton (2019) is formalized as an
   inductive relation called `BigStep` within the same module.
 - Theorem 4.1 presented in Section 4.2 is the final theorem
-  `soundness_and_adequacy` in the `Translation.v` file. We prove the theorem by
+  `soundness_and_adequacy` in the `FormalTranslation.v` file. We prove the theorem by
   utilizing two lemmas: `soundness` and `adequacy`. Both lemmas can be found in
   the same Coq file.
 - The Definitions presented in Fig. 10 can be found in the end of the file
@@ -138,7 +138,7 @@ programs.
   section of `Clairvoyance.v` (note that they are in a different file than the
   previous definitions).
 - The two rewrite rules presented in Section 4.4 are proved in the
-  `Translation.v` file and the corresponding theorems are called `bind_tick` and
+  `FormalTranslation.v` file and the corresponding theorems are called `bind_tick` and
   `thunk_tick`, respectively.
 
 ### Formal reasoning and case study

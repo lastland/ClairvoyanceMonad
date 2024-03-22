@@ -4,7 +4,7 @@ src/Misc.v
 src/Core.v
 src/Approx.v
 src/ApproxM.v
-src/Translation.v
+src/FormalTranslation.v
 src/FingerTree.v
 src/FingerTreeM.v
 src/Fix.v
