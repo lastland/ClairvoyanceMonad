@@ -4,6 +4,8 @@ From Clairvoyance Require Import Approx.
 From Coq Require Import Morphisms Arith.
 
 Set Primitive Projections.
+Set Implicit Arguments.
+Set Maximal Implicit Insertion.
 
 Module Tick.
 
@@ -80,4 +82,28 @@ Proof.
   - apply Hk, Hu.
 Qed.
 
+Module OTick.
+Record OTick (a : Type) : Type := MkOTick { unOTick : option (Tick a) }.
 
+Definition ret {a : Type} (x : a) : OTick a :=
+  MkOTick (Some (Tick.ret x)).
+
+Definition bind {a b : Type} (ox : OTick a) (k : a -> OTick b) : OTick b :=
+  MkOTick match unOTick ox with
+  | None => None
+  | Some x => match unOTick (k (Tick.val x)) with
+              | None => None
+              | Some y => Some (Tick.MkTick (Tick.cost x + Tick.cost y) (Tick.val y))
+              end
+  end.
+
+Definition fail {a : Type} : OTick a := MkOTick None.
+Module Notation.
+Declare Scope otick_scope.
+Delimit Scope otick_scope with otick.
+Notation "'let+' x := u 'in' v" := (bind u (fun x => v))
+  (at level 200, x pattern) : otick_scope.
+End Notation.
+End OTick.
+
+Notation OTick := OTick.OTick.
