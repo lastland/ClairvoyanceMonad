@@ -388,11 +388,11 @@ Unset Elimination Schemes.
 
 Inductive QueueA (A : Type) : Type :=
 | NilA : QueueA A
-| DeepA : T (FrontA A) -> T (QueueA (A * A)) -> T (RearA A) -> QueueA A.
+| DeepA : T (FrontA A) -> T (QueueA (prodA A A)) -> T (RearA A) -> QueueA A.
 
 Lemma QueueA_ind (P : forall A, QueueA A -> Prop) :
   (forall A, P A NilA) ->
-  (forall A f m r, TR1 (P (prod A A)) m -> P A (DeepA f m r)) ->
+  (forall A f m r, TR1 (P (prodA A A)) m -> P A (DeepA f m r)) ->
   forall (A : Type) (q : QueueA A), P A q.
 Proof.
   intros HNilA HDeepA. fix SELF 2.
@@ -418,7 +418,7 @@ Lemma LessDefined_QueueA_refl A `{LessDefined A, Reflexive A less_defined} :
 Proof.
   induction x.
   - constructor.
-  - assert (@Reflexive (A * A) less_defined) by apply Reflexive_LessDefined_prod.
+  - assert (@Reflexive (prodA A A) less_defined) by apply Reflexive_LessDefined_prodA.
     assert (@Reflexive (T (FrontA A)) less_defined) by apply Reflexive_LessDefined_T.
     assert (@Reflexive (T (RearA A)) less_defined) by apply Reflexive_LessDefined_T.
     constructor; auto.
@@ -438,9 +438,9 @@ Lemma LessDefined_QueueA_trans A `{LessDefined A, Transitive A less_defined} :
 Proof.
   induction y.
   - repeat invert_clear 1. auto.
-  -  assert (@Transitive (T (FrontA A)) less_defined) by apply Transitive_LessDefined_T.
-     assert (@Transitive (T (RearA A)) less_defined) by apply Transitive_LessDefined_T.
-     assert (@Transitive (A * A) less_defined) by apply Transitive_LessDefined_prod.
+  - assert (@Transitive (T (FrontA A)) less_defined) by apply Transitive_LessDefined_T.
+    assert (@Transitive (T (RearA A)) less_defined) by apply Transitive_LessDefined_T.
+    assert (@Transitive (prodA A A) less_defined) by apply Transitive_LessDefined_prodA.
     repeat invert_clear 1. repeat constructor; try (etransitivity; eauto).
     invert_clear H2; repeat match goal with
                        | H : ?x `less_defined` ?y |- _ =>
@@ -496,7 +496,7 @@ Qed.
    prove without a tedious auxiliary lemma (if at all; I admit that I haven't
    tried very hard). Worse, the problem may not be immediately apparent, since
    Coq will reject terms that SEEM to have exactly the right type. *)
-#[global] Instance Exact_Queue : forall A `{Exact A}, Exact (Queue A) (QueueA A) :=
+#[global] Instance Exact_Queue : forall A B `{Exact A B}, Exact (Queue A) (QueueA B) :=
   fix Exact_Queue A B _ q :=
     match q with
     | Nil => NilA
@@ -535,8 +535,8 @@ Proof.
                            (head_is_constructor x + head_is_constructor y); invert_clear H
                        end; repeat constructor; auto.
       apply H1; auto.
-      + apply Reflexive_LessDefined_prod.
-      + apply LubLaw_prod.
+      + apply Reflexive_LessDefined_prodA.
+      + apply LubLaw_prodA.
   - induction x; invert_clear 1;
       match goal with
       | H : ?P /\ ?Q |- _ => invert_clear H
@@ -551,8 +551,8 @@ Proof.
                (head_is_constructor x + head_is_constructor y); invert_clear H
            end; constructor; try reflexivity.
       apply H1.
-    + apply Reflexive_LessDefined_prod.
-    + apply LubLaw_prod.
+    + apply Reflexive_LessDefined_prodA.
+    + apply LubLaw_prodA.
     + eauto.
   - induction y; invert_clear 1;
       match goal with
@@ -568,8 +568,8 @@ Proof.
                (head_is_constructor x + head_is_constructor y); invert_clear H
            end; constructor; try reflexivity.
     apply H1.
-    + apply Reflexive_LessDefined_prod.
-    + apply LubLaw_prod.
+    + apply Reflexive_LessDefined_prodA.
+    + apply LubLaw_prodA.
     + eauto.
 Qed.
 
