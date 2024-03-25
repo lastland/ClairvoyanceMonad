@@ -39,13 +39,19 @@ Definition forceD {A} (x : T A) : option (A * (A -> OTick (T A))) :=
   | Thunk y => Some (y, fun d => OTick.ret (Thunk d))
   end.
 
+Definition forceD0 {A} (x : T A) : option A :=
+  match x with
+  | Undefined => None
+  | Thunk y => Some y
+  end.
+
 Definition tlD (x : listA nat) : option (listA nat * (listA nat -> OTick (listA nat))) :=
   match x with
   | ConsA y ys =>
     let? (zs, d_zs) := forceD ys in
     Some (zs, fun zsA =>
       let+ ysA := d_zs zsA in
-      OTick.ret (ConsA bottom ysA))
+      OTick.ret (ConsA (bottom_of y) ysA))
   | NilA => Some (NilA, fun d => OTick.ret NilA)
   end.
 
@@ -131,7 +137,7 @@ Elpi Accumulate lp:{{
   build_product (A :: As) {{ lp:B * lp:A }} :- build_product As B.
 
   pred lookup_indemand i:v i:indemand o:term.
-  lookup_indemand V F M :- F V none, M = {{ bottom }}.
+  lookup_indemand V F M :- F V none, M = {{ bottom_of lp:V }}.
   lookup_indemand V F M :- F V (some M).
 
   pred demand_singleton i:v i:term i:v o:(option term).
@@ -141,7 +147,7 @@ Elpi Accumulate lp:{{
 
 Elpi Accumulate lp:{{
   % _A = type of M, which we don't have access to because this translation does not keep track of types.
-  translate_body K {{ Core.ret lp:M }} {{ Some (pair lp:{{M}} lp:{{fun `d` _A R}}) }} :- !,
+  translate_body K {{ Core.ret lp:M }} {{ Some (pair lp:M lp:{{fun `d` _A R}}) }} :- !,
     pi d\ translate_value K d M (R d).
   % match should be on a variable
   translate_body K (match V {{fun x : listA _ => _}} [N_nil, N_cons])
@@ -149,7 +155,9 @@ Elpi Accumulate lp:{{
     translate_body K N_nil N_nil',
     translate_branch K V (Es\ M\ M = {{ ConsA }}) N_cons N_cons'.
   % force should be on a variable
-  translate_body K {{ force lp:V }} R :- !, _.
+  translate_body K {{ force lp:V }} {{ Option.bind (forceD0 lp:V) lp:{{fun `x` _ M'}} }} :- !,
+    pi x\ sigma R\ M' x = {{ Some (pair lp:x lp:{{fun `d` _A R}}) }},
+    pi d\ K (demand_singleton x d) (R d).
   translate_body K M R :- std.fatal-error-w-data "No match:" M.
 }}.
 
@@ -166,8 +174,9 @@ Elpi Accumulate lp:{{
     K' = (Es\ M\ sigma N\ H Es N, K (add V N Es) M),
     translate_body K' M M'.
 
+  pred translate_branch_accum i:v i:(indemand -> term -> prop) i:indemand o:term.
   translate_branch_accum V H Es M :-
-    H Es M1, lookup_demand x Es M2, M = app [M1, M2].
+    H Es M1, lookup_indemand V Es M2, M = app [M1, M2].
 
   pred add i:v i:term i:indemand i:v o:(option term).
   add V M Es V (some N) :- (Es V (some M'), N = {{ lub lp:M lp:M' }}) ; Es V none, N = M.
@@ -197,9 +206,11 @@ Elpi Accumulate lp:{{
     def_of IDENT M A, !,
     translate M M', !,
     translate_type A A', !,
-    std.assert-ok! (coq.typecheck M' A') "Result is ill-typed!",
+    % coq.say "Preterm: " M M',
+    % coq.say "Translated term: " {coq.pp->string {coq.term->pp M'} },
+    std.assert-ok! (coq.elaborate-skeleton M' A' M'') "Result is ill-typed!",
     coq.env.fresh-global-id {translate_name IDENT} IDENT',
-    coq.env.add-const IDENT' M' _ _ _.
+    coq.env.add-const IDENT' M'' _ _ _.
   main [str IDENT, str "debug"] :-
     def_of IDENT M _,
     translate M M',
@@ -217,7 +228,6 @@ Elpi Typecheck.
 Elpi Translate idM.
 Print idD1.
 
-(* WIP
-Elpi Trace.
-Elpi Translate tlM "debug".
- *)
+(* Elpi Trace "translate_body" "translate_branch". *)
+Elpi Translate tlM.
+Print tlD1. (* not yet correct *)
