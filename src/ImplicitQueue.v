@@ -1,5 +1,5 @@
 From Coq Require Import Arith Psatz Relations RelationClasses.
-From Clairvoyance Require Import Core Approx Tick Prod Option.
+From Clairvoyance Require Import Core Approx Tick Prod Option FormalTranslation.
 
 Import Tick.Notations.
 Open Scope tick_scope.
@@ -464,7 +464,7 @@ Qed.
 
 (* You think you want this to be parameterized over TWO types; i.e.,
 
-   `Exact (Queue A) (Queue B).`
+   `Exact (Queue A) (QueueA B).`
 
    You think you want that, but you don't.
 
@@ -597,12 +597,92 @@ Definition emptyA (A : Type) : M (QueueA A) := tick >> ret NilA.
 
 (* push *)
 
+(* Note that this definition is written so as to "look" maximally lazy. *)
 Fixpoint push (A : Type) (q : Queue A) (x : A) : Queue A :=
-  match q with
-  | Nil => Deep (FOne x) Nil RZero
-  | Deep f m RZero => Deep f m (ROne x)
-  | Deep f m (ROne y) => Deep f (push m (y, x)) RZero
-  end.
+  let '(f, m, r) :=
+    match q with
+    | Nil => (FOne x, Nil, RZero)
+    | Deep f m r =>
+        let (m, r) :=
+          match r with
+          | RZero => (m, ROne x)
+          | ROne y =>
+              let m' := push m (y, x) in
+              (m', RZero)
+          end in
+        (f, m, r)
+    end in
+  Deep f m r.
+
+(* Note that this definition *is* maximally lazy. *)
+Fixpoint pushA' (A : Type) (q : QueueA A) (x : T A) : M (QueueA A) :=
+  tick >>
+    let! (f, m, r) :=
+      match q with
+      | NilA => ret (Thunk (FOneA x), Thunk NilA, Thunk RZeroA)
+      | DeepA f m r =>
+          let! (m, r) :=
+            let! r := force r in
+            match r with
+            | RZeroA => ret (m, Thunk (ROneA x))
+            | ROneA y =>
+                (* The termination checker rejects a more "imperative" approach
+                   here; i.e., let! m := force m in ... *)
+                let~ m' := forcing m (fun m => pushA' m (Thunk (pairA y x))) in
+                ret (m', Thunk RZeroA)
+            end in
+          ret (f, m, r)
+      end in
+    ret (DeepA f m r).
+
+Definition pushA (A : Type) (q : T (QueueA A)) (x : T A) : M (QueueA A) :=
+  forcing q (fun q => pushA' q x).
+
+(* In order to accommodate polymorphic recursion, the type parameter of the
+   demand must be allowed to differ from the type parameter of the input. *)
+Fixpoint pushD' (A B : Type) (q : Queue A) (x : A) (outD : QueueA B) :
+  Tick (T (prodA (QueueA B) B)) :=
+  Tick.tick >>
+    match outD with
+    | DeepA fD mD rD =>
+        match q with
+        | Nil =>
+            let xD :=
+              match fD with
+              | Thunk (FOneA xD) => xD
+              | _ => bottom
+              end in
+            Tick.ret (Thunk (pairA (Thunk NilA) xD))
+        | Deep f m r =>
+            match r with
+            | RZero =>
+                let xD :=
+                  match rD with
+                  | Thunk (ROneA xD) => xD
+                  | _ => bottom
+                  end in
+                Tick.ret (Thunk (pairA (Thunk (DeepA fD mD (Thunk RZeroA))) xD))
+            | ROne y =>
+                let+ uD := thunkD (pushD' m (y, x)) mD in
+                match uD with
+                | Thunk (pairA mD pD) =>
+                    let (yD, xD) :=
+                      match pD with
+                      | Thunk (pairA yD xD) => (yD, xD)
+                      | _ => bottom
+                      end in
+                    Tick.ret (Thunk (pairA (Thunk (DeepA fD mD (Thunk (ROneA yD)))) xD))
+                | _ => bottom
+                end
+            end
+        end
+    | _ => bottom
+    end.
+
+(* Specialize pushD' for the case where B = A, which is what we actually care
+   about. *)
+Definition pushD (A : Type) : Queue A -> A -> QueueA A ->  Tick (T (prodA (QueueA A) A)) :=
+  pushD'.
 
 Lemma push_ind :
   forall (P : forall (A : Type), Queue A -> A -> Queue A -> Prop),
@@ -631,42 +711,14 @@ Proof.
           end); simpl; eauto.
 Qed.
 
-Fixpoint pushD (A : Type) (q : Queue A) (x : A) (outD : QueueA A) : Tick (T (QueueA A) * T A) :=
-  Tick.tick >>
-    match q with
-    | Nil =>
-        let xD := match outD with
-                  | DeepA (Thunk (FOneA xD)) _ _ => xD
-                  | _ => bottom
-                  end in
-        Tick.ret (Thunk NilA, xD)
-    | Deep f m RZero =>
-        match outD with
-        | DeepA fD mD rD =>
-            let xD := match rD with
-                      | Thunk (ROneA xD) => xD
-                      | _ => bottom
-                      end in
-            Tick.ret (Thunk (DeepA fD mD (Thunk RZeroA)), xD)
-        | _ => bottom
-        end
-    | Deep f m (ROne y) =>
-        match outD with
-        | DeepA fD mD _ =>
-            let+ (mD, pD) := thunkD (pushD m (y, x)) mD in
-            let (yD, xD) := unzipT pD in
-            Tick.ret (Thunk (DeepA fD mD (Thunk (ROneA yD))), xD)
-        | _ => bottom
-        end
-    end.
-
-Lemma pushD_approx : forall (A : Type) `{LessDefined A} (q : Queue A) (x : A) (outD : QueueA A),
-    outD `is_approx` push q x -> Tick.val (pushD q x outD) `is_approx` (q, x).
+Lemma pushD'_approx : forall (A B : Type) `{LessDefined B, Exact A B}
+                        (q : Queue A) (x : A) (outD : QueueA B),
+    outD `is_approx` push q x -> Tick.val (pushD' q x outD) `is_approx` (q, x).
 Proof.
-  intros ? LDA ? ? ?. revert A q x LDA outD.
-  apply (push_ind (fun A q x q' => forall `{LessDefined A} (outD : QueueA A),
+  intros ? ? LDB EAB ? ? ?. revert A q x B LDB EAB outD.
+  apply (push_ind (fun A q x q' => forall B `{LessDefined B, Exact A B} (outD : QueueA B),
                        outD `less_defined` exact q' ->
-                       Tick.val (pushD q x outD) `less_defined` exact (q, x)));
+                       Tick.val (pushD' q x outD) `less_defined` exact (q, x)));
     intros until outD.
   - refine (match outD with
             | DeepA (Thunk (FOneA xD)) _ _ => _
@@ -691,35 +743,107 @@ Proof.
     intro Happrox.
     invert_clear Happrox as [ | ? ? ? ? ? ? HfD HmD' HrD ].
     invert_clear HmD' as [ | mA' ? HmA' ]. 1: repeat constructor; auto.
-    specialize (H _ _ HmA').
-    simpl. destruct (Tick.val (pushD m (y, x) mA')) as [ mD pD ].
-    invert_clear H as [ HmD HpD ]. simpl in *.
-    invert_clear HpD as [ | p ? Hp ]; [ | destruct p; invert_clear Hp ];
-      repeat constructor; simpl; auto.
+    specialize (H _ _ _ _ HmA').
+    simpl. destruct (Tick.val (pushD' m (y, x) mA')) as [ [ mD pD ] | ]. 2: auto.
+    invert_clear H as [ | ? ? HuD ].
+    invert_clear HuD as [ HmD HpD ].
+    invert_clear HpD as [ | [ b1D b2D ] ? Hb1b2D ]. 1: repeat constructor; auto.
+    invert_clear Hb1b2D. repeat constructor; auto.
 Qed.
 
-Definition pushA (A : Type) (q : T (QueueA A)) (x : T A) : M (QueueA A) :=
-  let fix pushA_ (A : Type) (qA : QueueA A) (x : T A) : M (QueueA A) :=
-    bind tick
-      (fun _ =>
-         match qA with
-         | NilA => ret (DeepA (Thunk (FOneA x)) (Thunk NilA) (Thunk RZeroA))
-         | DeepA f m r =>
-             forcing r
-               (fun r =>
-                  match r with
-                  | RZeroA => ret (DeepA f m (Thunk (ROneA x)))
-                  | ROneA y =>
-                      let~ m' := (fun m => pushA_ _ m (zipT y x)) $! m in
-                      ret (DeepA f m' (Thunk RZeroA))
-                  end)
-         end)
-  in (fun q => pushA_ _ q x) $! q.
+Lemma pushD_approx (A : Type) `{LessDefined A}
+  (q : Queue A) (x : A) (outD : QueueA A) :
+  outD `is_approx` push q x -> Tick.val (pushD' q x outD) `is_approx` (q, x).
+Proof.
+  apply pushD'_approx.
+Qed.
 
-Lemma pushD_spec (A : Type) `{LDA : LessDefined A, !Reflexive LDA}
+Lemma pushD'_spec (A B : Type) :
+  forall `{LDB : LessDefined B, !Reflexive LDB, Exact A B}
+    (q : Queue A) (x : A) (outD : QueueA B),
+    outD `is_approx` push q x ->
+    forall qD xD, Thunk (pairA qD xD) = Tick.val (pushD' q x outD) ->
+             let dcost := Tick.cost (pushD' q x outD) in
+             pushA qD xD [[ fun out cost => outD `less_defined` out /\ cost <= dcost ]].
+Proof.
+  intros LDB HReflexive EAB q x outD Happrox qD xD HAD dcost.
+  revert A q x B LDB HReflexive EAB outD Happrox qD xD HAD dcost.
+  apply (push_ind
+           (fun A q x q' =>
+              forall B `{LDB : LessDefined B, !Reflexive LDB, Exact A B} outD,
+                outD `is_approx` q' ->
+                forall qD xD,
+                  Thunk (pairA qD xD) = Tick.val (pushD' q x outD) ->
+                  let dcost := Tick.cost (pushD' q x outD) in
+                  pushA qD xD [[fun out cost =>
+                                  outD `less_defined` out /\ cost <= dcost]])).
+  - intros A x B LDB HReflexive EAB outD Happrox qD xD. revert Happrox.
+    assert (@Reflexive (T A) less_defined) by typeclasses eauto.
+    refine (match outD with
+            | NilA => _
+            | DeepA fD _ _ => _
+            end); mgo'.
+    revert H4. refine (match fD with
+                       | Thunk (FOneA xD) => _
+                       | _ => _
+                       end); mgo'.
+  - intros A x f m B LDB HReflexive EAB outD Happrox qD xD. revert Happrox.
+    assert (@Reflexive (T (FrontA B)) less_defined) by apply Reflexive_LessDefined_T.
+    assert (@Reflexive (T (QueueA (prodA B B))) less_defined) by apply Reflexive_LessDefined_T.
+    refine (match outD with
+            | DeepA fD mD _ => _
+            | _ => _
+            end); mgo'; destruct t; mgo'; repeat constructor; auto.
+  - intros A x f m y IH B LDB HReflexive EAB outD Happrox qD xD. revert Happrox.
+    assert (@Reflexive (T (FrontA B)) less_defined) by apply Reflexive_LessDefined_T.
+    refine (match outD with
+            | DeepA fD mD _ => _
+            | _ => _
+            end); try solve [ discriminate ].
+    intro. invert_clear Happrox as [ | ? ? ? ? ? ? HfD HmD HrD ].
+    invert_clear HmD. 1: discriminate.
+    specialize (IH _ _ _ _ _ H0). revert IH.
+    simpl. destruct (Tick.val (pushD' m (y, x) x0)). 2: discriminate.
+    destruct x1. intro IH. specialize (IH _ _ eq_refl). destruct t1 eqn:Ht1.
+    + destruct x1. simpl. invert_clear 1. mgo_.
+      apply optimistic_thunk_go. eapply optimistic_mon.
+      * exact IH.
+      * mgo_. destruct H1. split.
+        -- repeat constructor; auto.
+        -- lia.
+    + invert_clear 1. mgo_. apply optimistic_thunk_go. eapply optimistic_mon.
+      *
+
+      apply optimistic_thunk_go. repeat eexists.
+
+
+    + simpl
+    destruct x1. destruct t1; simpl.
+    + destruct x1. intros.
+    + invert_clear H2. invert_clear H3.
+      * mgo'. apply optimistic_skip. mgo'.
+      * simpl in *.
+        destruct (Tick.val (pushD m (y, x) x0)) as [ mD pD ] eqn: HpushD.
+        symmetry in HpushD.
+        destruct (H0 _ _ _ H3 _ _ HpushD) as [ ? [ ? [ ? [ ? ? ] ] ] ].
+        destruct pD as [ [ ? ? ] | ]; simpl in *.
+        -- invert_clear H1. mgo_.
+           apply optimistic_thunk_go.
+           repeat eexists.
+           ++ exact H5.
+           ++ auto.
+           ++ lia.
+        -- invert_clear H1. mgo_.
+           apply optimistic_thunk_go.
+           repeat eexists.
+           ++ exact H5.
+           ++ auto.
+           ++ lia.
+
+Lemma pushD'_spec (A : Type) `{LDA : LessDefined A, !Reflexive LDA}
   (q : Queue A) (x : A) (outD : QueueA A)
   : outD `is_approx` push q x ->
-    forall qD xD, (qD, xD) = Tick.val (pushD q x outD) ->
+    forall qD xD, Thunk (pairA qD xD) = Tick.val (pushD q x outD) ->
     let dcost := Tick.cost (pushD q x outD) in
     pushA qD xD [[ fun out cost => outD `less_defined` out /\ cost <= dcost ]].
 Proof.
