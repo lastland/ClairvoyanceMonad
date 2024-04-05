@@ -64,7 +64,7 @@ demand_singleton X _D Y none :- not (X = Y).
 
 
 % _A = type of M, which we don't have access to because this translation does not keep track of types.
-translate_body K {{ Core.ret lp:M }} {{ Some (pair lp:M (fun d => lp:{{R {{ d }} }})) }} :- !,
+translate_body K {{ Core.ret lp:M }} {{ Some (pair lp:M (fun d => lp:(R d))) }} :- !,
   pi d\ translate_value K d M (R d).
 % match should be on a variable
 translate_body K (match V {{fun x : listA _ => _}} [N_nil, N_cons])
@@ -72,16 +72,16 @@ translate_body K (match V {{fun x : listA _ => _}} [N_nil, N_cons])
   translate_body K N_nil N_nil',
   translate_branch K V (Es\ M\ M = {{ ConsA }}) N_cons N_cons'.
 % force should be on a variable
-translate_body K {{ force lp:V }} {{ Option.bind (forceD0 lp:V) lp:{{fun `x` _ M'}} }} :- !,
-  pi x\ sigma R\ M' x = {{ Some (pair lp:x lp:{{fun `d` _A R}}) }},
+translate_body K {{ force lp:V }} {{ let? x := forceD0 lp:V in lp:(M' x) }} :- !,
+  pi x\ sigma R\ M' x = {{ Some (pair lp:x (fun d => lp:(R d))) }},
   pi d\ K (add V {{ Thunk lp:x }} (demand_singleton x d)) (R d).
+translate_body K {{ let! x := lp:M in lp:(N x) }} M' :- std.fatal-error-w-data "todo: let!".
 translate_body K M R :- std.fatal-error-w-data "No match:" M.
 
 
 translate_value K D {{ NilA }} M' :- K zerodemand M'.
 translate_value K D {{ ConsA lp:M0 lp:M1 }}
-  % {{ let+ '(d0, d1) := unConsA lp:D in lp:(M01 d0 d1) }}
-  {{ OTick.bind (unConsA lp:D) (fun '(d0, d1) => lp:(M01 d0 d1)) }}
+  {{ (let+ (d0, d1) := unConsA lp:D in lp:(M01 d0 d1))%otick }}
   :- !,
   pi d0 d1\
     sigma K0\ K0 = (Es0\ M1'\
