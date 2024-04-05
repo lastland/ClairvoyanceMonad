@@ -35,6 +35,13 @@ Defined.
 
 Set Elimination Schemes.
 
+(* Destructor for demand translation *)
+Definition unConsA (xs : listA nat) : OTick (T nat * T (listA nat)) :=
+  match xs with
+  | ConsA y ys => OTick.ret (y, ys)
+  | NilA => OTick.fail
+  end.
+
 (** * Size that doesn't count the list element
 
     As pointed out by the footnote of the figure, [T (listA A)] is not a

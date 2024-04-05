@@ -60,17 +60,11 @@ Definition tlD (x : listA nat) : option (listA nat * (listA nat -> OTick (listA 
 Definition consM (x : T nat) (xs : T (listA nat)) : M (listA nat) :=
   ret (ConsA x xs).
 
-Definition unConsA (xs : listA nat) : OTick (T nat * T (listA nat)) :=
-  match xs with
-  | ConsA y ys => OTick.ret (y, ys)
-  | NilA => OTick.fail
-  end.
-
 Definition consD (x : T nat) (xs : T (listA nat))
   : option (listA nat * (listA nat -> OTick (T nat * T (listA nat)))) :=
   Some (ConsA x xs, fun d =>
-    let+ (y, ys) := unConsA d in
-    OTick.ret (y, ys)).
+    let+ (d0, d1) := unConsA d in
+    OTick.ret (d0, d1)).
 
 From Clairvoyance Extra Dependency "translation.elpi" as translate.
 
@@ -82,6 +76,9 @@ Elpi Accumulate File translate.
 Elpi Translate idM.
 Print idD1.
 
-(* Elpi Trace "translate_body" "translate_branch". *)
+(* Elpi Trace "translate_body" "translate_branch_accum" "lookup_indemand" "add". *)
 Elpi Translate tlM.
-Print tlD1. (* not yet correct *)
+Print tlD1.
+
+Elpi Translate consM.
+Print consD1.

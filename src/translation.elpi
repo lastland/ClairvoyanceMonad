@@ -49,15 +49,14 @@ build_tuple [] _ {{ tt }}.
 build_tuple [V] F R :- !, lookup_indemand V F R.
 build_tuple [V|Vs] F {{ pair lp:R lp:M }} :- lookup_indemand V F M, build_tuple Vs F R.
 
-% build_product [A,B,C] {{ C * B * A }}
+% build_product [A,B,C] {{ (C * B * A)%type }}
 pred build_product i:(list term) o:term.
 build_product [] {{ unit }}.
 build_product [A] A :- !.
-build_product (A :: As) {{ lp:B * lp:A }} :- build_product As B.
+build_product (A :: As) {{ (lp:B * lp:A)%type }} :- build_product As B.
 
 pred lookup_indemand i:v i:indemand o:term.
-lookup_indemand V F M :- F V none, M = {{ bottom_of lp:V }}.
-lookup_indemand V F M :- F V (some M).
+lookup_indemand V F M :- sigma N\ (F V N, (N = none , M = {{ bottom_of lp:V }} ; N = some M)).
 
 pred demand_singleton i:v i:term i:v o:(option term).
 demand_singleton X D X (some D).
@@ -65,7 +64,7 @@ demand_singleton X _D Y none :- not (X = Y).
 
 
 % _A = type of M, which we don't have access to because this translation does not keep track of types.
-translate_body K {{ Core.ret lp:M }} {{ Some (pair lp:M lp:{{fun `d` _A R}}) }} :- !,
+translate_body K {{ Core.ret lp:M }} {{ Some (pair lp:M (fun d => lp:{{R {{ d }} }})) }} :- !,
   pi d\ translate_value K d M (R d).
 % match should be on a variable
 translate_body K (match V {{fun x : listA _ => _}} [N_nil, N_cons])
@@ -75,12 +74,20 @@ translate_body K (match V {{fun x : listA _ => _}} [N_nil, N_cons])
 % force should be on a variable
 translate_body K {{ force lp:V }} {{ Option.bind (forceD0 lp:V) lp:{{fun `x` _ M'}} }} :- !,
   pi x\ sigma R\ M' x = {{ Some (pair lp:x lp:{{fun `d` _A R}}) }},
-  pi d\ K (demand_singleton x d) (R d).
+  pi d\ K (add V {{ Thunk lp:x }} (demand_singleton x d)) (R d).
 translate_body K M R :- std.fatal-error-w-data "No match:" M.
 
 
 translate_value K D {{ NilA }} M' :- K zerodemand M'.
-
+translate_value K D {{ ConsA lp:M0 lp:M1 }}
+  % {{ let+ '(d0, d1) := unConsA lp:D in lp:(M01 d0 d1) }}
+  {{ OTick.bind (unConsA lp:D) (fun '(d0, d1) => lp:(M01 d0 d1)) }}
+  :- !,
+  pi d0 d1\
+    sigma K0\ K0 = (Es0\ M1'\
+      sigma K1\ K1 = (Es1\ R\ K (lub_indemand Es0 Es1) R),
+      translate_value K1 d1 M1 M1'),
+    translate_value K0 d0 M0 (M01 d0 d1).
 
 pred translate_branch i:(indemand -> term -> prop) i:v i:(indemand -> term -> prop) i:term o:term.
 translate_branch K V H (fun X A M) (fun X A M') :- !,
@@ -95,15 +102,29 @@ translate_branch_accum V H Es M :-
   H Es M1, lookup_indemand V Es M2, M = app [M1, M2].
 
 pred add i:v i:term i:indemand i:v o:(option term).
-add V M Es V (some N) :- (Es V (some M'), N = {{ lub lp:M lp:M' }}) ; Es V none, N = M.
+add V M Es V (some N) :- !,
+  sigma M0\ Es V M0,
+    ( sigma M'\ M0 = some M', N = {{ lub lp:M lp:M' }}
+    ; M0 = none, N = M
+    ).
 add V M Es U N :- not (V = U), Es U N.
 
+type lub_indemand indemand -> indemand -> indemand.
+pred lub_indemand i:indemand i:indemand i:v o:(option term).
+lub_indemand E1 E2 V M :-
+  E1 V M1, E2 V M2, lub_ M1 M2 M.
+
+pred lub_ i:(option term) i:(option term) o:(option term).
+lub_ none none none.
+lub_ (some M1) none (some M1).
+lub_ none (some M2) (some M2).
+lub_ (some M1) (some M2) (some {{ lub lp:M1 lp:M2 }}).
 
 pred translate_type i:term o:term.
 translate_type T T' :- translate_type.aux [] T T'.
 translate_type.aux As (prod X A T) (prod X A T') :-
   pi x\ translate_type.aux (A :: As) (T x) (T' x).
-translate_type.aux As {{ M lp:T }} {{ option (lp:T * (lp:T -> OTick lp:R)) }} :-
+translate_type.aux As {{ M lp:T }} {{ option (lp:T * (lp:T -> OTick lp:R))%type }} :-
   build_product As R.
 
 
@@ -121,7 +142,7 @@ main [str IDENT] :- !,
   translate M M', !,
   translate_type A A', !,
   % coq.say "Preterm: " M M',
-  % coq.say "Translated term: " {coq.pp->string {coq.term->pp M'} },
+  % coq.say "Translated term: " {coq.pp->string {coq.term->pp M'} } M',
   std.assert-ok! (coq.elaborate-skeleton M' A' M'') "Result is ill-typed!",
   coq.env.fresh-global-id {translate_name IDENT} IDENT',
   coq.env.add-const IDENT' M'' _ _ _.
