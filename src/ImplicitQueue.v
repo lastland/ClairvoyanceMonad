@@ -607,7 +607,8 @@ Fixpoint push (A : Type) (q : Queue A) (x : A) : Queue A :=
           match r with
           | RZero => (m, ROne x)
           | ROne y =>
-              let m' := push m (y, x) in
+              let p := (y, x) in
+              let m' := push m p in
               (m', RZero)
           end in
         (f, m, r)
