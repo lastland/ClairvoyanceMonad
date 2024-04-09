@@ -58,3 +58,6 @@ Proof.
   - intros [ a1 b1 ] [ a2 b2 ] [ [ a3 b3 ] [ [ Ha13 Hb13 ] [ Ha23 Hb23 ] ] ].
     split; apply lub_upper_bound_r; eauto.
 Qed.
+
+#[global] Instance Bottom_prodA {A B} : Bottom (prodA A B) :=
+  pairA Undefined Undefined.
