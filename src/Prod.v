@@ -5,6 +5,14 @@ Inductive prodA (A B : Type) : Type :=
   | pairA : T A -> T B -> prodA A B.
 Arguments pairA {A} {B}.
 
+Definition fstA {A B} (p : prodA A B) : T A :=
+  let '(pairA a b) := p in
+  a.
+
+Definition sndA {A B} (p : prodA A B) : T B :=
+  let '(pairA a b) := p in
+  b.
+
 Definition prodD {A B C D} (f : T A -> T C) (g : T B -> T D)
   (p : prodA A B) : prodA C D :=
   match p with

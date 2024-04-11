@@ -684,15 +684,13 @@ Fixpoint pushD' (A B : Type) (q : Queue A) (x : A) (outD : QueueA B) :
                 Tick.ret (pairA (Thunk (DeepA fD mD (Thunk RZeroA))) xD)
             | ROne y =>
                 let+ uD := thunkD (pushD' m (y, x)) mD in
-                match uD with
-                | pairA mD pD =>
-                    let (yD, xD) :=
-                      match pD with
-                      | Thunk (pairA yD xD) => (yD, xD)
-                      | _ => bottom
-                      end in
-                    Tick.ret (pairA (Thunk (DeepA fD mD (Thunk (ROneA yD)))) xD)
-                end
+                let '(pairA mD pD) := uD in
+                let (yD, xD) :=
+                  match pD with
+                  | Thunk (pairA yD xD) => (yD, xD)
+                  | _ => bottom
+                  end in
+                Tick.ret (pairA (Thunk (DeepA fD mD (Thunk (ROneA yD)))) xD)
             end
         end
     | _ => bottom
@@ -1296,7 +1294,7 @@ Inductive op (A : Type) : Type :=
         emptyD outD >> Tick.ret []
     | Push x, [q], [outD] =>
         let outD := forceD (bottom_of (exact (push q x))) outD in
-        let+ (qD, _) := pushD q x outD in
+        let+ (pairA qD _) := pushD q x outD in
         Tick.ret [qD]
     | _, _, _ => Tick.ret (bottom_of (exact args))
     end.
@@ -1370,6 +1368,12 @@ Lemma pd (A : Type)
     Eval_Queue
     Demand_Queue.
 Proof.
+  assert (@Reflexive A less_defined)
+    as HRA
+    by (destruct PA; auto).
+  assert (@Reflexive (QueueA A) less_defined)
+    as HRQA
+    by apply (@Reflexive_LessDefined_QueueA A LDA HRA).
   unfold PureDemand, pure_demand.
   intros o args output.
   set (o' := o). revert o'.
@@ -1385,15 +1389,30 @@ Proof.
   - simpl.
     destruct (Tick.val (pushD q x (bottom_of (exact (push q x))))) eqn:HpushD.
     constructor; auto.
-    replace t with (fst (Tick.val (pushD q x (bottom_of (exact (push q x)))))).
-      + apply pushD_approx, bottom_is_least. reflexivity.
-      + destruct (Tick.val (pushD q x (bottom_of (exact (push q x))))).
-        invert_clear HpushD. auto.
+    replace t with (fstA (Tick.val (pushD q x (bottom_of (exact (push q x)))))).
+    + assert (bottom_of (exact (push q x)) `less_defined` exact (push q x)).
+      apply bottom_is_least. auto.
+      pose proof (@pushD_approx _ _ q x _ H).
+      unfold less_defined, LessDefined_prodA in H1.
+      change (pushD' q x (bottom_of (exact (push q x))))
+        with
+        (pushD q x (bottom_of (exact (push q x))))
+        in H1.
+      destruct (Tick.val (pushD q x (bottom_of (exact (push q x))))).
+      intuition.
+    + destruct (Tick.val (pushD q x (bottom_of (exact (push q x))))).
+      invert_clear HpushD. auto.
   - simpl.
     destruct (Tick.val (pushD q x x0)) eqn:HpushD. simpl.
     constructor; auto.
-    replace t with (fst (Tick.val (pushD q x x0))).
-    + apply pushD_approx. auto.
+    replace t with (fstA (Tick.val (pushD q x x0))).
+    + pose proof (@pushD_approx _ _ q x _ H).
+      change (pushD' q x x0)
+        with
+        (pushD q x x0)
+        in H1.
+      destruct (Tick.val (pushD q x x0)).
+      intuition.
     + destruct (Tick.val (pushD q x x0)). invert_clear HpushD. auto.
 Qed.
 
