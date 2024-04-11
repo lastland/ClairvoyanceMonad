@@ -906,7 +906,7 @@ Fixpoint pop (A : Type) (q : Queue A) : option (A * Queue A) :=
 (* Definition popA (A : Type) (q : T (QueueA A)) : M (option (T A * T (QueueA A))) := *)
 (*   popA' $! q. *)
 
-Fixpoint popD' (A B : Type) (q : Queue A) (outD : option (T B * T (QueueA B))) :
+Fixpoint popD' (A B : Type) (q : Queue A) (outD : option (prodA B (QueueA B))) :
   Tick (T (QueueA B)) :=
   Tick.tick >>
     match q with
@@ -918,7 +918,7 @@ Fixpoint popD' (A B : Type) (q : Queue A) (outD : option (T B * T (QueueA B))) :
             match p with
             | Some (yz, m') =>
                 match outD with
-                | Some (xD, qD) =>
+                | Some (pairA xD qD) =>
                     let+ (mD, rD) :=
                       match qD with
                       | Thunk (DeepA fD mD' rD) =>
@@ -927,7 +927,7 @@ Fixpoint popD' (A B : Type) (q : Queue A) (outD : option (T B * T (QueueA B))) :
                             | Thunk (FTwoA yD zD) => Thunk (pairA yD zD)
                             | _ => bottom
                             end in
-                          let+ mD := popD' m (Some (pD, mD')) in
+                          let+ mD := popD' m (Some (pairA pD mD')) in
                           Tick.ret (mD, rD)
                       | _ => bottom
                       end in
@@ -938,14 +938,14 @@ Fixpoint popD' (A B : Type) (q : Queue A) (outD : option (T B * T (QueueA B))) :
                 match r with
                 | RZero =>
                     match outD with
-                    | Some (xD, _) =>
+                    | Some (pairA xD _) =>
                         let+ mD := popD' m None in
                         Tick.ret (Thunk (DeepA (Thunk (FOneA xD)) mD (Thunk RZeroA)))
                     | _ => bottom
                     end
                 | ROne y =>
                     match outD with
-                    | Some (xD, Thunk (DeepA (Thunk (FOneA yD)) _ _)) =>
+                    | Some (pairA xD (Thunk (DeepA (Thunk (FOneA yD)) _ _))) =>
                         let+ mD := popD' m None in
                         Tick.ret (Thunk (DeepA (Thunk (FOneA xD)) mD (Thunk (ROneA yD))))
                     | _ => bottom
@@ -954,7 +954,7 @@ Fixpoint popD' (A B : Type) (q : Queue A) (outD : option (T B * T (QueueA B))) :
             end
         | FTwo x y =>
             match outD with
-            | Some (xD, qD) =>
+            | Some (pairA xD qD) =>
                 let '(yD, mD, rD) :=
                   match qD with
                   | Thunk (DeepA fD mD rD) =>
@@ -972,7 +972,7 @@ Fixpoint popD' (A B : Type) (q : Queue A) (outD : option (T B * T (QueueA B))) :
         end
     end.
 
-Definition popD (A : Type) (q : Queue A) (outD : option (T A * T (QueueA A))) :
+Definition popD (A : Type) (q : Queue A) (outD : option (prodA A (QueueA A))) :
   Tick (T (QueueA A)) :=
   popD' q outD.
 
