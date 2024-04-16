@@ -66,6 +66,11 @@ Definition consD (x : T nat) (xs : T (listA nat))
     let+ (d0, d1) := unConsA d in
     OTick.ret (d0, d1)).
 
+(* ** More artificial examples for testing *)
+
+Definition etaM' (x : listA nat) : M (listA nat) :=
+  let! x := ret x in ret x.
+
 From Clairvoyance Extra Dependency "translation.elpi" as translate.
 
 Elpi Command Translate.

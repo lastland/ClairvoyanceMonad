@@ -17,16 +17,13 @@ translate_const IDENT R :-
 
 
 typeabbrev v term.  % terms that should be variables
-typeabbrev indemand (v -> option term -> prop).
-
-type zerodemand indemand.
-zerodemand V none.
+typeabbrev indemand (list (prod v term)).
 
 % The first argument is the list of free variables.
 pred translate_head i:(list v) i:term o:term.
 
 % The first argument contains a continuation that expects the demand on the free variables.
-pred translate_body i:(indemand -> term -> prop) i:term o:term.
+pred translate_body i:(term -> (term -> term) -> term -> prop) i:(indemand -> term -> prop) i:term o:term.
 pred translate_value i:(indemand -> term -> prop) i:v i:term o:term.
 
 
@@ -35,14 +32,17 @@ translate M M' :- translate_head [] M M'.
 
 translate_head Vs (fun X A M) (fun X A M') :- !,
   pi x\
-    (pi D K R\ (translate_value K D x R :- K (demand_singleton x D) R)) =>
+    (pi D K R\ (translate_value K D x R :- K (pair x D :: []) R)) =>
     translate_head (x :: Vs) (M x) (M' x).
 translate_head Vs M M' :-
   not (var M),
-  pi d\ translate_body (ret_tuple Vs) M M'.
+  pi d\ translate_body translate_body_return (ret_tuple Vs) M M'.
 
 pred ret_tuple i:(list v) i:indemand o:term.
 ret_tuple Vs F {{ OTick.ret lp:R }} :- build_tuple Vs F R.
+
+pred translate_body_return i:term i:(term -> term) o:term.
+translate_body_return M R N' :- N' = {{ Some (pair lp:M (fun d => lp:(R d))) }}.
 
 pred build_tuple i:(list v) i:indemand o:term.
 build_tuple [] _ {{ tt }}.
@@ -55,70 +55,58 @@ build_product [] {{ unit }}.
 build_product [A] A :- !.
 build_product (A :: As) {{ (lp:B * lp:A)%type }} :- build_product As B.
 
+pred lookup_indemand_aux i:v i:indemand i:(option term) o:term.
+lookup_indemand_aux V [] none {{ bottom_of lp:V }}.
+lookup_indemand_aux V [] (some M) M.
+lookup_indemand_aux V (pair V M :: Dem) none R :- !, lookup_indemand_aux V Dem (some M) R.
+lookup_indemand_aux V (pair V M :: Dem) (some N) R :- !, lookup_indemand_aux V Dem (some {{ lub lp:M lp:N }}) R.
+lookup_indemand_aux V (pair W M :: Dem) Acc R :- not (V = W), lookup_indemand_aux V Dem Acc R.
+
 pred lookup_indemand i:v i:indemand o:term.
-lookup_indemand V F M :- sigma N\ (F V N, (N = none , M = {{ bottom_of lp:V }} ; N = some M)).
+lookup_indemand V Dem M :- lookup_indemand_aux V Dem none M.
 
-pred demand_singleton i:v i:term i:v o:(option term).
-demand_singleton X D X (some D).
-demand_singleton X _D Y none :- not (X = Y).
+pred lub_indemand i:indemand i:indemand o:indemand.
+lub_indemand E1 E2 R :- append E1 E2 R.
 
-
-% _A = type of M, which we don't have access to because this translation does not keep track of types.
-translate_body K {{ Core.ret lp:M }} {{ Some (pair lp:M (fun d => lp:(R d))) }} :- !,
-  pi d\ translate_value K d M (R d).
+translate_body Ret K {{ Core.ret lp:M }} N' :- !,
+  sigma R\
+    Ret M R N',
+    pi d\
+    translate_value K d M (R d).
 % match should be on a variable
-translate_body K (match V {{fun x : listA _ => _}} [N_nil, N_cons])
+translate_body Ret K (match V {{fun x : listA _ => _}} [N_nil, N_cons])
                  (match V {{fun x : listA _ => _}} [N_nil', N_cons']) :- !,
-  translate_body K N_nil N_nil',
-  translate_branch K V (Es\ M\ M = {{ ConsA }}) N_cons N_cons'.
+  translate_body Ret K N_nil N_nil',
+  translate_branch Ret K V (Es\ M\ M = {{ ConsA }}) N_cons N_cons'.
 % force should be on a variable
-translate_body K {{ force lp:V }} {{ let? x := forceD0 lp:V in lp:(M' x) }} :- !,
-  pi x\ sigma R\ M' x = {{ Some (pair lp:x (fun d => lp:(R d))) }},
-  pi d\ K (add V {{ Thunk lp:x }} (demand_singleton x d)) (R d).
-translate_body K {{ let! x := lp:M in lp:(N x) }} M' :- std.fatal-error-w-data "todo: let!".
-translate_body K M R :- std.fatal-error-w-data "No match:" M.
+translate_body Ret K {{ force lp:V }} {{ let? x := forceD0 lp:V in lp:(M' x) }} :- !,
+  pi x\ sigma R\ Ret x R (M' x),
+  pi d\ K (pair V {{ Thunk lp:x }} :: pair x d :: []) (R d).
+translate_body Ret K {{ let! x := lp:M in lp:(N x) }} M' :- std.fatal-error-w-data "todo: let!".
+translate_body Ret K M R :- std.fatal-error-w-data "No match:" M.
 
 
-translate_value K D {{ NilA }} M' :- K zerodemand M'.
+translate_value K D {{ NilA }} M' :- K [] M'.
 translate_value K D {{ ConsA lp:M0 lp:M1 }}
   {{ (let+ (d0, d1) := unConsA lp:D in lp:(M01 d0 d1))%otick }}
   :- !,
   pi d0 d1\
     sigma K0\ K0 = (Es0\ M1'\
-      sigma K1\ K1 = (Es1\ R\ K (lub_indemand Es0 Es1) R),
+      sigma K1\ K1 = (Es1\ R\ K { lub_indemand Es0 Es1 } R),
       translate_value K1 d1 M1 M1'),
     translate_value K0 d0 M0 (M01 d0 d1).
 
-pred translate_branch i:(indemand -> term -> prop) i:v i:(indemand -> term -> prop) i:term o:term.
-translate_branch K V H (fun X A M) (fun X A M') :- !,
+pred translate_branch i:(term -> (term -> term) -> term -> prop) i:(indemand -> term -> prop) i:v i:(indemand -> term -> prop) i:term o:term.
+translate_branch Ret K V H (fun X A M) (fun X A M') :- !,
   pi x\
-    translate_branch K V (translate_branch_accum x H) (M x) (M' x).
-translate_branch K V H M M' :-
-  K' = (Es\ M\ sigma N\ H Es N, K (add V N Es) M),
-  translate_body K' M M'.
+    translate_branch Ret K V (translate_branch_accum x H) (M x) (M' x).
+translate_branch Ret K V H M M' :-
+  K' = (Es\ M\ sigma N\ H Es N, K (pair V N :: Es) M),
+  translate_body Ret K' M M'.
 
 pred translate_branch_accum i:v i:(indemand -> term -> prop) i:indemand o:term.
 translate_branch_accum V H Es M :-
   H Es M1, lookup_indemand V Es M2, M = app [M1, M2].
-
-pred add i:v i:term i:indemand i:v o:(option term).
-add V M Es V (some N) :- !,
-  sigma M0\ Es V M0,
-    ( sigma M'\ M0 = some M', N = {{ lub lp:M lp:M' }}
-    ; M0 = none, N = M
-    ).
-add V M Es U N :- not (V = U), Es U N.
-
-type lub_indemand indemand -> indemand -> indemand.
-pred lub_indemand i:indemand i:indemand i:v o:(option term).
-lub_indemand E1 E2 V M :-
-  E1 V M1, E2 V M2, lub_ M1 M2 M.
-
-pred lub_ i:(option term) i:(option term) o:(option term).
-lub_ none none none.
-lub_ (some M1) none (some M1).
-lub_ none (some M2) (some M2).
-lub_ (some M1) (some M2) (some {{ lub lp:M1 lp:M2 }}).
 
 pred translate_type i:term o:term.
 translate_type T T' :- translate_type.aux [] T T'.
