@@ -1,6 +1,42 @@
 % Untyped translation. TODO: can/should we make use of typing information?
-pred translate i:term o:term.
 
+% Translate from the clairvoyance monad to a demand function.
+pred translateD i:term o:term.
+translateD M M' :- translate_head [] M M'.
+
+% Translate from the clairvoyance monad to the partiality monad (option).
+% It's just a renaming of functions because they have the same interface.
+% Another way we could do this is to parameterize definitions by a type class
+% so it can be specialized to both the clairvoyance monad and the option monad.
+% Or just get rid of the clairvoyance monad. We currently use the clairvoyance
+% monad to have a connection to an already formalized operational semantics,
+% but we could formalize a connection between demand functions and an operational
+% semantics directly.
+pred translateP i:term o:term.
+translateP {{ Core.ret lp:M }} {{ Partial.ret lp:M'}} :- translateP M M'.
+translateP {{ Core.bind lp:M lp:N }} {{ Partial.bind lp:M' lp:N' }} :- translateP M M', translateP N N'.
+translateP {{ Core.force lp:M }} {{ Partial.force lp:M' }} :- translateP M M'.
+translateP {{ Core.thunk lp:M }} {{ Partial.thunk lp:M' }} :- translateP M M'.
+translateP {{ Core.tick }} {{ Partial.tick }}.
+% other Coq constructs
+translateP {{ fun x : lp:A => lp:(M x) }} {{ fun x : lp:A' => lp:(M' x) }} :- translateP A A', pi x\ translateP x x => translateP (M x) (M' x).
+translateP {{ let x := lp:M in lp:(N x) }} {{ let x := lp:M' in lp:(N' x) }} :- translateP M M', pi x\ translateP x x => translateP (N x) (N' x).
+translateP (app Ms) (app Ms') :- std.map Ms translateP Ms'.
+translateP (match M R Bs) (match M' R' Bs') :- translateP M M', translateP R R', std.map Bs translateP Bs'.
+% type translation
+translateP {{ forall x : lp:A, lp:(B x) }} {{ forall x : lp:A', lp:(B' x) }} :- translateP A A', pi x\ translateP x x => translateP (B x) (B' x).
+translateP {{ Core.M }} {{ option }}.
+translateP {{ Core.T }} {{ Core.T }}.
+% TODO: put these in a Db
+translateP {{ listA }} {{ listA }}.
+translateP {{ @ConsA }} {{ @ConsA }}.
+translateP {{ @NilA }} {{ @NilA }}.
+translateP {{ unit }} {{ unit }}.
+translateP {{ tt }} {{ tt }}.
+translateP {{ nat }} {{ nat }}.
+translateP {{ S }} {{ S }}.
+translateP {{ O }} {{ O }}.
+translateP M M' :- std.fatal-error-w-data "No match:" M.
 
 pred def_of i:string o:term o:term.
 def_of IDENT M A :-
@@ -18,31 +54,27 @@ translate_const IDENT R :-
 
 typeabbrev v term.  % terms that should be variables
 typeabbrev indemand (list (prod v term)).
+typeabbrev leaf (term -> term -> prop).
 
 % The first argument is the list of free variables.
 pred translate_head i:(list v) i:term o:term.
 
 % The first argument contains a continuation that expects the demand on the free variables.
-pred translate_body i:(term -> (term -> term) -> term -> prop) i:(indemand -> term -> prop) i:term o:term.
+pred translate_body i:v i:(indemand -> term -> prop) i:term o:term.
 pred translate_value i:(indemand -> term -> prop) i:v i:term o:term.
 
-
-translate M M' :- translate_head [] M M'.
 
 
 translate_head Vs (fun X A M) (fun X A M') :- !,
   pi x\
     (pi D K R\ (translate_value K D x R :- K (pair x D :: []) R)) =>
     translate_head (x :: Vs) (M x) (M' x).
-translate_head Vs M M' :-
+translate_head Vs M (fun `d` _ M') :-
   not (var M),
-  pi d\ translate_body translate_body_return (ret_tuple Vs) M M'.
+  pi d\ translate_body d (ret_tuple Vs) M (M' d).
 
 pred ret_tuple i:(list v) i:indemand o:term.
 ret_tuple Vs F {{ OTick.ret lp:R }} :- build_tuple Vs F R.
-
-pred translate_body_return i:term i:(term -> term) o:term.
-translate_body_return M R N' :- N' = {{ Some (pair lp:M (fun d => lp:(R d))) }}.
 
 pred build_tuple i:(list v) i:indemand o:term.
 build_tuple [] _ {{ tt }}.
@@ -68,22 +100,19 @@ lookup_indemand V Dem M :- lookup_indemand_aux V Dem none M.
 pred lub_indemand i:indemand i:indemand o:indemand.
 lub_indemand E1 E2 R :- append E1 E2 R.
 
-translate_body Ret K {{ Core.ret lp:M }} N' :- !,
+translate_body D K {{ Core.ret lp:M }} N' :- !,
   sigma R\
-    Ret M R N',
-    pi d\
-    translate_value K d M (R d).
+    translate_value K D M N'.
 % match should be on a variable
-translate_body Ret K (match V {{fun x : listA _ => _}} [N_nil, N_cons])
-                 (match V {{fun x : listA _ => _}} [N_nil', N_cons']) :- !,
-  translate_body Ret K N_nil N_nil',
-  translate_branch Ret K V (Es\ M\ M = {{ ConsA }}) N_cons N_cons'.
+translate_body D K (match V {{fun x : listA _ => _}} [N_nil, N_cons])
+                   (match V {{fun x : listA _ => _}} [N_nil', N_cons']) :- !,
+  translate_body D K N_nil N_nil',
+  translate_branch D K V (Es\ M\ M = {{ ConsA }}) N_cons N_cons'.
 % force should be on a variable
-translate_body Ret K {{ force lp:V }} {{ let? x := forceD0 lp:V in lp:(M' x) }} :- !,
-  pi x\ sigma R\ Ret x R (M' x),
-  pi d\ K (pair V {{ Thunk lp:x }} :: pair x d :: []) (R d).
-translate_body Ret K {{ let! x := lp:M in lp:(N x) }} M' :- std.fatal-error-w-data "todo: let!".
-translate_body Ret K M R :- std.fatal-error-w-data "No match:" M.
+translate_body D K {{ force lp:V }} {{ let+ d := forceD lp:V lp:D in lp:(M' d) }} :- !,
+  pi d\ K (pair V d :: []) (M' d).
+translate_body D K {{ let! x := lp:M in lp:(N x) }} MN' :- std.fatal-error-w-data "TODO: let " M.
+translate_body D K M R :- std.fatal-error-w-data "No match:" M.
 
 
 translate_value K D {{ NilA }} M' :- K [] M'.
@@ -112,28 +141,34 @@ pred translate_type i:term o:term.
 translate_type T T' :- translate_type.aux [] T T'.
 translate_type.aux As (prod X A T) (prod X A T') :-
   pi x\ translate_type.aux (A :: As) (T x) (T' x).
-translate_type.aux As {{ M lp:T }} {{ option (lp:T * (lp:T -> OTick lp:R))%type }} :-
+translate_type.aux As {{ M lp:T }} {{ (lp:T -> OTick lp:R) }} :-
   build_product As R.
 
 
-pred translate_name i:string o:string.
-translate_name NAMEM NAMED :-
+pred translate_name i:string i:string o:string.
+translate_name SUFFIX NAMEM NAMED :-
   S is NAMEM,
   N is size S,
-  ( ("M" is substring NAMEM (N - 1) 1, !, NAMED is substring NAMEM 0 (N - 1) ^ "D")
-  ; NAMED is NAMEM ^ "D").
+  ( ("M" is substring NAMEM (N - 1) 1, !, NAMED is substring NAMEM 0 (N - 1) ^ SUFFIX)
+  ; NAMED is NAMEM ^ SUFFIX).
 
 
 pred main i:(list argument).
 main [str IDENT] :- !,
   def_of IDENT M A, !,
-  translate M M', !,
-  translate_type A A', !,
-  % coq.say "Preterm: " M M',
-  % coq.say "Translated term: " {coq.pp->string {coq.term->pp M'} } M',
-  std.assert-ok! (coq.elaborate-skeleton M' A' M'') "Result is ill-typed!",
-  coq.env.fresh-global-id {translate_name IDENT} IDENT',
-  coq.env.add-const IDENT' M'' _ _ _.
+  translateP M MP, !,
+  translateP A AP, !,
+  coq.say "translateP done",
+  translateD M MD, !,
+  translate_type A AD, !,
+  % coq.say "Preterm: " M MD,
+  % coq.say "Translated term: " {coq.pp->string {coq.term->pp MD} } MD,
+  std.assert-ok! (coq.elaborate-skeleton MP AP MP') "Result is ill-typed!",
+  std.assert-ok! (coq.elaborate-skeleton MD AD MD') "Result is ill-typed!",
+  coq.env.fresh-global-id {translate_name "P" IDENT} IDENTP,
+  coq.env.fresh-global-id {translate_name "D" IDENT} IDENTD,
+  coq.env.add-const IDENTP MP' _ _ _,
+  coq.env.add-const IDENTD MD' _ _ _.
 main [str IDENT, str "debug"] :-
   def_of IDENT M _,
   translate M M',

@@ -1,6 +1,7 @@
 -Q src Clairvoyance
 
 src/Misc.v
+src/Partial.v
 src/Core.v
 src/Approx.v
 src/ApproxM.v

@@ -5,7 +5,7 @@
    which is mostly equivalent to [(a -> option b) * (a -> b -> OTick a)]. *)
 
 From elpi Require Import elpi.
-From Clairvoyance Require Import Misc Core Approx ListA Tick.
+From Clairvoyance Require Import Misc Core Approx ListA Partial Tick.
 Import Option.Notation.
 #[local] Open Scope option_scope.
 Import OTick.Notation.
@@ -33,10 +33,10 @@ Definition tlM (x : listA nat) : M (listA nat) :=
   end.
 
 (* TODO: move to a module of primitives for demand translation *)
-Definition forceD {A} (x : T A) : option (A * (A -> OTick (T A))) :=
+Definition forceD {A} (x : T A) (d : A) : OTick (T A) :=
   match x with
-  | Undefined => None
-  | Thunk y => Some (y, fun d => OTick.ret (Thunk d))
+  | Undefined => OTick.fail
+  | Thunk y => OTick.ret (Thunk d)
   end.
 
 Definition forceD0 {A} (x : T A) : option A :=
@@ -45,14 +45,12 @@ Definition forceD0 {A} (x : T A) : option A :=
   | Thunk y => Some y
   end.
 
-Definition tlD (x : listA nat) : option (listA nat * (listA nat -> OTick (listA nat))) :=
+Definition tlD (x : listA nat) (zsA : listA nat) : OTick (listA nat) :=
   match x with
   | ConsA y ys =>
-    let? (zs, d_zs) := forceD ys in
-    Some (zs, fun zsA =>
-      let+ ysA := d_zs zsA in
-      OTick.ret (ConsA (bottom_of y) ysA))
-  | NilA => Some (NilA, fun d => OTick.ret NilA)
+      let+ ysA := forceD ys zsA in
+      OTick.ret (ConsA (bottom_of y) ysA)
+  | NilA => OTick.ret NilA
   end.
 
 (* ** Example: cons *)
@@ -79,6 +77,7 @@ Elpi Accumulate File translate.
 (* Elpi Translate (fun x => ret x). *)
 
 Elpi Translate idM.
+Print idP.
 Print idD1.
 
 (* Elpi Trace "translate_body" "translate_branch_accum" "lookup_indemand" "add". *)
