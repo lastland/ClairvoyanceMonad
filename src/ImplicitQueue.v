@@ -1,6 +1,8 @@
 From Coq Require Import Arith Psatz Relations RelationClasses.
 From Clairvoyance Require Import Core Approx Tick Prod Option FormalTranslation.
 
+From Hammer Require Import Tactics.
+
 Import Tick.Notations.
 Open Scope tick_scope.
 
@@ -1291,26 +1293,7 @@ Proof.
                                   | H : ?x `less_defined` ?y |- _ =>
                                       (head_is_constructor x + head_is_constructor y); invert_clear H
                                   end)
-            ].
-        -- destruct t.
-           ++ destruct x2.
-              ** invert_clear H5.
-              ** invert_clear H5. invert_clear H2. invert_clear H2.
-           ++ invert_clear H5.
-        -- destruct t.
-           ++ destruct x2.
-              ** invert_clear H5.
-              ** invert_clear H2. invert_clear H2.
-           ++ discriminate.
-        -- destruct t.
-           ++ destruct x2.
-              ** discriminate.
-              ** invert_clear H2. invert_clear H2.
-           ++ discriminate.
-        -- destruct mD', t; try destruct x2; try lia.
-        -- destruct t, mD'; try destruct x1; try lia.
-           ** invert_clear H2. invert_clear H2.
-           ** invert_clear H2. invert_clear H2.
+            ]; sauto.
       * simpl. unfold debt. simpl.
         destruct fD, t; try destruct x1; try destruct x2; simpl.
         -- unfold debt at 1. simpl. change (Debitable_T mD') with (debt mD'). lia.
