@@ -299,10 +299,10 @@ Lemma rotateD_cost {a} (f b d : list a) (outD : listA a)
 Proof.
   revert b d outD; induction f as [ | x f IH ]; intros [ | y b] * Hout; cbn in *; f_equal.
   - destruct outD as [ | ? [] ]; cbn; try rewrite Nat.min_0_r; reflexivity.
-  - rewrite exact_list_unfold_cons in Hout. inversion Hout; subst; cbn.
+  - inversion Hout; subst; cbn.
     destruct xs; cbn; [ rewrite Nat.min_0_r | ]; reflexivity.
-  - rewrite exact_list_unfold_nil in Hout. inversion Hout; subst; cbn. reflexivity.
-  - rewrite exact_list_unfold_cons in Hout. inversion Hout; subst; cbn.
+  - inversion Hout; subst; cbn. reflexivity.
+  - inversion Hout; subst; cbn.
     inversion H3; subst; cbn; [ reflexivity | ].
     rewrite IH; auto.
     destruct (Tick.val _) as [ [? ?] ? ]; cbn. rewrite Nat.add_0_r; reflexivity.
@@ -361,23 +361,22 @@ Proof.
   - repeat constructor.
   - destruct outD; cbn.
     + repeat constructor.
-    + cbn in Hout. rewrite exact_list_unfold_cons in Hout. inversion Hout; subst.
+    + cbn in Hout. inversion Hout; subst.
       repeat constructor; cbn in *; auto.
-      rewrite exact_list_unfold_cons; auto.
   - repeat constructor.
   - destruct outD; cbn.
     + repeat constructor.
-    + cbn in Hout. rewrite exact_list_unfold_cons in Hout. inversion Hout; subst. destruct x2; cbn.
+    + cbn in Hout. inversion Hout; subst. destruct x2; cbn.
       * apply less_defined_Thunk_inv in H4.
         specialize (IHf l (a1 :: d) x H4).
         inversion IHf as [ [HH1 HH2] HH3]; destruct (Tick.val (rotateD _ _ _ _)) as [ [f' b'] d'];
           cbn in *.
-        repeat (constructor; cbn); try (rewrite exact_list_unfold_cons; constructor); auto.
-        { inversion HH3; subst; cbn; auto. rewrite exact_list_unfold_cons in H1.
+        repeat (constructor; cbn); auto.
+        { inversion HH3; subst; cbn; auto.
           inversion H1; subst. auto. }
-        { inversion HH3; subst; cbn; auto. rewrite exact_list_unfold_cons in H1.
+        { inversion HH3; subst; cbn; auto.
           inversion H1; subst. auto. }
-      * repeat (constructor; cbn; try rewrite exact_list_unfold_cons); auto.
+      * repeat (constructor; cbn); auto.
 Qed.
 
 Lemma thunkD_sound {a' a b' b} `{BottomLeast b, Exact b' b, Exact a' a, LessDefined a}

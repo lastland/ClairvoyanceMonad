@@ -287,7 +287,6 @@ Proof.
   split; [|auto]. inversion Hout. mgo_.
   eapply less_defined_tail_cons. 
   inversion ld_back0; subst; mgo_.
-  inversion H1. subst. mgo_.
 Qed.
 
 Lemma popD_spec {a} (q : Queue a) (outD : option (T a * T (QueueA a)))

@@ -3,7 +3,6 @@ Set Maximal Implicit Insertion.
 Set Contextual Implicit.
 
 From Coq Require Import Arith List Psatz Morphisms Relations SetoidClass.
-From Equations Require Import Equations.
 From Clairvoyance Require Import Core Approx ApproxM Tick Misc.
 
 Unset Elimination Schemes.
@@ -93,13 +92,11 @@ Qed.
 #[global] Hint Resolve sizeX_ge_1 : core.
 
 
-(** The function is defined with the help of the Equations library. Neither our
-    methodology nor our definitions have to rely on Equations, but the tactics
-    provided by Equations such as [funelim] makes our proofs slightly
-    simpler. *)
-Equations exact_listA {a b : Type} `{Exact a b} (xs : list a) : listA b :=
-exact_listA nil := NilA ;
-exact_listA (cons y ys) := ConsA (Thunk (exact y)) (Thunk (exact_listA ys)).
+Fixpoint exact_listA {a b : Type} `{Exact a b} (xs : list a) : listA b :=
+  match xs with
+  | nil => NilA
+  | cons y ys => ConsA (Thunk (exact y)) (Thunk (exact_listA ys))
+  end.
 
 #[global]
 Instance Exact_list {a b} `{Exact a b} : Exact (list a) (listA b) :=
@@ -108,26 +105,22 @@ Instance Exact_list {a b} `{Exact a b} : Exact (list a) (listA b) :=
 Lemma exact_list_unfold_nil {a b} `{Exact a b}
   : exact (@nil a) = (@NilA b).
 Proof.
-  unfold exact; simp exact_listA; reflexivity.
+  reflexivity.
 Qed.
 
 Lemma exact_list_unfold_cons {a b} `{Exact a b} (x : a) (xs : list a)
   : exact (x :: xs) = ConsA (exact x) (exact xs).
 Proof.
-  unfold exact; simp exact_listA; reflexivity.
+  reflexivity.
 Qed.
 
 Lemma exact_list_unfold_nil_T {a b} `{Exact a b}
   : exact (@nil a) = Thunk (@NilA b).
-Proof.
-  unfold exact; simp exact_listA; reflexivity.
-Qed.
+Proof. reflexivity. Qed.
 
 Lemma exact_list_unfold_cons_T {a b} `{Exact a b} (x : a) (xs : list a)
   : exact (x :: xs) = Thunk (ConsA (exact x) (exact xs)).
-Proof.
-  unfold exact; simp exact_listA; reflexivity.
-Qed.
+Proof. reflexivity. Qed.
 
 Global
 Hint Rewrite @exact_list_unfold_nil @exact_list_unfold_cons
@@ -196,8 +189,7 @@ Instance ExactMaximal_listA {a b} `{ExactMaximal a b} : ExactMaximal (listA a) (
 Proof.
   intros xA x. revert xA. induction x.
   - inversion 1. reflexivity.
-  - unfold exact, Exact_list.
-    rewrite exact_listA_equation_2.
+  - unfold exact, Exact_list. cbn.
     inversion 1; subst. f_equal.
     + inversion H3; subst. f_equal. apply exact_maximal, H2.
     + inversion H5; subst. f_equal.

@@ -710,7 +710,7 @@ Proof.
     constructor; cbn; auto.
     + rewrite Nat.add_0_r. apply Nat.add_le_mono; apply H0 + apply H1.
     + apply lub_least_upper_bound; apply H0 + apply H1.
-  - intros; apply optimistic_bind. inv H.
+  - intros; apply optimistic_bind. unfold Exact_list in H. unfold cons_fn in H. simp exact_listA in H. inv H.
     assert (Tick.val (put la g x) `is_approx` g) by apply Ca, H5.
     assert (Tick.val (put lb g xs) `is_approx` g) by apply Cb, H6.
     cbn in H1; apply lub_inv in H1; [ destruct H1 | eauto ].
@@ -1160,10 +1160,11 @@ Theorem fcorrect_foldr' `{IsAA G G', IsAA A A', IsAA B B'}
     foldr_cv' (fun x' b' => fb (g', x', b')) (fn g') a' {{ fun b' n =>
       b' `is_approx` foldr_fn' (fun x b => get lb (g, x, b)) (get ln g) a }}.
 Proof.
-  intros Cb Cn g g' Eg a. induction a; intros a' Ea; inv Ea; cbn.
-  - apply (pessimistic_mon (functional_correct Cn _ _ Eg)).
+  intros Cb Cn g g' Eg a. induction a; intros a' Ea.
+  - inv Ea. apply (pessimistic_mon (functional_correct Cn _ _ Eg)).
     intros b _ Eb. auto.
-  - apply pessimistic_bind. apply pessimistic_thunk.
+  - unfold exact in Ea. cbn in Ea. unfold Exact_list in Ea. simp exact_listA in Ea. inv Ea; cbn.
+    apply pessimistic_bind. apply pessimistic_thunk.
     + apply pessimistic_forcing. intros x0 ->. inv H3.
       apply (pessimistic_mon (IHa _ H1)).
       intros b1 _ Eb1.
@@ -1195,12 +1196,14 @@ Theorem underapprox_foldr' `{IsAA G G', IsAA A A', IsAA B B'}
     foldr_cv' (fun x' b' => fb (g', x', b')) (fn g') a' {{ fun b' n =>
       foldr_dem' lb ln g a b' `less_defined` Tick.MkTick n (g', a') }}.
 Proof.
-  intros Cb Cn g g' Eg a. induction a; intros a' Ea; inv Ea; cbn.
-  - apply (pessimistic_mon (underapprox Cn _ Eg)).
+  intros Cb Cn g g' Eg a. induction a; intros a' Ea.
+  - inv Ea; cbn.
+    apply (pessimistic_mon (underapprox Cn _ Eg)).
     intros b' n Eb. constructor; cbn.
     + rewrite Nat.add_0_r. apply Eb.
     + constructor; [ apply Eb | constructor ].
-  - apply pessimistic_bind. apply pessimistic_thunk.
+  - unfold exact in Ea; cbn in Ea. unfold Exact_list in Ea; simp exact_listA in Ea; inv Ea.
+    apply pessimistic_bind. apply pessimistic_thunk.
     + apply pessimistic_forcing. intros x0 ->. inv H3.
       apply (pessimistic_mon (@pessimistic_conj _ _ _ _ (IHa _ H1) (fcorrect_foldr' Cb Cn g g' Eg a0 H1))).
       intros b1 n [ Eb1 Eb2 ].
@@ -1254,19 +1257,21 @@ Theorem minimal_ex_foldr' `{IsAA G G', IsAA A A', IsAA B B'}
     foldr_cv' (fun x' b' => fb (g', x', b')) (fn g') a' [[ fun b'' n =>
       n = Tick.cost (foldr_dem' lb ln g a b') /\ b' `less_defined` b'' ]].
 Proof.
-  intros Cb Cn g. induction a; intros b' Eb g' Eg a' Ea Efold; inv Ea; cbn in *.
-  - destruct Efold as [Eg' _]; cbn in Eg'.
+  intros Cb Cn g. induction a; intros b' Eb g' Eg a' Ea Efold.
+  - inv Ea; cbn in *. destruct Efold as [Eg' _]; cbn in Eg'.
     apply (optimistic_mon (minimal_ex Cn g b' Eb g' Eg Eg')).
     intros *; rewrite Nat.add_0_r; auto.
-  - destruct (Tick.val (put lb (g, a, foldr_fn' (fun x b => get lb (g, x, b)) (get ln g) a0) b'))
+  - unfold exact in Ea; cbn in Ea. unfold Exact_list in Ea; simp exact_listA in Ea; inv Ea.
+    destruct (Tick.val (put lb (g, a, foldr_fn' (fun x b => get lb (g, x, b)) (get ln g) a0) b'))
       as [ [g2 a2] b2] eqn:E2.
     assert (E2' : (g2, a2, b2) `is_approx` (g, a, foldr_fn' (fun x b => get lb (g, x, b)) (get ln g) a0)).
     { rewrite <- E2; apply (complete (Good_correct Cb)); auto. }
     destruct E2' as [ [Eg2 Ea2] Eb2 ]; cbn in *.
     apply optimistic_bind.
-    inv Eb2.
+    unfold Exact_T in Eb2. inv Eb2.
     + apply optimistic_skip.
-      cbn in Efold. destruct Efold as [Eg' Exs]; cbn in *.
+      cbn in Efold. destruct Efold as [Eg' Exs].
+      rewrite E2 in *. cbn in Eg'.
       rewrite lub_bottom_of_r in Eg'; auto.
       inv Exs.
       refine (optimistic_mon
@@ -1274,12 +1279,13 @@ Proof.
       { repeat constructor; auto. }
       { rewrite E2. repeat constructor; cbn; auto. }
       { intros b3 n. rewrite Nat.add_0_r. auto. }
-    + apply optimistic_thunk_go. cbn in Efold.
+    + apply optimistic_thunk_go. rewrite E2 in *. cbn in Efold.
       destruct (Tick.val (foldr_dem' lb ln g a0 x0)) as [g3 a3] eqn:E3. cbn in *.
       assert (H3' : (g3, a3) `is_approx` (g, a0)).
       { rewrite <- E3. apply complete_foldr'; eauto. }
       destruct H3' as [Eg3 Ea3].
-      destruct Efold as [Eg3' Exs]. inv Exs. inv H7. inv H3.
+      destruct Efold as [Eg3' Exs].
+      inv Exs. inv H7. inv H3.
       cbn in *.
       refine (optimistic_mon
         (optimistic_conj (fcorrect_foldr' Cb Cn _ _ Eg _ H6)  (IHa _ H1 _ Eg _ H6 _)) _).

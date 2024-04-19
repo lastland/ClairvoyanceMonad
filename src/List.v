@@ -362,6 +362,7 @@ Proof.
     + simpl. lia.
     + simpl.
       rewrite length_take_n_leq_n.
+      simp exact. cbn.
       rewrite takeD_cost.
       lia.
 Qed.
@@ -440,9 +441,12 @@ Theorem appendA_correct_partial {a} :
     (appendA xsA ysA) {{ fun zsA _ => zsA `is_approx` append xs ys }}.
 Proof.
   destruct xsA; [| mgo_list].
-  intros ysA Hxs. revert ys ysA.
-  funelim (exact_listA xs); mgo_list.
-  relax_apply H0; try eassumption; mgo_list.
+  intros ysA Hxs. revert x Hxs ys ysA.
+  induction xs; intros x Hxs; mgo_list.
+  relax. { apply IHxs.
+    { constructor; auto. }
+    { eauto. } }
+  mgo_list.
 Qed.
 
 Theorem appendA_correct_pure {a} :
@@ -451,10 +455,9 @@ Theorem appendA_correct_pure {a} :
     (appendA xsA ysA) [[ fun zsA _ => zsA = exact (append xs ys) ]].
 Proof.
   destruct xsA; [|mgo_list].
-  intros ysA Hxs. revert ys ysA.
-  funelim (exact_listA xs); mgo_list.
+  intros ysA Hxs. inv Hxs. induction xs; cbn; mgo_list.
   apply optimistic_thunk_go.
-  relax_apply H0; try eassumption; try reflexivity.
+  relax. { apply IHxs. auto. }
   mgo_list.
 Qed.
 
@@ -651,11 +654,11 @@ forall (xs : list a) (xsA : listA a) (ysA : T (listA a)),
   xsA `is_approx` xs ->
   (revA_ xsA ysA) {{ fun zsA cost => cost = length xs + 1 }}.
 Proof.
-  intros. funelim (exact_listA xs); mgo_list.
-  - relax_apply H0. assumption.
-    cbn. intros. lia.
-  - relax_apply H0. assumption.
-    cbn. intros. lia.
+  intros xs; induction xs; intros xsA ysA Hxs; inv Hxs.
+  - cbn. mgo_list.
+  - cbn. mgo idtac.
+    + relax. { apply IHxs. auto. } mgo idtac.
+    + relax. { apply IHxs; auto. } mgo idtac.
 Qed.
 
 Theorem revA_pessim {a} :
@@ -724,15 +727,18 @@ forall f (xs : list a) (xsA : T (listA a)) (v : b) (vA : T bA),
     {{ fun zsA cost => cost >= length xs + 1 /\ cost <= 2 * length xs + 1 }}.
 Proof.
   intros f xs xsA v vA Hf Hxs. revert v vA.
-  unfold foldlA. funelim (exact_listA xs); mgo_list.
-  - relax_apply Hf. cbn; intros.
-    destruct H3 as (? & ? & ?); subst.
-    relax. eapply H0 with (v:=x1); try eassumption.
-    constructor; assumption.
-    cbn. intros. lia.
-  - specialize (H0 _ _ _ _ f (Thunk x)).
-    cbn in H0. relax; [ apply H0 with (v:=v); auto; solve_approx | ].
-    cbn; lia.
+  unfold foldlA. inv Hxs.
+  { cbn. mgo idtac. }
+  revert x H3; induction xs; intros xsA Hxs; intros.
+  - inv Hxs; mgo idtac.
+  - inv Hxs; mgo idtac.
+    + relax. { apply Hf. }
+      cbn. intros * [bb [Hb ->] ].
+      inv H6; mgo idtac.
+      relax. { eapply IHxs; solve_approx. }
+      cbn. lia.
+    + relax. { apply IHxs with (v := v); solve_approx. }
+      cbn. lia.
 Qed.
 
 Definition foldr_pessim {a b bA} `{LessDefined bA} `{LessDefined (T bA)} `{Exact b bA} :
@@ -744,12 +750,13 @@ forall f (xs : list a) (xsA : T (listA a)) (v : b) (vA : T bA),
     {{ fun zsA cost => cost >= 1 /\ cost <= 2 * sizeX 0 xsA + 1 }}.
 Proof.
   intros f xs xsA v vA Hf Hxs. revert v vA.
-  unfold foldrA. funelim (exact_listA xs); mgo_list.
-  - specialize (H0 _ _ _ _ _ f (Thunk x)).
-    relax; [ eapply H0; auto; solve_approx | ].
-    mgo_list. relax_apply Hf. mgo_list.
-  - relax_apply Hf. cbn. intros. subst.
-    destruct xs; simpl; lia.
+  unfold foldrA. inv Hxs.
+  { mgo idtac. }
+  revert x H4; induction xs; intros xsA Hxs; inv Hxs; mgo idtac.
+  - relax. { eapply IHxs; solve_approx. }
+    mgo idtac. relax; [ apply Hf | cbn ].
+    lia.
+  - relax; [ apply Hf | cbn ]. mgo idtac. inv H6; lia.
 Qed.
 
 Definition foldr_optim1 {a b bA} `{LessDefined bA} `{LessDefined (T bA)} `{Exact b bA} :

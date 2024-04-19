@@ -41,7 +41,7 @@ Lemma right_ret : forall {A : Type} (m : Tick A),
   (bind m (fun x => ret x)) = m.
 Proof.
   intros. unfold bind. destruct m; simpl.
-  f_equal. apply plus_0_r.
+  f_equal. apply Nat.add_0_r.
 Qed.
 
 #[global] Instance LessDefined_Tick {a} `{LessDefined a} : LessDefined (Tick a) :=
@@ -97,11 +97,19 @@ Definition bind {a b : Type} (ox : OTick a) (k : a -> OTick b) : OTick b :=
               end
   end.
 
+Definition obind {a b : Type} (ox : option a) (k : a -> OTick b) : OTick b :=
+  MkOTick match ox with
+          | None => None
+          | Some x => unOTick (k x)
+          end.
+
 Definition fail {a : Type} : OTick a := MkOTick None.
 Module Notation.
 Declare Scope otick_scope.
 Delimit Scope otick_scope with otick.
 Notation "'let+' x := u 'in' v" := (bind u (fun x => v))
+  (at level 200, x pattern) : otick_scope.
+Notation "'let+?' x := u 'in' v" := (obind u (fun x => v))
   (at level 200, x pattern) : otick_scope.
 End Notation.
 End OTick.
