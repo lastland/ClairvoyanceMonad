@@ -124,45 +124,6 @@ Proof.
   apply make_partial_order, LessDefined_T_antisym. firstorder.
 Qed.
 
-(* Definition unzipT A B (p : T (A * B)) : prodA A B := *)
-(*   match p with *)
-(*   | Undefined => pairA Undefined Undefined *)
-(*   | Thunk (x, y) => pairA (Thunk x) (Thunk y) *)
-(*   end. *)
-
-Definition unzipT A B (p : T (A * B)) : T A * T B :=
-  match p with
-  | Undefined => (Undefined, Undefined)
-  | Thunk (x, y) => (Thunk x, Thunk y)
-  end.
-
-Definition zipT A B (p : T A) (q : T B) : T (A * B) :=
-  match p, q with
-  | Thunk x, Thunk y => Thunk (x, y)
-  | _, _ => Undefined
-  end.
-
-(* Lemma zipT_less_defined A B `{LessDefined A, LessDefined B} *)
-(*   (aD aD' : T A) (bD bD' : T B) : *)
-(*   aD `less_defined` aD' -> *)
-(*   bD `less_defined` bD' -> *)
-(*   zipT aD bD `less_defined` zipT aD' bD'. *)
-(* Proof. *)
-(*   repeat invert_clear 1; simpl; repeat constructor; auto. *)
-(* Qed. *)
-(* #[global] Hint Resolve zipT_less_defined : core. *)
-
-(* Lemma zipT_less_defined_approx A B `{LessDefined A, LessDefined B} *)
-(*   (aD : T A) (a : A) (bD : T B) (b : B) : *)
-(*   aD `is_approx` a -> *)
-(*   bD `is_approx` b -> *)
-(*   zipT aD bD `is_approx` (a, b). *)
-(* Proof. *)
-(*   change (exact (a, b)) with (zipT (Thunk a) (Thunk b)). *)
-(*   apply zipT_less_defined. *)
-(* Qed. *)
-(* #[global] Hint Resolve zipT_less_defined_approx : core. *)
-
 Definition forceD {a} (y : a) (u : T a) : a :=
   match u with
   | Undefined => y
@@ -924,6 +885,12 @@ Proof.
     + apply H5.
 Qed.
 
+Definition unzipT (A B : Type) (p : T (prodA A B)) : prodA A B :=
+  match p with
+  | Undefined => pairA Undefined Undefined
+  | Thunk p => p
+  end.
+
 (* Note that this definition *is* maximally lazy. *)
 Fixpoint popA' (A : Type) (q : QueueA A) : M (option (T (prodA A (QueueA A)))) :=
   tick >>
@@ -937,9 +904,13 @@ Fixpoint popA' (A : Type) (q : QueueA A) : M (option (T (prodA A (QueueA A)))) :
               let! p := popA' $! m in
               match p with
               | Some yzm' =>
+                  (* let '(pairA yz m') := unzipT yzm' in *)
+                  (* let '(pairA y z) := unzipT yz in *)
+                  (* ret (DeepA (Thunk (FTwoA y z)) m' r) *)
                   let! (pairA yz m') := force yzm' in
                   let! (pairA y z) := force yz in
-                  ret (DeepA (Thunk (FTwoA y z)) m' r)
+                  let~ f := ret (FTwoA y z) in
+                  ret (DeepA f m' r)
               | None =>
                   let! r := force r in
                   match r with
@@ -967,17 +938,23 @@ Fixpoint popD' (A B : Type) (q : Queue A) (outD : option (T (prodA B (QueueA B))
             match p with
             | Some (yz, m') =>
                 match outD with
-                | Some (Thunk (pairA xD qD)) =>
-                    let+ (mD, rD) :=
-                      match qD with
-                      | Thunk (DeepA fD mD' rD) =>
-                          let pD :=
-                            match fD with
-                            | Thunk (FTwoA yD zD) => Thunk (pairA yD zD)
+                | Some pD =>
+                    let+ (xD, mD, rD) :=
+                      match pD with
+                      | Thunk (pairA xD qD) =>
+                          let+ (mD, rD) :=
+                            match qD with
+                              | Thunk (DeepA fD mD' rD) =>
+                                let pD :=
+                                  match fD with
+                                  | Thunk (FTwoA yD zD) => Thunk (pairA yD zD)
+                                  | _ => bottom
+                                  end in
+                                let+ mD := popD' m (Some (Thunk (pairA pD mD'))) in
+                                Tick.ret (mD, rD)
                             | _ => bottom
                             end in
-                          let+ mD := popD' m (Some (Thunk (pairA pD mD'))) in
-                          Tick.ret (mD, rD)
+                          Tick.ret (xD, mD, rD)
                       | _ => bottom
                       end in
                     Tick.ret (Thunk (DeepA (Thunk (FOneA xD)) mD rD))
@@ -1041,41 +1018,105 @@ Proof.
     invert_clear H2; try solve [ repeat constructor; auto ].
     invert_clear H2. invert_clear H2.
     + repeat constructor; try solve [ auto ].
-      apply H0. rewrite H. repeat constructor; auto.
-    + invert_clear H2. repeat constructor; try solve [ auto ].
-      apply H0. rewrite H. repeat constructor; auto.
-  - simpl. rewrite H.
-    invert_clear H1. invert_clear H1; try solve [ repeat constructor; auto ].
-    destruct x1. invert_clear H1. repeat constructor; try solve [ auto ].
-    apply H0. rewrite H. repeat constructor; auto.
-  - simpl. rewrite H.
-    invert_clear H1. invert_clear H1; try solve [ repeat constructor; auto ].
-    destruct x1. invert_clear H1.
-    invert_clear H2; try solve [ repeat constructor; auto ].
-    invert_clear H2. invert_clear H2; try solve [ repeat constructor; auto ].
-    invert_clear H2. repeat constructor; try solve [ auto ].
-    apply H0. rewrite H. repeat constructor; auto.
-  - invert_clear H. invert_clear H; try solve [ auto ].
-    destruct x1. invert_clear H.
-    invert_clear H0; try solve [ repeat constructor; auto ].
-    invert_clear H0. invert_clear H0; try solve [ repeat constructor; auto ].
-    invert_clear H0. repeat constructor; auto.
-Qed.
+(*       apply H0. rewrite H. repeat constructor; auto. *)
+(*     + invert_clear H2. repeat constructor; try solve [ auto ]. *)
+(*       apply H0. rewrite H. repeat constructor; auto. *)
+(*   - simpl. rewrite H. *)
+(*     invert_clear H1. invert_clear H1; try solve [ repeat constructor; auto ]. *)
+(*     destruct x1. invert_clear H1. repeat constructor; try solve [ auto ]. *)
+(*     apply H0. rewrite H. repeat constructor; auto. *)
+(*   - simpl. rewrite H. *)
+(*     invert_clear H1. invert_clear H1; try solve [ repeat constructor; auto ]. *)
+(*     destruct x1. invert_clear H1. *)
+(*     invert_clear H2; try solve [ repeat constructor; auto ]. *)
+(*     invert_clear H2. invert_clear H2; try solve [ repeat constructor; auto ]. *)
+(*     invert_clear H2. repeat constructor; try solve [ auto ]. *)
+(*     apply H0. rewrite H. repeat constructor; auto. *)
+(*   - invert_clear H. invert_clear H; try solve [ auto ]. *)
+(*     destruct x1. invert_clear H. *)
+(*     invert_clear H0; try solve [ repeat constructor; auto ]. *)
+(*     invert_clear H0. invert_clear H0; try solve [ repeat constructor; auto ]. *)
+(*     invert_clear H0. repeat constructor; auto. *)
+(* Qed. *)
+Admitted.
 
-Corollary popD_approx : forall (A : Type) `{LDA : LessDefined A}
+Corollary popD_approx : forall (A : Type) `{LessDefined A}
                           (q : Queue A) (outD : option (T (prodA A (QueueA A)))),
     outD `is_approx` pop q -> Tick.val (popD' q outD) `is_approx` q.
 Proof.
   intros. apply popD'_approx. auto.
 Qed.
 
-(* Lemma popD'_spec : *)
-(*   forall (A B : Type) `{LDA : LessDefined A, Exact A B} *)
-(*     (q : Queue A) (outD : option (prodA B (QueueA B))), *)
-(*     outD `is_approx` pop q -> *)
-(*     forall qD, qD = Tick.val (popD' q outD) -> *)
-(*     let dcost := Tick.cost (popD' q outD) in *)
-(*     popA qD [[ fun out cost => outD `less_defined` out /\ cost <= dcost ]]. *)
+Lemma popD'_spec :
+  forall (A B : Type) `{LDB : LessDefined B, !Reflexive LDB, Exact A B}
+    (q : Queue A) (outD : option (T (prodA B (QueueA B)))),
+    outD `is_approx` pop q ->
+    forall qD, qD = Tick.val (popD' q outD) ->
+    let dcost := Tick.cost (popD' q outD) in
+    popA qD [[ fun out cost => outD `less_defined` out /\ cost <= dcost ]].
+Proof.
+  intros ? ? LDB RLDB EAB ? ?. revert A q B LDB RLDB EAB outD.
+  apply (pop_ind (fun A q u =>
+                    forall B LDB RLDB EAB outD,
+                      outD `is_approx` u ->
+                      forall qD, qD = Tick.val (popD' q outD) ->
+                            let dcost := Tick.cost (popD' q outD) in
+                            popA qD [[ fun out cost => outD `less_defined` out /\ cost <= dcost ]])).
+  - intros. subst. mgo_.
+  - simpl. intros A m r x y z m' ->.
+    invert_clear 3. invert_clear H0.
+    + intros. subst. mgo_. apply optimistic_skip. mgo_.
+      split; solve_approx.
+      (* pop m = None *)
+    + destruct x1 as [ xD qD ].
+      invert_clear H0 as [ HxQ HqD ]. invert_clear HqD
+        as [ | qA ? HqA ].
+      * simpl. intros. subst. mgo_.
+        apply optimistic_skip. mgo_.
+        assert (@Reflexive (T B) less_defined)
+          by apply Reflexive_LessDefined_T.
+        split; solve_approx.
+      (* qD = Thunk ... *)
+      * simpl. invert_clear HqA as [ | fD ? mD ? rD ? HfD HmD HrD ].
+        simpl. invert_clear HfD as [ | fA ? HfA ].
+        (* fD = Undefined *)
+        -- intros. subst. mgo_.
+           apply optimistic_thunk_go. mgo_.
+           eapply optimistic_mon.
+           ++ eapply H.
+              ** admit.
+              ** shelve.
+              ** reflexivity. Unshelve. repeat constructor; auto.
+           ++ intros. destruct H0. invert_clear H0 as [ | ? yzm'D Hyzm'D ].
+              invert_clear Hyzm'D as [ | ? yzm'A Hyzm'A ].
+              destruct yzm'A as [ yzD m'D ].
+              invert_clear Hyzm'A as [ ? HmD' ].
+              mgo_. destruct yzD.
+              ** mgo_. destruct x0. mgo_.
+                 apply optimistic_skip. mgo_. split.
+                 repeat constructor; auto; admit. lia.
+              (* yzD = Undefined *)
+              ** (* ??? *)
+
+
+
+           ++ intros.
+        --
+        intros. subst. mgo_.
+        apply optimistic_thunk_go. mgo_.
+        eapply optimistic_mon.
+        eapply H.
+        -- admit.
+        -- shelve.
+        -- reflexivity.
+        -- destruct x0.
+           ++ intros. destruct H1. invert_clear H1.
+              invert_clear H1. destruct y0. mgo_.
+              destruct H1. destruct t0.
+              ** destruct x0. mgo_. split.
+                 repeat constructor; auto; admit. lia.
+              ** mgo_.
+
 
 (* (* XXX This is probably unprovable right now. *) *)
 (* Lemma popD_spec : *)
