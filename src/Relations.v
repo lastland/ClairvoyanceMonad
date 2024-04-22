@@ -13,6 +13,10 @@ Inductive option_rel {a b} (r : a -> b -> Prop) : option a -> option b -> Prop :
 | option_rel_Some x y : r x y -> option_rel r (Some x) (Some y)
 .
 
+#[global] Instance Reflexive_option_rel {a} (r : relation a)
+  `{!Reflexive r} : Reflexive (option_rel r).
+Proof. unfold Reflexive. destruct x; constructor; auto. Qed.
+
 #[global]
 Instance PreOrder_pair_rel {a b ra rb} `{!@PreOrder a ra,!@PreOrder b rb} : PreOrder (pair_rel ra rb).
 Proof.
