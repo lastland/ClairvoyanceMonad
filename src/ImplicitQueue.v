@@ -961,173 +961,90 @@ Fixpoint popA' (A : Type) (q : QueueA A) : M (option (T (prodA A (QueueA A)))) :
 Definition popA (A : Type) (q : T (QueueA A)) : M (option (T (prodA A (QueueA A)))) :=
   popA' $! q.
 
-
-(* Fixpoint popD' (A B : Type) (q : Queue A) (outD : option (T (prodA B (QueueA B)))) : *)
-(*   Tick (T (QueueA B)) := *)
-(*   Tick.tick >> *)
-(*     match q with *)
-(*     | Nil => Tick.ret (Thunk NilA) *)
-(*     | Deep f m r => *)
-(*         match f with *)
-(*         | FOne x => *)
-(*             let p := pop m in *)
-(*             match p with *)
-(*             | Some (yz, m') => *)
-(*                 match outD with *)
-(*                 | Some pD => *)
-(*                     let+ (xD, mD, rD) := *)
-(*                       match pD with *)
-(*                       | Thunk (pairA xD qD) => *)
-(*                           let+ (mD, rD) := *)
-(*                             match qD with *)
-(*                             | Thunk (DeepA fD mD' rD) => *)
-(*                                 let pD := *)
-(*                                   (* XXX *) *)
-(*                                   Thunk (match fD with *)
-(*                                          | Thunk (FTwoA yD zD) => pairA yD zD *)
-(*                                          | _ => bottom *)
-(*                                          end) in *)
-(*                                 let+ mD := popD' m (Some (Thunk (pairA pD mD'))) in *)
-(*                                 Tick.ret (mD, rD) *)
-(*                             | _ => bottom *)
-(*                             end in *)
-(*                           Tick.ret (xD, mD, rD) *)
-(*                       | _ => bottom *)
-(*                       end in *)
-(*                     Tick.ret (Thunk (DeepA (Thunk (FOneA xD)) mD rD)) *)
-(*                 | _ => bottom *)
-(*                 end *)
-(*             | None => *)
-(*                 match r with *)
-(*                 | RZero => *)
-(*                     let+ (xD, mD) := *)
-(*                       match outD with *)
-(*                       | Some (Thunk (pairA xD _)) => *)
-(*                           let+ mD := popD' m None in *)
-(*                           Tick.ret (xD, mD) *)
-(*                       | _ => bottom *)
-(*                       end in *)
-(*                     Tick.ret (Thunk (DeepA (Thunk (FOneA xD)) mD (Thunk RZeroA))) *)
-(*                 | ROne y => *)
-(*                     let+ (xD, yD, mD) := *)
-(*                       match outD with *)
-(*                       | Some (Thunk (pairA xD qD)) => *)
-(*                           let yD := *)
-(*                             match qD with *)
-(*                             | Thunk (DeepA (Thunk (FOneA yD)) _ _) => yD *)
-(*                             | _ => bottom *)
-(*                             end in *)
-(*                           let+ mD := popD' m None in *)
-(*                           Tick.ret (xD, yD, mD) *)
-(*                       | _ => bottom *)
-(*                       end in *)
-(*                     Tick.ret (Thunk (DeepA (Thunk (FOneA xD)) mD (Thunk (ROneA yD)))) *)
-(*                 end *)
-(*             end *)
-(*         | FTwo x y => *)
-(*             let '(xD, yD, mD, rD) := *)
-(*               match outD with *)
-(*               | Some (Thunk (pairA xD qD)) => *)
-(*                   let '(yD, mD, rD) := *)
-(*                     match qD with *)
-(*                     | Thunk (DeepA fD mD rD) => *)
-(*                         let yD := *)
-(*                           match fD with *)
-(*                           | Thunk (FOneA yD) => yD *)
-(*                           | _ => bottom *)
-(*                           end in *)
-(*                         (yD, mD, rD) *)
-(*                     | _ => bottom *)
-(*                     end in *)
-(*                   (xD, yD, mD, rD) *)
-(*               | _ => bottom *)
-(*               end in *)
-(*             Tick.ret (Thunk (DeepA (Thunk (FTwoA xD yD)) mD rD)) *)
-(*         end *)
-(*     end. *)
-
 Fixpoint popD' (A B : Type) (q : Queue A) (outD : option (T (prodA B (QueueA B)))) :
   Tick (T (QueueA B)) :=
   Tick.tick >>
     match q with
     | Nil => Tick.ret (Thunk NilA)
     | Deep f m r =>
-        match outD with
-        | Some pD =>
-            match f with
-            | FOne x =>
-                let p := pop m in
-                match p with
-                | Some (yz, m') =>
-                    let+ (xD, mD, rD) :=
-                      match pD with
-                      | Thunk (pairA xD qD) =>
-                          let+ (mD, rD) :=
-                            match qD with
-                            | Thunk (DeepA fD mD' rD) =>
-                                let pD :=
-                                  (* XXX *)
-                                  Thunk (match fD with
-                                         | Thunk (FTwoA yD zD) => pairA yD zD
-                                         | _ => bottom
-                                         end) in
-                                let+ mD := popD' m (Some (Thunk (pairA pD mD'))) in
-                                Tick.ret (mD, rD)
-                            | _ => bottom
-                            end in
-                          Tick.ret (xD, mD, rD)
-                      | _ => bottom
-                      end in
-                    Tick.ret (Thunk (DeepA (Thunk (FOneA xD)) mD rD))
-                | None =>
-                    match r with
-                    | RZero =>
-                        let+ (xD, mD) :=
-                          match outD with
-                          | Some (Thunk (pairA xD _)) =>
-                              let+ mD := popD' m None in
-                              Tick.ret (xD, mD)
-                          | _ => bottom
-                          end in
-                        Tick.ret (Thunk (DeepA (Thunk (FOneA xD)) mD (Thunk RZeroA)))
-                    | ROne y =>
-                        let+ (xD, yD, mD) :=
-                          match outD with
-                          | Some (Thunk (pairA xD qD)) =>
-                              let yD :=
-                                match qD with
-                                | Thunk (DeepA (Thunk (FOneA yD)) _ _) => yD
-                                | _ => bottom
-                                end in
-                              let+ mD := popD' m None in
-                              Tick.ret (xD, yD, mD)
-                          | _ => bottom
-                          end in
-                        Tick.ret (Thunk (DeepA (Thunk (FOneA xD)) mD (Thunk (ROneA yD))))
-                    end
-                end
-            | FTwo x y =>
-                let '(xD, yD, mD, rD) :=
-                  match pD with
-                  | Thunk (pairA xD qD) =>
-                      let '(yD, mD, rD) :=
-                        match qD with
-                        | Thunk (DeepA fD mD rD) =>
-                            let yD :=
-                              match fD with
-                              | Thunk (FOneA yD) => yD
+        let+ (fD, mD, rD) :=
+          match outD with
+          | Some pD =>
+              match f with
+              | FOne x =>
+                  let p := pop m in
+                  match p with
+                  | Some (yz, m') =>
+                      let+ (xD, mD, rD) :=
+                        match pD with
+                        | Thunk (pairA xD qD) =>
+                            let+ (mD, rD) :=
+                              match qD with
+                              | Thunk (DeepA fD mD' rD) =>
+                                  let pD :=
+                                    (* XXX *)
+                                    Thunk (match fD with
+                                           | Thunk (FTwoA yD zD) => pairA yD zD
+                                           | _ => bottom
+                                           end) in
+                                  let+ mD := popD' m (Some (Thunk (pairA pD mD'))) in
+                                  Tick.ret (mD, rD)
                               | _ => bottom
                               end in
-                            (yD, mD, rD)
+                            Tick.ret (xD, mD, rD)
                         | _ => bottom
                         end in
-                      (xD, yD, mD, rD)
-                  | _ => bottom
-                  end in
-                Tick.ret (Thunk (DeepA (Thunk (FTwoA xD yD)) mD rD))
-            end
-        | _ => bottom
-        end
+                      Tick.ret (Thunk (FOneA xD), mD, rD)
+                  | None =>
+                      match r with
+                      | RZero =>
+                          let+ (xD, mD) :=
+                            match outD with
+                            | Some (Thunk (pairA xD _)) =>
+                                let+ mD := popD' m None in
+                                Tick.ret (xD, mD)
+                            | _ => bottom
+                            end in
+                          Tick.ret (Thunk (FOneA xD), mD, Thunk RZeroA)
+                      | ROne y =>
+                          let+ (xD, yD, mD) :=
+                            match outD with
+                            | Some (Thunk (pairA xD qD)) =>
+                                let yD :=
+                                  match qD with
+                                  | Thunk (DeepA (Thunk (FOneA yD)) _ _) => yD
+                                  | _ => bottom
+                                  end in
+                                let+ mD := popD' m None in
+                                Tick.ret (xD, yD, mD)
+                            | _ => bottom
+                            end in
+                          Tick.ret (Thunk (FOneA xD), mD, Thunk (ROneA yD))
+                      end
+                  end
+              | FTwo x y =>
+                  let '(xD, yD, mD, rD) :=
+                    match pD with
+                    | Thunk (pairA xD qD) =>
+                        let '(yD, mD, rD) :=
+                          match qD with
+                          | Thunk (DeepA fD mD rD) =>
+                              let yD :=
+                                match fD with
+                                | Thunk (FOneA yD) => yD
+                                | _ => bottom
+                                end in
+                              (yD, mD, rD)
+                          | _ => bottom
+                          end in
+                        (xD, yD, mD, rD)
+                    | _ => bottom
+                    end in
+                  Tick.ret (Thunk (FTwoA xD yD), mD, rD)
+              end
+          | _ => bottom
+          end in
+        Tick.ret (Thunk (DeepA fD mD rD))
     end.
 
 Definition popD (A : Type) (q : Queue A) (outD : option (T (prodA A (QueueA A)))) :
