@@ -1488,6 +1488,15 @@ Qed.
 
 (* Compute popD (Deep (FOne 1) (Deep (FOne (2, 3)) Nil RZero) RZero) (Some Undefined). *)
 
+(* Goal forall (A : Type) `{LessDefined A} (q : Queue A), Some (Thunk (pairA Undefined Undefined)) `is_approx` pop q -> *)
+(*                                                   debt (Tick.val (popD q (Some (Thunk (pairA Undefined Undefined))))) <= 1. *)
+(*   induction q. *)
+(*   - simpl. unfold debt, Debitable_T, debt. simpl. lia. *)
+(*   - simpl. destruct f as [ x | x y ]. *)
+(*     + destruct (pop q) eqn:Hpop. *)
+(*       * destruct p. simpl. unfold debt, Debitable_T, debt. simpl. lia. *)
+(*       * simpl.  *)
+
 Lemma popD'_cost : forall (A B : Type) `{LessDefined B, Exact A B}
                      (q : Queue A) (outD : option (T (prodA B (QueueA B)))),
     outD `is_approx` pop q ->
@@ -1519,16 +1528,37 @@ Proof.
            ++ simpl. lia.
            ++ invert_clear HqA as [ | fD ? mD ? rD ? HfD HmD HrD ].
               simpl. invert_clear HfD as [ | fA ? HfA ].
+              (* fD = Undefined *)
               ** specialize (IHq _ _ _ (Some (Thunk (pairA (Thunk bottom) mD)))
                                ltac:(repeat constructor; auto)).
                  simpl in IHq.
                  unfold debt, Debitable_T, debt. simpl.
                  change (Debitable_T (Tick.val (popD' q (Some (Thunk (pairA (Thunk bottom) mD))))))
                    with (debt (Tick.val (popD' q (Some (Thunk (pairA (Thunk bottom) mD)))))).
-                 change (Debitable_T mD) with (debt mD). destruct mD; simpl.
-                 destruct rD; try destruct x1; simpl.
-                 set (r1 := debt (Tick.val (popD' q (Some (Thunk (pairA (Thunk bottom) (Thunk x0))))))) in *.
-                 set (r2 := Tick.cost (popD' q (Some (Thunk (pairA (Thunk bottom) (Thunk x0)))))) in *.
+                 change (Debitable_T mD) with (debt mD). destruct mD.
+                 (* mD = Thunk _ *)
+                 --- admit.
+                 (* mD = Undefined *)
+                 --- destruct rD.
+                     (* rD = Thunk _ *)
+                     +++ destruct x0; simpl; admit.
+                     (* rD = Undefined *)
+                     +++ simpl. admit.
+              ** invert_clear HfA as [ | yD ? zD ? HyD HzD ].
+                 specialize (IHq _ _ _ (Some (Thunk (pairA (Thunk (pairA yD zD)) mD)))
+                               ltac:(repeat constructor; auto)).
+                 simpl in *.
+                 unfold debt, Debitable_T, debt.
+                 simpl.
+                 change (Debitable_T (Tick.val (popD' q (Some (Thunk (pairA (Thunk (pairA yD zD)) mD))))))
+                   with (debt (Tick.val (popD' q (Some (Thunk (pairA (Thunk (pairA yD zD)) mD)))))).
+                 change (Debitable_T mD) with (debt mD).
+                 destruct rD; try destruct x0.
+                 --- simpl. lia.
+                 --- simpl. lia.
+                 --- simpl. lia.
+Admitted.
+
   (*                lia. *)
 
   (* apply (pop_ind (fun A q u => *)
