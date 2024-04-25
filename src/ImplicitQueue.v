@@ -968,81 +968,57 @@ Fixpoint popD' (A B : Type) (q : Queue A) (outD : option (T (prodA B (QueueA B))
     | Nil => Tick.ret (Thunk NilA)
     | Deep f m r =>
         let+ (fD, mD, rD) :=
-          match outD with
-          | Some pD =>
-              match f with
-              | FOne x =>
-                  let p := pop m in
-                  match p with
-                  | Some (yz, m') =>
-                      let+ (xD, mD, rD) :=
-                        match pD with
-                        | Thunk (pairA xD qD) =>
-                            let+ (mD, rD) :=
-                              match qD with
-                              | Thunk (DeepA fD mD' rD) =>
-                                  let pD :=
-                                    (* XXX *)
-                                    Thunk (match fD with
-                                           | Thunk (FTwoA yD zD) => pairA yD zD
-                                           | _ => bottom
-                                           end) in
-                                  let+ mD := popD' m (Some (Thunk (pairA pD mD'))) in
-                                  Tick.ret (mD, rD)
-                              | _ => bottom
-                              end in
-                            Tick.ret (xD, mD, rD)
-                        | _ => bottom
-                        end in
-                      Tick.ret (Thunk (FOneA xD), mD, rD)
-                  | None =>
-                      match r with
-                      | RZero =>
-                          let+ (xD, mD) :=
-                            match outD with
-                            | Some (Thunk (pairA xD _)) =>
-                                let+ mD := popD' m None in
-                                Tick.ret (xD, mD)
-                            | _ => bottom
-                            end in
-                          Tick.ret (Thunk (FOneA xD), mD, Thunk RZeroA)
-                      | ROne y =>
-                          let+ (xD, yD, mD) :=
-                            match outD with
-                            | Some (Thunk (pairA xD qD)) =>
-                                let yD :=
-                                  match qD with
-                                  | Thunk (DeepA (Thunk (FOneA yD)) _ _) => yD
-                                  | _ => bottom
-                                  end in
-                                let+ mD := popD' m None in
-                                Tick.ret (xD, yD, mD)
-                            | _ => bottom
-                            end in
-                          Tick.ret (Thunk (FOneA xD), mD, Thunk (ROneA yD))
-                      end
-                  end
-              | FTwo x y =>
-                  let '(xD, yD, mD, rD) :=
-                    match pD with
-                    | Thunk (pairA xD qD) =>
-                        let '(yD, mD, rD) :=
-                          match qD with
-                          | Thunk (DeepA fD mD rD) =>
-                              let yD :=
-                                match fD with
-                                | Thunk (FOneA yD) => yD
-                                | _ => bottom
-                                end in
-                              (yD, mD, rD)
-                          | _ => bottom
-                          end in
-                        (xD, yD, mD, rD)
+          let (xD, qD) :=
+            match outD with
+            | Some (Thunk (pairA xD qD)) => (xD, qD)
+            | _ => bottom
+            end in
+          match f with
+          | FOne x =>
+              let p := pop m in
+              let (pD, rD) :=
+                match p with
+                | Some (yz, m') =>
+                    match qD with
+                    | Thunk (DeepA fD mD' rD) =>
+                        let yzD :=
+                          (* XXX *)
+                          Thunk (match fD with
+                                 | Thunk (FTwoA yD zD) => pairA yD zD
+                                 | _ => bottom
+                                 end) in
+                        (Thunk (Some (Thunk (pairA yzD mD'))), rD)
                     | _ => bottom
-                    end in
-                  Tick.ret (Thunk (FTwoA xD yD), mD, rD)
-              end
-          | _ => bottom
+                    end
+                | None =>
+                    let rD :=
+                      match r with
+                      | RZero => Thunk RZeroA
+                      | ROne y =>
+                          let yD :=
+                            match qD with
+                            | Thunk (DeepA (Thunk (FOneA yD)) _ _) => yD
+                            | _ => bottom
+                            end in
+                          Thunk (ROneA yD)
+                      end in
+                    (Thunk None, rD)
+                end in
+              let+ mD := thunkD (popD' m) pD in
+              Tick.ret (Thunk (FOneA xD), mD, rD)
+          | FTwo x y =>
+              let '(yD, mD, rD) :=
+                match qD with
+                | Thunk (DeepA fD' mD rD) =>
+                    let yD :=
+                      match fD' with
+                      | Thunk (FOneA yD) => yD
+                      | _ => bottom
+                      end in
+                    (yD, mD, rD)
+                | _ => bottom
+                end in
+              Tick.ret (Thunk (FTwoA xD yD), mD, rD)
           end in
         Tick.ret (Thunk (DeepA fD mD rD))
     end.
@@ -1136,7 +1112,7 @@ Proof.
       split.
       * solve_approx.
       * lia.
-      (* pop m = None *)
+    (* pop m = None *)
     + destruct x1 as [ xD qD ].
       invert_clear H0 as [ HxQ HqD ]. invert_clear HqD
         as [ | qA ? HqA ].
@@ -1146,7 +1122,7 @@ Proof.
         split.
         -- repeat constructor; intuition.
         -- lia.
-      (* qD = Thunk ... *)
+      (* qD = Thunk _ *)
       * simpl. invert_clear HqA as [ | fD ? mD ? rD ? HfD HmD HrD ].
         simpl. invert_clear HfD as [ | fA ? HfA ].
         (* fD = Undefined *)
@@ -1204,6 +1180,7 @@ Proof.
         split.
         -- destruct H0. repeat constructor; intuition.
         -- lia.
+  (* f = FOne x, pop m = None, r = ROne y *)
   - simpl. intros ? ? ? ? -> ? ? ? ? ? ?. invert_clear 1.
     invert_clear H0.
     + intros ? ->. mgo_. apply optimistic_skip. mgo_.
@@ -1212,6 +1189,7 @@ Proof.
       * repeat constructor; auto.
       * lia.
     + destruct x1. invert_clear H0. invert_clear H1.
+      (* outD = Some (Thunk (_, Undefined)) *)
       * simpl. intros ? ->. mgo_. apply optimistic_thunk_go.
         destruct (popD' m None) eqn:HpopD'. simpl. mgo_.
         eapply optimistic_mon.
@@ -1266,6 +1244,7 @@ Proof.
               split.
               ** repeat constructor; intuition.
               ** lia.
+  (* f = FTwo x y *)
   - invert_clear 2. invert_clear H.
     * intros ? ->. mgo_.
       apply optimistic_thunk_go. mgo_.
@@ -1274,7 +1253,9 @@ Proof.
       split.
       ++ repeat constructor; intuition.
       ++ lia.
+    (* outD = Some (Thunk (pairA xD qD)) *)
     * destruct x1. invert_clear H. invert_clear H0.
+      (* qD = Undefined *)
       -- intros ? ->. mgo_.
          apply optimistic_thunk_go. mgo_.
          apply optimistic_thunk_go. mgo_.
@@ -1421,9 +1402,9 @@ Lemma pushD'_cost : forall (A B : Type) `{LessDefined B, Exact A B} (q : Queue A
     let (qD, _) := Tick.val inM in
     debt qD + cost <= 2 + debt outD.
 Proof.
-  intros A B LDA EAB q x. revert A q x B LDA EAB.
+  intros A B LDB EAB q x. revert A q x B LDB EAB.
   apply (push_ind (fun (A : Type) (q : Queue A) (x : A) (q' : Queue A) =>
-                     forall B LDA EAB outD,
+                     forall B LDB EAB outD,
                        outD `is_approx` q' ->
                        let inM := pushD' q x outD in
                        let cost := Tick.cost inM in
@@ -1504,6 +1485,94 @@ Corollary pushD_cost : forall (A : Type) `{LessDefined A} (q : Queue A) (x : A) 
 Proof.
   intros. apply pushD'_cost. auto.
 Qed.
+
+(* Compute popD (Deep (FOne 1) (Deep (FOne (2, 3)) Nil RZero) RZero) (Some Undefined). *)
+
+Lemma popD'_cost : forall (A B : Type) `{LessDefined B, Exact A B}
+                     (q : Queue A) (outD : option (T (prodA B (QueueA B)))),
+    outD `is_approx` pop q ->
+    let d := match outD with
+             | Some (Thunk (pairA _ qD)) => debt qD
+             | _ => 0
+             end in
+    let inM := popD' q outD in
+    let cost := Tick.cost inM in
+    let inD := Tick.val inM in
+    debt inD + cost <= 2 + d.
+Proof.
+  intros A B LDB EAB q. revert A q B LDB EAB.
+
+  induction q; intros B LDB EAB outD HoutD.
+  - simpl in *. lia.
+  - simpl in *. destruct f as [ x | x y ].
+    (* f = FOne x *)
+    + invert_clear HoutD as [ | pD ? HpD ].
+      (* outD = Some pD *)
+      destruct (pop q) as [ p | ] eqn:Hpop.
+      (* pop q = Some p *)
+      * destruct p as [ [ y z ] m ].
+        invert_clear HpD as [ | pA ? HpA ].
+        (* pD = Thunk (DeepA (Thunk (FOneA bottom)) bottom bottom) *)
+        -- simpl. lia.
+        -- destruct pA as [ xD qD ]. invert_clear HpA as [ HxD HqD ].
+           invert_clear HqD as [ | qA ? HqA ].
+           ++ simpl. lia.
+           ++ invert_clear HqA as [ | fD ? mD ? rD ? HfD HmD HrD ].
+              simpl. invert_clear HfD as [ | fA ? HfA ].
+              ** specialize (IHq _ _ _ (Some (Thunk (pairA (Thunk bottom) mD)))
+                               ltac:(repeat constructor; auto)).
+                 simpl in IHq.
+                 unfold debt, Debitable_T, debt. simpl.
+                 change (Debitable_T (Tick.val (popD' q (Some (Thunk (pairA (Thunk bottom) mD))))))
+                   with (debt (Tick.val (popD' q (Some (Thunk (pairA (Thunk bottom) mD)))))).
+                 change (Debitable_T mD) with (debt mD). destruct mD; simpl.
+                 destruct rD; try destruct x1; simpl.
+                 set (r1 := debt (Tick.val (popD' q (Some (Thunk (pairA (Thunk bottom) (Thunk x0))))))) in *.
+                 set (r2 := Tick.cost (popD' q (Some (Thunk (pairA (Thunk bottom) (Thunk x0)))))) in *.
+  (*                lia. *)
+
+  (* apply (pop_ind (fun A q u => *)
+  (*                   forall B LDA EAB outD, *)
+  (*                     outD `is_approx` u -> *)
+  (*                     let d := match outD with *)
+  (*                              | Some (Thunk (pairA _ qD)) => debt qD *)
+  (*                              | _ => 0 *)
+  (*                              end in *)
+  (*                     let inM := popD' q outD in *)
+  (*                     let cost := Tick.cost inM in *)
+  (*                     let inD := Tick.val inM in *)
+  (*                     debt inD + cost <= 2 + d)). *)
+  (* - invert_clear 1. simpl. lia. *)
+  (* - simpl. intros ? ? ? ? ? ? ? ->. invert_clear 2. invert_clear H0. *)
+  (*   + simpl. lia. *)
+  (*   + destruct x1. invert_clear H0. invert_clear H1; try solve [ simpl; lia ]. *)
+  (*     invert_clear H1. *)
+  (*     * simpl. *)
+  (*       specialize (H (prodA B B) _ _ (Some (Thunk (pairA (Thunk bottom) q1))) *)
+  (*                     ltac:(repeat constructor; eauto)). simpl in *. *)
+  (*       invert_clear H1. *)
+  (*       -- *)
+  (*     * invert_clear H1. *)
+  (*       specialize (H (prodA B B) _ _ (Some (Thunk (pairA (Thunk (pairA x1 y1)) q1))) *)
+  (*                     ltac:(repeat constructor; eauto)). simpl. *)
+  (*       simpl in *. unfold debt. simpl. unfold debt at 2. simpl. *)
+  (*       invert_clear H3. *)
+  (*       -- simpl. *)
+  (*          set (p := (Tick.val (popD' m (Some (Thunk (pairA (Thunk (pairA x1 y1)) q1)))))) in *. *)
+  (*          change (Debitable_T p) with (debt p). change (Debitable_T q1) with (debt q1). *)
+  (*          lia. *)
+  (*       -- simpl. invert_clear H3. *)
+  (*          ** simpl. *)
+  (*             set (p := (Tick.val (popD' m (Some (Thunk (pairA (Thunk (pairA x1 y1)) q1)))))) *)
+  (*               in *. *)
+  (*             change (Debitable_T p) with (debt p). change (Debitable_T q1) with (debt q1). *)
+  (*             lia. *)
+  (*          ** simpl. unfold debt, Debitable_T at 1. simpl *)
+  (*             set (p := (Tick.val (popD' m (Some (Thunk (pairA (Thunk (pairA x1 y1)) q1)))))) *)
+  (*               in *. *)
+  (*             change (Debitable_T p) with (debt p). change (Debitable_T q1) with (debt q1). *)
+
+
 
 From Coq Require Import List.
 Import ListNotations.
