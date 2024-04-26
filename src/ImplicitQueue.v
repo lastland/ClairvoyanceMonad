@@ -1388,10 +1388,7 @@ Definition size_RearA (A : Type) (rA : RearA A) : nat :=
     match qA with
     | NilA => 0
     | DeepA fD mD rD =>
-        let c := match fD, mD with
-                 | Undefined, Undefined => 0
-                 | _, _ => T_rect _ size_FrontA 1 fD - T_rect _ size_RearA 0 rD
-                 end
+        let c := T_rect _ size_FrontA 2 fD - T_rect _ size_RearA 0 rD
         in c + @Debitable_T _ (debt_QueueA _) mD
     end.
 
@@ -1458,9 +1455,11 @@ Proof.
               ** invert_clear H2. invert_clear H2.
            ++ discriminate.
         -- destruct mD', t; try destruct x2; try lia.
-        -- destruct t, mD'; try destruct x1; try lia.
-           ** invert_clear H2. invert_clear H2.
-           ** invert_clear H2. invert_clear H2.
+           ++ do 2 invert_clear H2.
+           ++ do 2 invert_clear H2. discriminate.
+        -- destruct mD', t; try destruct x1; try lia.
+           ++ destruct x2; try discriminate.
+           ++ destruct x2; try discriminate.
       * simpl. unfold debt. simpl.
         destruct fD, t; try destruct x1; try destruct x2; simpl.
         -- unfold debt at 1. simpl. change (Debitable_T mD') with (debt mD'). lia.
@@ -1469,11 +1468,9 @@ Proof.
         -- invert_clear H2. invert_clear H2.
         -- unfold debt at 1. simpl. change (Debitable_T mD') with (debt mD'). lia.
         -- simpl. change (Debitable_T mD') with (debt mD'). lia.
-        -- unfold debt at 1. simpl. change (Debitable_T mD') with (debt mD').
-           destruct mD'; lia.
+        -- simpl. change (Debitable_T mD') with (debt mD'). lia. 
         -- invert_clear H2. invert_clear H2.
-        -- unfold debt at 1. simpl. change (Debitable_T mD') with (debt mD').
-           destruct mD'; lia.
+        -- simpl. change (Debitable_T mD') with (debt mD'). lia.
 Qed.
 
 Corollary pushD_cost : forall (A : Type) `{LessDefined A} (q : Queue A) (x : A) (outD : QueueA A),
@@ -1497,11 +1494,12 @@ Qed.
 (*       * destruct p. simpl. unfold debt, Debitable_T, debt. simpl. lia. *)
 (*       * simpl.  *)
 
-Lemma popD'_cost : forall (A B : Type) `{LessDefined B, Exact A B}
+Lemma popD'_cost : forall (A B : Type)
+                     `{LessDefined B, Exact A B}
                      (q : Queue A) (outD : option (T (prodA B (QueueA B)))),
     outD `is_approx` pop q ->
     let d := match outD with
-             | Some (Thunk (pairA _ qD)) => debt qD
+             | Some (Thunk (pairA _ qD)) => debt qD 
              | _ => 0
              end in
     let inM := popD' q outD in
@@ -1531,19 +1529,16 @@ Proof.
               (* fD = Undefined *)
               ** specialize (IHq _ _ _ (Some (Thunk (pairA (Thunk bottom) mD)))
                                ltac:(repeat constructor; auto)).
-                 simpl in IHq.
-                 unfold debt, Debitable_T, debt. simpl.
+                 simpl in *.
+                 unfold debt, Debitable_T, debt.
+                 simpl.
                  change (Debitable_T (Tick.val (popD' q (Some (Thunk (pairA (Thunk bottom) mD))))))
                    with (debt (Tick.val (popD' q (Some (Thunk (pairA (Thunk bottom) mD)))))).
-                 change (Debitable_T mD) with (debt mD). destruct mD.
-                 (* mD = Thunk _ *)
-                 --- admit.
-                 (* mD = Undefined *)
-                 --- destruct rD.
-                     (* rD = Thunk _ *)
-                     +++ destruct x0; simpl; admit.
-                     (* rD = Undefined *)
-                     +++ simpl. admit.
+                 change (Debitable_T mD) with (debt mD).
+                 destruct rD; try destruct x0.
+                 --- simpl. destruct mD; simpl; lia.
+                 --- simpl. lia.
+                 --- simpl. lia.
               ** invert_clear HfA as [ | yD ? zD ? HyD HzD ].
                  specialize (IHq _ _ _ (Some (Thunk (pairA (Thunk (pairA yD zD)) mD)))
                                ltac:(repeat constructor; auto)).
