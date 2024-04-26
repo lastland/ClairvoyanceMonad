@@ -1,6 +1,8 @@
 From Coq Require Import Arith Psatz Relations RelationClasses.
 From Clairvoyance Require Import Core Approx Tick Prod Option FormalTranslation.
 
+From Hammer Require Import Tactics.
+
 Import Tick.Notations.
 Open Scope tick_scope.
 
@@ -1494,36 +1496,47 @@ Qed.
 (*       * destruct p. simpl. unfold debt, Debitable_T, debt. simpl. lia. *)
 (*       * simpl.  *)
 
+Lemma popD_None: forall A B (q : Queue A),
+    pop q = None ->
+    popD' q None = Tick.MkTick 1 (Thunk (NilA : QueueA B)).
+Proof.
+  induction q; simpl.
+  - hauto.
+  - destruct (pop q) eqn:Hpop.
+    + destruct f; simpl; discriminate.
+    + destruct f; simpl; discriminate.
+Qed.
+        
 Lemma popD'_cost : forall (A B : Type)
                      `{LessDefined B, Exact A B}
                      (q : Queue A) (outD : option (T (prodA B (QueueA B)))),
     outD `is_approx` pop q ->
     let d := match outD with
              | Some (Thunk (pairA _ qD)) => debt qD 
-             | _ => 0
+             | _ => 1
              end in
     let inM := popD' q outD in
     let cost := Tick.cost inM in
     let inD := Tick.val inM in
-    debt inD + cost <= 2 + d.
+    debt inD + cost <= 3 + d.
 Proof.
   intros A B LDB EAB q. revert A q B LDB EAB.
 
   induction q; intros B LDB EAB outD HoutD.
-  - simpl in *. lia.
+  - sfirstorder.
   - simpl in *. destruct f as [ x | x y ].
-    (* f = FOne x *)
-    + invert_clear HoutD as [ | pD ? HpD ].
+    + (* f = FOne x *)
+      invert_clear HoutD as [ | pD ? HpD ].
       (* outD = Some pD *)
       destruct (pop q) as [ p | ] eqn:Hpop.
-      (* pop q = Some p *)
-      * destruct p as [ [ y z ] m ].
+      * (* pop q = Some p *)
+        destruct p as [ [ y z ] m ].
         invert_clear HpD as [ | pA ? HpA ].
-        (* pD = Thunk (DeepA (Thunk (FOneA bottom)) bottom bottom) *)
-        -- simpl. lia.
+        -- (* pD = Thunk (DeepA (Thunk (FOneA bottom)) bottom bottom) *)
+            sauto.
         -- destruct pA as [ xD qD ]. invert_clear HpA as [ HxD HqD ].
            invert_clear HqD as [ | qA ? HqA ].
-           ++ simpl. lia.
+           ++ sauto.
            ++ invert_clear HqA as [ | fD ? mD ? rD ? HfD HmD HrD ].
               simpl. invert_clear HfD as [ | fA ? HfA ].
               (* fD = Undefined *)
@@ -1535,11 +1548,9 @@ Proof.
                  change (Debitable_T (Tick.val (popD' q (Some (Thunk (pairA (Thunk bottom) mD))))))
                    with (debt (Tick.val (popD' q (Some (Thunk (pairA (Thunk bottom) mD)))))).
                  change (Debitable_T mD) with (debt mD).
-                 destruct rD; try destruct x0.
-                 --- simpl. destruct mD; simpl; lia.
-                 --- simpl. lia.
-                 --- simpl. lia.
-              ** invert_clear HfA as [ | yD ? zD ? HyD HzD ].
+                 sauto.
+              ** (* fD = Thunk fA *)
+                 invert_clear HfA as [ | yD ? zD ? HyD HzD ].
                  specialize (IHq _ _ _ (Some (Thunk (pairA (Thunk (pairA yD zD)) mD)))
                                ltac:(repeat constructor; auto)).
                  simpl in *.
@@ -1548,11 +1559,29 @@ Proof.
                  change (Debitable_T (Tick.val (popD' q (Some (Thunk (pairA (Thunk (pairA yD zD)) mD))))))
                    with (debt (Tick.val (popD' q (Some (Thunk (pairA (Thunk (pairA yD zD)) mD)))))).
                  change (Debitable_T mD) with (debt mD).
-                 destruct rD; try destruct x0.
-                 --- simpl. lia.
-                 --- simpl. lia.
-                 --- simpl. lia.
-Admitted.
+                 sauto.
+      * (* pop q = None *)
+        destruct r as [| y].
+        -- (* r = RZero *)
+           simpl. invert_clear HpD as [| pA ? HpA].
+           ++ rewrite !popD_None; [| assumption]. simpl. lia.
+           ++ destruct pA. invert_clear HpA as [Hfst Hsnd]. simpl.
+              invert_clear Hsnd; (rewrite !popD_None; [| assumption]); simpl; lia.
+        -- (* r = ROne y *)
+          simpl. invert_clear HpD as [| pA ? HpA].
+          ++ rewrite !popD_None; [| assumption]. simpl. lia.
+          ++ destruct pA. invert_clear HpA as [Hfst Hsnd]. simpl.
+              invert_clear Hsnd; (rewrite !popD_None; [| assumption]); simpl; lia.
+    + (* f = FTwo x y *)
+      invert_clear HoutD as [| ? ? H]. invert_clear H as [ | xD].
+      * (* x0 = Undefined *) sauto.
+      * destruct xD. invert_clear H as [Hfst Hsnd].
+        invert_clear Hsnd.
+        -- simpl; lia.
+        -- invert_clear H. invert_clear H.
+           ++ simpl. unfold debt, Debitable_T, debt, Debitable_QueueA. sfirstorder.
+           ++ simpl. unfold debt, Debitable_T, debt, Debitable_QueueA. sauto.
+Qed.
 
   (*                lia. *)
 
