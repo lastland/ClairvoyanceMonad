@@ -1647,7 +1647,7 @@ Inductive op (A : Type) : Type :=
                  end.
 
 #[global] Instance Budget_Queue (A : Type) : Budget (op A) (Queue A) :=
-  fun _ _ => 2.
+  fun _ _ => 3.
 
 #[global] Instance Demand_Queue (A : Type) : Demand (op A) (Queue A) (T (QueueA A)) :=
   fun op args argsA =>
@@ -1682,19 +1682,6 @@ Proof.
 Qed.
 #[global] Hint Resolve sumof_potential_bottom_of : core.
 
-Lemma potential_pushD_bottom_of (A : Type) (q : Queue A) (x : A) :
-  let inD := pushD q x (bottom_of (exact (push q x))) in
-  let (qD, _) := Tick.val inD in
-  Tick.cost inD = 1 /\ Potential_Queue qD = 0.
-Proof.
-  refine (match q with
-          | Nil => _
-          | Deep f m RZero => _
-          | Deep f m (ROne y) => _
-          end); simpl; auto.
-Qed.
-#[global] Hint Resolve potential_pushD_bottom_of : core.
-
 Theorem physicist's_argumentD :
   forall (A : Type) `{LDA : LessDefined A, PreOrder A LDA, LBA : Lub A, @LubLaw A LBA LDA},
     @Physicist'sArgumentD
@@ -1713,10 +1700,9 @@ Proof.
                             try (rewrite Hpb); lia ].
   - invert_clear 1. invert_clear 1. simpl. invert_clear H; try invert_clear H; simpl; lia.
   - invert_clear 1 as [ | ? ? ? ? HoutD _ ]. invert_clear HoutD as [ | ? ? HoutD ].
-    + invert_clear 1.
-      pose proof (potential_pushD_bottom_of q x). cbn in H.
-      destruct (Tick.val (pushD q x (bottom_of (exact (push q x))))) eqn:HpushD.
-      simpl. lia.
+    + unfold Demand_Queue. simpl. unfold bottom_of, BottomOf.
+      pose proof (push_is_Deep q x) as Hpush. destruct Hpush as [? [? [? Hpush] ] ].
+      rewrite Hpush. simpl. destruct q; fcrush.
     + pose proof (pushD_cost _ _ HoutD) as Hcost. cbn in Hcost.
       invert_clear 1.
       destruct (Tick.val (pushD q x x0)) as [ qD xD ]. simpl.
