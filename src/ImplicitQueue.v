@@ -29,6 +29,12 @@ Ltac teardown_eqns := repeat (simpl; match goal with
                                          let H := fresh "H" in destruct x eqn:H
                                      end).
 
+Ltac keep_mgo_ :=
+  mgo_; repeat (apply optimistic_thunk_go; mgo_).
+
+Ltac mgo_brute_force :=
+  solve [mgo_; repeat ((apply optimistic_skip + apply optimistic_thunk_go); mgo_)].
+
 (* I have had some problems with inversion_clear. This does the same thing, but
    hopefully better. Note that it might not work as expected if the inverted
    hypothesis "contains" equalities. *)
@@ -726,12 +732,13 @@ Proof.
             end); try solve [ repeat constructor ].
     intro Happrox.
     invert_clear Happrox as [ | ? ? ? ? ? ? HfD HmD' HrD ].
-    invert_clear HmD' as [ | mA' ? HmA' ]. 1: repeat constructor; auto.
-    specialize (H _ _ _ _ HmA').
-    simpl. destruct (Tick.val (pushD' m (y, x) mA')) as [ mD pD ].
-    invert_clear H as [ HmD HpD ].
-    invert_clear HpD as [ | [ b1D b2D ] ? Hb1b2D ]. 1: repeat constructor; auto.
-    invert_clear Hb1b2D. repeat constructor; auto.
+    invert_clear HmD' as [ | mA' ? HmA' ].
+    + solve_approx.
+    + specialize (H _ _ _ _ HmA').
+      simpl. destruct (Tick.val (pushD' m (y, x) mA')) as [ mD pD ].
+      invert_clear H as [ HmD HpD ].
+      invert_clear HpD as [ | [ b1D b2D ] ? Hb1b2D ];
+        repeat (invert_approx); solve_approx.
 Qed.
 
 Corollary pushD_approx (A : Type) `{LessDefined A}
@@ -740,6 +747,9 @@ Corollary pushD_approx (A : Type) `{LessDefined A}
 Proof.
   apply pushD'_approx.
 Qed.
+
+#[local] Existing Instance Reflexive_LessDefined_T.
+#[local] Existing Instance Reflexive_LessDefined_prodA.
 
 Lemma pushD'_spec (A B : Type) :
   forall `{LDB : LessDefined B, !Reflexive LDB, Exact A B}
@@ -763,21 +773,16 @@ Proof.
                                   outD `less_defined` out /\
                                     cost <= dcost]])).
   - intros A x B LDB HReflexive EAB outD Happrox qD xD. revert Happrox.
-    assert (@Reflexive (T A) less_defined) by typeclasses eauto.
     refine (match outD with
             | NilA => _
             | DeepA fD _ _ => _
             end); mgo'.
-    do 3 (apply optimistic_thunk_go; mgo_).
-    revert H4. refine (match fD with
+    keep_mgo_.
+    revert H3. refine (match fD with
                        | Thunk (FOneA xD) => _
                        | _ => _
                        end); mgo'.
   - intros A x f m B LDB HReflexive EAB outD Happrox qD xD. revert Happrox.
-    assert (@Reflexive (T (FrontA B)) less_defined)
-      by apply Reflexive_LessDefined_T.
-    assert (@Reflexive (T (QueueA (prodA B B))) less_defined)
-      by apply Reflexive_LessDefined_T.
     simpl.
     refine (match outD with
             | DeepA fD mD _ => _
@@ -786,34 +791,27 @@ Proof.
       apply optimistic_thunk_go; destruct t; mgo'; solve_approx.
   - intros A x f m y IH B LDB HReflexive EAB outD Happrox qD xD.
     revert Happrox.
-    assert (@Reflexive (T (FrontA B)) less_defined)
-      by apply Reflexive_LessDefined_T.
     refine (match outD with
             | DeepA fD mD rD => _
             | _ => _
             end); try solve [ invert_clear 1 ].
     invert_clear 1 as [ | ? ? ? ? ? ? HfD HmD HrD ].
     invert_clear HmD as [ | mA ? HmA ].
-    + invert_clear 1. mgo_.
-      apply optimistic_skip. mgo_.
-      apply optimistic_skip. mgo_.
-      apply optimistic_thunk_go. mgo_.
+    + invert_clear 1. mgo_brute_force.
     + specialize (IH _ _ _ _ _ HmA).
       revert IH. simpl. destruct (Tick.val (pushD' m (y, x) mA)) as [ qD' xD' ].
       intro IH. specialize (IH _ _ eq_refl).
       destruct xD' as [ [ b1D b2D ] | ].
-      * invert_clear 1.
+      * invert_clear 1. 
         mgo_. apply optimistic_thunk_go.
         mgo_. apply optimistic_thunk_go.
-        eapply optimistic_mon.
-        -- apply IH.
-        -- mgo_. apply optimistic_thunk_go. mgo_. fcrush.
+        eapply optimistic_mon; [eassumption |].
+        keep_mgo_. tauto.
       * invert_clear 1.
         mgo_. apply optimistic_skip.
         mgo_. apply optimistic_thunk_go.
-        eapply optimistic_mon.
-        -- apply IH.
-        -- mgo_. apply optimistic_thunk_go. mgo_. fcrush. 
+        eapply optimistic_mon; [eassumption |].
+        keep_mgo_. tauto.
 Qed.
 
 Corollary pushD_spec (A : Type) :
@@ -1036,24 +1034,20 @@ Lemma popD'_approx : forall (A B : Type) `{LDB : LessDefined B, Exact A B}
     outD `is_approx` pop q -> Tick.val (popD' q outD) `is_approx` q.
 Proof.
   Ltac finish H :=
-    repeat constructor;
-    try solve [ auto ];
-    apply H;
-    repeat constructor;
-    auto.
+    solve_approx; apply H; solve_approx.
   intros ? ? LDB EAB ? ?. revert A q B LDB EAB outD.
   apply (pop_ind (fun A q u =>
                     forall B LDB EAB outD,
                       outD `less_defined` exact u ->
                       Tick.val (popD' q outD) `less_defined` exact q)); intros.
-  - repeat constructor.
+  - solve_approx.
   - simpl. rewrite H in *. invert_clear H1. invert_clear H1.
-    + finish H0.
+    + sauto.
     + destruct x1. invert_clear H1. invert_clear H2.
-      * finish H0.
+      * sauto.
       * invert_clear H2. invert_clear H2.
-        -- finish H0.
-        -- simpl. invert_clear H2. finish H0.
+        -- cbn. finish H0.
+        -- simpl. finish H0. fcrush.
   - simpl. rewrite H in *. invert_clear H1. invert_clear H1.
     + finish H0.
     + destruct x1. invert_clear H1. finish H0.
@@ -1080,12 +1074,6 @@ Proof.
   intros. apply popD'_approx. auto.
 Qed.
 
-Ltac keep_mgo_ :=
-  mgo_; repeat (apply optimistic_thunk_go; mgo_).
-
-Ltac mgo_brute_force :=
-  solve [mgo_; repeat ((apply optimistic_skip + apply optimistic_thunk_go); mgo_)].
-
 Lemma popD'_spec :
   forall (A B : Type) `{LDB : LessDefined B, !Reflexive LDB, Exact A B}
     (q : Queue A) (outD : option (T (prodA B (QueueA B)))),
@@ -1094,15 +1082,6 @@ Lemma popD'_spec :
     let dcost := Tick.cost (popD' q outD) in
     popA qD [[ fun out cost => outD `less_defined` out /\ cost <= dcost ]].
 Proof.
-  assert (forall A `{LDA : LessDefined A, !Reflexive LDA}, Reflexive (less_defined (a := T A)))
-    as HReflexive_T
-      by (intros; apply Reflexive_LessDefined_T).
-  assert (forall A `{LDA : LessDefined A, !Reflexive LDA}, Reflexive (less_defined (a := prodA A A)))
-    as HReflexive_prodA
-      by (intros; apply Reflexive_LessDefined_prodA).
-  assert (forall A `{LDA : LessDefined A, !Reflexive LDA}, Reflexive (less_defined (a := option A)))
-    as HReflexive_option
-      by (intros; apply Relations.Reflexive_option_rel; auto).
   intros ? ? LDB RLDB EAB ? ?. revert A q B LDB RLDB EAB outD.
   apply (pop_ind (fun A q u =>
                     forall B LDB RLDB EAB outD,
@@ -1127,7 +1106,7 @@ Proof.
            apply optimistic_thunk_go. mgo_.
            eapply optimistic_mon.
            ++ eapply H; [ | | reflexivity ].
-              all: sauto.
+              all: fcrush.
            ++ intros. destruct H0. invert_clear H0 as [ | ? yzm'D Hyzm'D ].
               invert_clear Hyzm'D as [ | ? yzm'A Hyzm'A ].
               destruct yzm'A as [ yzD m'D ].
@@ -1152,7 +1131,7 @@ Proof.
       mgo_. apply optimistic_thunk_go.
       mgo_. eapply optimistic_mon.
       * eapply H; [ | | | reflexivity ].
-        all: sauto.
+        all: fcrush.
       * simpl. destruct 1. repeat invert_approx.
         mgo_brute_force.
   (* f = FOne x, pop m = None, r = ROne y *)
@@ -1307,49 +1286,18 @@ Proof.
                        let cost := Tick.cost inM in
                        let (qD, _) := Tick.val inM in
                        debt qD + cost <= 2 + debt outD)).
-  - intros until outD. refine (match outD with
-                               | DeepA (Thunk (FOneA xD)) _ _ => _
-                               | _ => _
-                               end); repeat (unfold debt; simpl); lia.
-  - intros until outD. refine (match outD with
-                               | DeepA fD mD (Thunk (ROneA xD)) => _
-                               | _ => _
-                               end); repeat (unfold debt; simpl); teardown; simpl; lia.
+  - fcrush unfold:debt.
+  - fcrush unfold:debt.
   - intros until outD. refine (match outD with
                                | DeepA fD mD _ => _
                                | _ => _
                                end); invert_clear 1.
     invert_clear H1.
-    + repeat (unfold debt, T_rect, size_FrontA, size_RearA; teardown; simpl); lia.
+    + sauto unfold:debt.
     + specialize (H _ _ _ _ H1). simpl in *.
       destruct (Tick.val (pushD' m (y, x) x0))
         as [ mD' [ [ yD xD ] | ] ]
-             eqn:HpushD.
-      * unfold debt. simpl. unfold T_rect, size_FrontA, size_RearA.
-        teardown_eqns;
-          unfold debt; simpl;
-          change (Debitable_T mD') with (debt mD');
-          change (Debitable_QueueA x0) with (debt x0); try lia;
-          try solve [
-              match goal with
-              | H : context [ match ?a with _ => _ end ] |- _ => destruct a
-              end; teardown;
-              repeat (simpl in *; match goal with
-                                  | H : ?x `less_defined` ?y |- _ =>
-                                      (head_is_constructor x + head_is_constructor y); invert_clear H
-                                  end)
-            ]; teardown; try solve [sauto].
-      * simpl. unfold debt. simpl.
-        destruct fD, t; try destruct x1; try destruct x2; simpl.
-        -- unfold debt at 1. simpl. change (Debitable_T mD') with (debt mD'). lia.
-        -- invert_clear H2. invert_clear H2.
-        -- change (Debitable_T mD') with (debt mD'). lia.
-        -- invert_clear H2. invert_clear H2.
-        -- unfold debt at 1. simpl. change (Debitable_T mD') with (debt mD'). lia.
-        -- simpl. change (Debitable_T mD') with (debt mD'). lia.
-        -- simpl. change (Debitable_T mD') with (debt mD'). lia. 
-        -- invert_clear H2. invert_clear H2.
-        -- simpl. change (Debitable_T mD') with (debt mD'). lia.
+             eqn:HpushD; sauto unfold:*.
 Qed.
 
 Corollary pushD_cost : forall (A : Type) `{LessDefined A} (q : Queue A) (x : A) (outD : QueueA A),
@@ -1358,7 +1306,7 @@ Corollary pushD_cost : forall (A : Type) `{LessDefined A} (q : Queue A) (x : A) 
     let cost := Tick.cost inM in
     let (qD, _) := Tick.val inM in
     debt qD + cost <= 2 + debt outD.
-Proof.
+Proof. 
   intros. apply pushD'_cost. auto.
 Qed.
 
@@ -1412,46 +1360,22 @@ Proof.
               simpl. invert_clear HfD as [ | fA ? HfA ].
               (* fD = Undefined *)
               ** specialize (IHq _ _ _ (Some (Thunk (pairA (Thunk bottom) mD)))
-                               ltac:(repeat constructor; auto)).
-                 simpl in *.
-                 unfold debt, Debitable_T, debt.
-                 simpl.
-                 change (Debitable_T (Tick.val (popD' q (Some (Thunk (pairA (Thunk bottom) mD))))))
-                   with (debt (Tick.val (popD' q (Some (Thunk (pairA (Thunk bottom) mD)))))).
-                 change (Debitable_T mD) with (debt mD).
-                 sauto.
+                               ltac:(solve_approx)).
+                 sauto unfold:debt. 
               ** (* fD = Thunk fA *)
                  invert_clear HfA as [ | yD ? zD ? HyD HzD ].
                  specialize (IHq _ _ _ (Some (Thunk (pairA (Thunk (pairA yD zD)) mD)))
-                               ltac:(repeat constructor; auto)).
-                 simpl in *.
-                 unfold debt, Debitable_T, debt.
-                 simpl.
-                 change (Debitable_T (Tick.val (popD' q (Some (Thunk (pairA (Thunk (pairA yD zD)) mD))))))
-                   with (debt (Tick.val (popD' q (Some (Thunk (pairA (Thunk (pairA yD zD)) mD)))))).
-                 change (Debitable_T mD) with (debt mD).
-                 sauto.
+                               ltac:(solve_approx)).
+                 sauto unfold:debt. 
       * (* pop q = None *)
-        destruct r as [| y].
-        -- (* r = RZero *)
-           simpl. invert_clear HpD as [| pA ? HpA].
-           ++ rewrite !popD_None; [| assumption]. simpl. lia.
-           ++ destruct pA. invert_clear HpA as [Hfst Hsnd]. simpl.
-              invert_clear Hsnd; (rewrite !popD_None; [| assumption]); simpl; lia.
-        -- (* r = ROne y *)
-          simpl. invert_clear HpD as [| pA ? HpA].
-          ++ rewrite !popD_None; [| assumption]. simpl. lia.
-          ++ destruct pA. invert_clear HpA as [Hfst Hsnd]. simpl.
-              invert_clear Hsnd; (rewrite !popD_None; [| assumption]); simpl; lia.
+        destruct r as [| y]; sauto use:popD_None. 
     + (* f = FTwo x y *)
       invert_clear HoutD as [| ? ? H]. invert_clear H as [ | xD].
       * (* x0 = Undefined *) sauto.
       * destruct xD. invert_clear H as [Hfst Hsnd].
         invert_clear Hsnd.
         -- simpl; lia.
-        -- invert_clear H. invert_clear H.
-           ++ simpl. unfold debt, Debitable_T, debt, Debitable_QueueA. sfirstorder.
-           ++ simpl. unfold debt, Debitable_T, debt, Debitable_QueueA. sauto.
+        -- invert_clear H. invert_clear H; cbn; sauto.
 Qed.
 
 From Coq Require Import List.
