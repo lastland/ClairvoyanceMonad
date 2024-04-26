@@ -1507,7 +1507,7 @@ Lemma popD'_cost : forall (A B : Type)
     outD `is_approx` pop q ->
     let d := match outD with
              | Some (Thunk (pairA _ qD)) => debt qD 
-             | _ => 1
+             | _ => 0
              end in
     let inM := popD' q outD in
     let cost := Tick.cost inM in
