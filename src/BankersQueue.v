@@ -492,18 +492,15 @@ Proof.
       { eapply appendD_spec'; try eassumption.
         - rewrite ED. reflexivity.  - reflexivity.  - constructor; assumption. }
       cbn; intros * []. mgo_.
-      split.
-      * constructor; cbn; try assumption. rewrite Ef; auto.
-      * lia.
+      rewrite Ef; auto.
     + apply optimistic_skip. mgo_. inv Hout; cbn in *. destruct (frontA _) eqn:Ef; inv ld_front0; cbn in ED.
       * apply optimistic_thunk_go.
         relax; [ eapply appendD_spec'; eassumption + (try rewrite ED; reflexivity) | ].
         cbn; intros * []; mgo_.
-        split; [ constructor; cbn; try assumption | lia].
         rewrite Ef; auto.
-      * apply optimistic_skip. mgo_. split; [constructor; cbn; try assumption | lia ].
+      * apply optimistic_skip. mgo_. 
         rewrite Ef; reflexivity.
-  - mgo_. inv HQ. split; [ constructor; cbn; apply Hout + reflexivity | reflexivity ].
+  - inv HQ. invert_approx. mgo_. 
 Qed.
 
 Lemma mkQueueD_spec' {a} nf f nb b (outD : QueueA a)
@@ -560,14 +557,12 @@ Proof.
     destruct thunkD as [? [] ] eqn:ED. cbn. mgo_.
     inversion Hsnd; subst; cbn in *.
     + apply optimistic_skip. mgo_; cbn [thunkD bottom Bottom_T].
-      split; [ reflexivity | ]. inversion ED; subst. reflexivity.
     + apply optimistic_thunk_go; cbn.
       relax.
       { eapply mkQueueD_spec.
         - eassumption.
         - rewrite ED; reflexivity. }
       cbn; intros * []. mgo_.
-      split; [ solve_approx | lia ].
 Qed.
 
 (** * Lazy Physicist's method *)
@@ -1041,8 +1036,8 @@ Proof.
     { inversion ld_. mforward idtac. rewrite (pop_popD Ep) in COST.
       change (Exact_Queue q) with (exact q). cbn in COST |- *. lia. }
   - apply lub_inv in ld_q; [ | apply cobounded_demand_tree ].
-    mgo'. relax. { apply IHt1; [apply wf_q | apply ld_q]. }
-    cbn; intros; mgo'. relax. { apply IHt2; [apply wf_q | apply ld_q]. }
+    mgo'. relax. { apply IHt1; eassumption. }
+    cbn; intros; mgo'. relax. { apply IHt2; eassumption. } 
     cbn; intros; mgo'. rewrite lub_debt by apply cobounded_demand_tree. lia.
   - mgo'.
 Qed.

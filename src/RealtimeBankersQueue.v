@@ -192,25 +192,25 @@ Proof.
       { eapply rotateD_spec; [ | symmetry; apply Edcost'].
         apply less_defined_Thunk_inv. rewrite <- Elub.
         apply lub_least_upper_bound; apply HoutD. }
+      assert (Hcobounded : cobounded (frontA outD) (scheduleA outD)).
+      { exists (exact (rotate f b [])); split; apply HoutD. }
       cbn; intros ? ? [ ]; mgo_.
-      split; [ | lia].
+      all: etransitivity; [ | apply LessDefined_Thunk; eauto ].
+      all: try rewrite <- Elub.
+      * apply lub_upper_bound_l; assumption.
+      * invert_approx. 
+        etransitivity; [ eassumption | ].
+        solve_approx.
+      * apply lub_upper_bound_r; assumption.
+    + apply optimistic_skip.
       assert (Hcobounded : cobounded (frontA outD) (scheduleA outD)).
       { exists (exact (rotate f b [])); split; apply HoutD. }
-      constructor; cbn; [ | apply HoutD | ].
-      all: etransitivity; [ | apply LessDefined_Thunk; eassumption ].
-      all: rewrite <- Elub.
-      { apply lub_upper_bound_l; assumption. }
-      { apply lub_upper_bound_r; assumption. }
-    + apply optimistic_skip. mgo_. split; [ | lia ].
-      assert (Hcobounded : cobounded (frontA outD) (scheduleA outD)).
-      { exists (exact (rotate f b [])); split; apply HoutD. }
-      constructor; cbn.
-      { rewrite <- Elub; apply lub_upper_bound_l; assumption. }
-      { apply HoutD. }
-      { rewrite <- Elub; apply lub_upper_bound_r; assumption. }
+      mgo_.
+      * rewrite <- Elub; apply lub_upper_bound_l; assumption.
+      * apply HoutD.
+      * rewrite <- Elub; apply lub_upper_bound_r; assumption.
   - unfold Tick.bind in Hdcost; cbn in Hdcost.
     injclear Hdcost; intros -> -> -> ->. mgo_.
-    split; reflexivity.
 Qed.
 
 Lemma pushD_spec {a} (q : Queue a) (x : a) (outD : QueueA a)

@@ -16,6 +16,8 @@ Set Maximal Implicit Insertion.
 
 (* Tear a goal down by destructing on every case that the goal matches on. *)
 Ltac teardown := repeat (simpl; match goal with
+                                | [_ : context [match ?x with _ => _ end] |- _ ] => destruct x
+                                | [_ : context [if ?x then _ else _] |- _ ] => destruct x
                                 | |- context [match ?x with _ => _ end] => destruct x
                                 | |- context [if ?x then _ else _] => destruct x
                                 end).
@@ -805,17 +807,13 @@ Proof.
         mgo_. apply optimistic_thunk_go.
         eapply optimistic_mon.
         -- apply IH.
-        -- mgo_. apply optimistic_thunk_go. mgo_. split.
-           ++ solve_approx. intuition.
-           ++ lia.
+        -- mgo_. apply optimistic_thunk_go. mgo_. fcrush.
       * invert_clear 1.
         mgo_. apply optimistic_skip.
         mgo_. apply optimistic_thunk_go.
         eapply optimistic_mon.
         -- apply IH.
-        -- mgo_. apply optimistic_thunk_go. mgo_. split.
-           ++ solve_approx. intuition.
-           ++ lia.
+        -- mgo_. apply optimistic_thunk_go. mgo_. fcrush. 
 Qed.
 
 Corollary pushD_spec (A : Type) :
@@ -826,7 +824,7 @@ Corollary pushD_spec (A : Type) :
              let dcost := Tick.cost (pushD' q x outD) in
              pushA qD xD [[ fun out cost =>
                               outD `less_defined` out /\ cost <= dcost ]].
-Proof.
+Proof. 
   intros. apply pushD'_spec; auto.
 Qed.
 
@@ -1029,9 +1027,9 @@ Definition popD (A : Type) (q : Queue A) (outD : option (T (prodA A (QueueA A)))
   Tick (T (QueueA A)) :=
   popD' q outD.
 
-Compute popD
-  (Deep (FOne 1) (Deep (FOne (2, 3)) Nil RZero) RZero)
-  (Some Undefined).
+(* Compute popD
+   (Deep (FOne 1) (Deep (FOne (2, 3)) Nil RZero) RZero)
+   (Some Undefined). *)
 
 Lemma popD'_approx : forall (A B : Type) `{LDB : LessDefined B, Exact A B}
                        (q : Queue A) (outD : option (T (prodA B (QueueA B)))),
@@ -1082,6 +1080,12 @@ Proof.
   intros. apply popD'_approx. auto.
 Qed.
 
+Ltac keep_mgo_ :=
+  mgo_; repeat (apply optimistic_thunk_go; mgo_).
+
+Ltac mgo_brute_force :=
+  solve [mgo_; repeat ((apply optimistic_skip + apply optimistic_thunk_go); mgo_)].
+
 Lemma popD'_spec :
   forall (A B : Type) `{LDB : LessDefined B, !Reflexive LDB, Exact A B}
     (q : Queue A) (outD : option (T (prodA B (QueueA B)))),
@@ -1109,21 +1113,12 @@ Proof.
   - intros. subst. mgo_.
   - simpl. intros A m r x y z m' ->.
     invert_clear 3. invert_clear H0.
-    + intros. subst. mgo_. apply optimistic_skip. mgo_.
-      apply optimistic_thunk_go. mgo_.
-      split.
-      * solve_approx.
-      * lia.
-    (* pop m = None *)
-    + destruct x1 as [ xD qD ].
+    + intros. subst. mgo_brute_force.
+    + (* pop m = None *)
+      destruct x1 as [ xD qD ].
       invert_clear H0 as [ HxQ HqD ]. invert_clear HqD
         as [ | qA ? HqA ].
-      * simpl. intros. subst. mgo_.
-        apply optimistic_skip. mgo_.
-        apply optimistic_thunk_go. mgo_.
-        split.
-        -- repeat constructor; intuition.
-        -- lia.
+      * simpl. intros. subst. mgo_brute_force. 
       (* qD = Thunk _ *)
       * simpl. invert_clear HqA as [ | fD ? mD ? rD ? HfD HmD HrD ].
         simpl. invert_clear HfD as [ | fA ? HfA ].
@@ -1131,155 +1126,58 @@ Proof.
         -- intros. subst. mgo_.
            apply optimistic_thunk_go. mgo_.
            eapply optimistic_mon.
-           ++ eapply H.
-              ** intuition.
-              ** shelve.
-              ** reflexivity. Unshelve. repeat constructor; auto.
+           ++ eapply H; [ | | reflexivity ].
+              all: sauto.
            ++ intros. destruct H0. invert_clear H0 as [ | ? yzm'D Hyzm'D ].
               invert_clear Hyzm'D as [ | ? yzm'A Hyzm'A ].
               destruct yzm'A as [ yzD m'D ].
               invert_clear Hyzm'A as [ ? HmD' ].
               mgo_. destruct yzD.
-              ** mgo_. destruct x0. mgo_.
-                 apply optimistic_skip. mgo_.
-                 apply optimistic_thunk_go. mgo_.
-                 split.
-                 --- repeat constructor; intuition.
-                 --- lia.
+              ** destruct x0. mgo_brute_force.
               (* yzD = Undefined *)
               ** invert_clear H0.
         -- invert_clear HfA. intros. subst. mgo_.
            apply optimistic_thunk_go. mgo_.
            eapply optimistic_mon.
-           ++ eapply H.
-              ** intuition.
-              ** shelve.
-              ** reflexivity. Unshelve. repeat constructor; auto.
+           ++ eapply H; [ | | reflexivity ].
+              all: fcrush.
            ++ intros. destruct H2. invert_clear H2.
               mgo_. invert_clear H2. mgo_.
               destruct y2. destruct H2. invert_clear H2.
-              destruct y0. mgo_.
-              apply optimistic_thunk_go. mgo_.
-              apply optimistic_thunk_go. mgo_.
-              split.
-              ** repeat constructor; intuition.
-              ** lia.
+              destruct y0. invert_approx.
+              keep_mgo_.
   - simpl. intros ? ? ? -> ? ? ? ? ? ?. invert_clear 1. invert_clear H0.
-    + intros ? ->. mgo_. apply optimistic_skip. mgo_.
-      apply optimistic_thunk_go. mgo_.
-      split.
-      * repeat constructor.
-      * lia.
-    + destruct x1. simpl. intros ? ->. mgo_. apply optimistic_thunk_go.
+    + intros ? ->. mgo_brute_force.
+    + destruct x1. simpl. intros ? ->. 
+      mgo_. apply optimistic_thunk_go.
       mgo_. eapply optimistic_mon.
-      * eapply H.
-        -- intuition.
-        -- intuition.
-        -- shelve.
-        -- reflexivity. Unshelve. intuition.
-      * simpl. destruct 1. invert_clear H1.
-        mgo_. apply optimistic_thunk_go. mgo_.
-        split.
-        -- destruct H0. repeat constructor; intuition.
-        -- lia.
+      * eapply H; [ | | | reflexivity ].
+        all: sauto.
+      * simpl. destruct 1. repeat invert_approx.
+        mgo_brute_force.
   (* f = FOne x, pop m = None, r = ROne y *)
   - simpl. intros ? ? ? ? -> ? ? ? ? ? ?. invert_clear 1.
     invert_clear H0.
-    + intros ? ->. mgo_. apply optimistic_skip. mgo_.
-      apply optimistic_thunk_go. mgo_.
-      split.
-      * repeat constructor; auto.
-      * lia.
-    + destruct x1. invert_clear H0. invert_clear H1.
-      (* outD = Some (Thunk (_, Undefined)) *)
-      * simpl. intros ? ->. mgo_. apply optimistic_thunk_go.
-        destruct (popD' m None) eqn:HpopD'. simpl. mgo_.
-        eapply optimistic_mon.
-        -- eapply H.
-           ++ intuition.
-           ++ intuition.
-           ++ shelve.
-           ++ rewrite HpopD'. reflexivity.
-        -- intros. destruct x0. mgo_. invert_clear H1.
-           ++ invert_clear H1.
-           ++ mgo_.
-              apply optimistic_thunk_go. mgo_.
-              apply optimistic_thunk_go. mgo_.
-              apply optimistic_thunk_go. mgo_.
-              apply optimistic_thunk_go. mgo_.
-              split.
-              ** repeat constructor; intuition.
-              ** destruct H1.
-                 replace cost with (Tick.cost (@popD' _ (prodA B B) m None))
-                   by (rewrite HpopD'; auto). lia.
-      * invert_clear H1. invert_clear H1. intros ? ->.
-        mgo_. apply optimistic_thunk_go. mgo_.
-        eapply optimistic_mon.
-        -- eapply H.
-           ++ intuition.
-           ++ intuition.
-           ++ shelve.
-           ++ reflexivity. Unshelve.
-              ** intuition.
-              ** intuition.
-        -- destruct 1. invert_clear H1. mgo_.
-           apply optimistic_thunk_go. mgo_.
-           apply optimistic_thunk_go. mgo_.
-           apply optimistic_thunk_go. mgo_.
-           apply optimistic_thunk_go. mgo_.
-           split.
-           ++ repeat constructor; intuition.
-           ++ lia.
-        -- invert_clear H1. intros ? ->. mgo_.
-           apply optimistic_thunk_go. mgo_.
-           eapply optimistic_mon.
-           ++ eapply H.
-              ** intuition.
-              ** intuition.
-              ** shelve.
-              ** reflexivity. Unshelve. intuition.
-           ++ destruct 1. invert_clear H4. mgo_.
-              apply optimistic_thunk_go. mgo_.
-              apply optimistic_thunk_go. mgo_.
-              apply optimistic_thunk_go. mgo_.
-              apply optimistic_thunk_go. mgo_.
-              split.
-              ** repeat constructor; intuition.
-              ** lia.
+    + intros ? ->. mgo_brute_force.
+    + destruct x1. repeat invert_approx.
+      simpl. intros ? ->. mgo_. apply optimistic_thunk_go.
+      destruct (popD' m None) eqn:HpopD'. simpl. mgo_.
+      eapply optimistic_mon.
+      * eapply H; [ | | | rewrite HpopD'; reflexivity ].
+        all: fcrush.
+      * intros. destruct x0. mgo_. repeat invert_approx.
+        keep_mgo_; [ fcrush | ].
+        destruct H1;
+          replace cost with (Tick.cost (@popD' _ (prodA B B) m None))
+          by (rewrite HpopD'; auto); lia.
   (* f = FTwo x y *)
   - invert_clear 2. invert_clear H.
-    * intros ? ->. mgo_.
-      apply optimistic_thunk_go. mgo_.
-      apply optimistic_thunk_go. mgo_.
-      apply optimistic_thunk_go. mgo_.
-      split.
-      ++ repeat constructor; intuition.
-      ++ lia.
+    * intros ? ->. keep_mgo_.
     (* outD = Some (Thunk (pairA xD qD)) *)
     * destruct x1. invert_clear H. invert_clear H0.
       (* qD = Undefined *)
-      -- intros ? ->. mgo_.
-         apply optimistic_thunk_go. mgo_.
-         apply optimistic_thunk_go. mgo_.
-         apply optimistic_thunk_go. mgo_.
-         split.
-         ++ repeat constructor; intuition.
-         ++ lia.
-      -- invert_clear H0. invert_clear H0.
-         ++ intros ? ->. mgo_.
-            apply optimistic_thunk_go. mgo_.
-            apply optimistic_thunk_go. mgo_.
-            apply optimistic_thunk_go. mgo_.
-            split.
-            ** repeat constructor; intuition.
-            ** lia.
-         ++ invert_clear H0. intros ? ->. mgo_.
-            apply optimistic_thunk_go. mgo_.
-            apply optimistic_thunk_go. mgo_.
-            apply optimistic_thunk_go. mgo_.
-            split.
-            ** repeat constructor; intuition.
-            ** lia.
+      -- intros ? ->. keep_mgo_.
+      -- repeat invert_approx; intros ? ->; keep_mgo_; fcrush.
 Qed.
 
 Corollary popD_spec :
@@ -1440,28 +1338,7 @@ Proof.
                                   | H : ?x `less_defined` ?y |- _ =>
                                       (head_is_constructor x + head_is_constructor y); invert_clear H
                                   end)
-            ].
-        -- destruct t.
-           ++ destruct x2.
-              ** invert_clear H5.
-              ** invert_clear H5. invert_clear H2. invert_clear H2.
-           ++ invert_clear H5.
-        -- destruct t.
-           ++ destruct x2.
-              ** invert_clear H5.
-              ** invert_clear H2. invert_clear H2.
-           ++ discriminate.
-        -- destruct t.
-           ++ destruct x2.
-              ** discriminate.
-              ** invert_clear H2. invert_clear H2.
-           ++ discriminate.
-        -- destruct mD', t; try destruct x2; try lia.
-           ++ do 2 invert_clear H2.
-           ++ do 2 invert_clear H2. discriminate.
-        -- destruct mD', t; try destruct x1; try lia.
-           ++ destruct x2; try discriminate.
-           ++ destruct x2; try discriminate.
+            ]; teardown; try solve [sauto].
       * simpl. unfold debt. simpl.
         destruct fD, t; try destruct x1; try destruct x2; simpl.
         -- unfold debt at 1. simpl. change (Debitable_T mD') with (debt mD'). lia.
@@ -1697,7 +1574,7 @@ Proof.
         (pushD q x (bottom_of (exact (push q x))))
         in H1.
       destruct (Tick.val (pushD q x (bottom_of (exact (push q x))))).
-      intuition.
+      sauto.
     + destruct (Tick.val (pushD q x (bottom_of (exact (push q x))))).
       invert_clear HpushD. auto.
   - simpl.
@@ -1710,7 +1587,7 @@ Proof.
         (pushD q x x0)
         in H1.
       destruct (Tick.val (pushD q x x0)).
-      intuition.
+      fcrush.
     + destruct (Tick.val (pushD q x x0)). invert_clear HpushD. auto.
 Qed.
 

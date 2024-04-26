@@ -636,6 +636,8 @@ Ltac mforward tac :=
 (** Heuristics for dealing with approximations. *)
 Ltac invert_approx :=
   match goal with
+  | [H : _ `less_defined` _ /\ _ |- _ ] =>
+    destruct H
   | [H : _ `less_defined` _ |- _] =>
     inversion H; let n:= numgoals in guard n=1; subst; clear H
   | [H : is_defined ?x |- _] =>
@@ -651,6 +653,7 @@ Ltac invert_eq :=
 Ltac solve_approx :=
   repeat (match goal with
           | _ => solve [reflexivity | eauto]
+          | [ |- _ `less_defined` _ /\ _ ] => split; solve_approx
           | [ |- _ `less_defined` _ ] => progress (autorewrite with exact) + (constructor; cbn)
           | [ |- is_defined (Thunk _) ] =>
             reflexivity

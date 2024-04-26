@@ -284,7 +284,7 @@ Lemma pushD_spec {a} (q : Queue a) (x : a) (outD : QueueA a)
 Proof.
   unfold push, pushD, pushA; cbn beta iota.
   intros Hout * Hval. cbn in Hval. inv Hval. mgo_.
-  split; [|auto]. inversion Hout. mgo_.
+  invert_approx. mgo_. 
   eapply less_defined_tail_cons. 
   inversion ld_back0; subst; mgo_.
 Qed.

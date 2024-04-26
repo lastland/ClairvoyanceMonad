@@ -613,19 +613,21 @@ Proof.
     destruct (lookups_lub (ys := out1) H0) as (y1 & Hx & Hcob1 & Hy);
       [ eauto | ].
     rewrite Hy.
-    mgo_. relax; [ | intros ? ? Hr; mgo_; rewrite Nat.add_0_r; exact Hr ].
+    mgo_. 
     eapply optimistic_corelax.
     { eapply monotonic_exec. etransitivity; [ eassumption | apply lub_upper_bound_l; eauto ]. }
-    { unfold uc; intros * ? ? []; split.
-      - rewrite H3. apply less_defined_app; reflexivity + assumption.
-      - rewrite <- H4. lia. }
+    { unfold uc.
+      intros * ? ? [? [? [? [? ?] ] ] ]. mgo_.
+      unfold ret in H3. inv H3.
+      etransitivity. apply H4.
+      apply less_defined_app; solve_approx. }
     relax; [ apply HH | cbn; intros r c [Hr Hc] ].
-    split; [ apply less_defined_app; [ apply lub_upper_bound_r; eauto | assumption ] | ].
+    mgo_; [ apply less_defined_app; [ apply lub_upper_bound_r; eauto | assumption ] | ].
     rewrite potential_lub_list_ by eauto. rewrite sumof_app.
     rewrite E, Hpotential.
     revert Hc. generalize (budget o l). lia.
   - exists output. rewrite (less_defined_lookups_None E Hout).
-    split; [ auto | ]. mgo_. split; [ reflexivity | lia ].
+    split; [ auto | ]. mgo_. 
 Qed.
 
 Lemma physicist's_method_aux

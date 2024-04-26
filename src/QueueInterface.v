@@ -168,10 +168,9 @@ Qed.
 Lemma cd : CvDemand.
 Proof.
   do 2 red. intros []; cbn.
-  - intros qs yD Hy n xD; injection 1; intros -> ->. unfold emptyA.
-    mgo'. split; [ | auto ]. constructor; assumption.
+  - intros qs yD Hy n xD; injection 1; intros -> ->. unfold emptyA. mgo'. 
   - intros [| q qs] yD Hy; inv Hy.
-    { intros ? ?; injection 1; intros -> ->; cbn; mgo'. split; reflexivity. }
+    { intros ? ?; injection 1; intros -> ->; cbn; mgo'. }
     intros n xD. destruct pushD as [ ? [] ] eqn:EpushD. intros Hpush; inv Hpush.
     apply optimistic_bind.
     assert (t0 = Thunk x); [ | subst t0 ].

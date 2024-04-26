@@ -569,9 +569,9 @@ Proof.
   - inversion 1; subst; cbn; mgo_; split; reflexivity.
   - autorewrite with exact in Hout. inv Hout. destruct thunkD as [ ? [] ] eqn:Eth; cbn.
     inversion 1; subst; cbn. mgo_. inv H3; cbn in Eth; inv Eth.
-    + apply optimistic_skip. mgo_. split; reflexivity.
+    + apply optimistic_skip. mgo_. 
     + apply optimistic_thunk_go. relax_apply IHxs; [ try rewrite H1; eauto .. | cbn; intros * [] ].
-      mgo_. split; [solve_approx | ]. lia.
+      mgo_. 
 Qed.
 
 Lemma appendD_spec' {a} (xs ys : list a) (outD : listA a)
