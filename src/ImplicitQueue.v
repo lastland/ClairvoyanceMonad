@@ -1499,13 +1499,7 @@ Qed.
 Lemma popD_None: forall A B (q : Queue A),
     pop q = None ->
     popD' q None = Tick.MkTick 1 (Thunk (NilA : QueueA B)).
-Proof.
-  induction q; simpl.
-  - hauto.
-  - destruct (pop q) eqn:Hpop.
-    + destruct f; simpl; discriminate.
-    + destruct f; simpl; discriminate.
-Qed.
+Proof. sauto. Qed.
         
 Lemma popD'_cost : forall (A B : Type)
                      `{LessDefined B, Exact A B}
@@ -1582,51 +1576,6 @@ Proof.
            ++ simpl. unfold debt, Debitable_T, debt, Debitable_QueueA. sfirstorder.
            ++ simpl. unfold debt, Debitable_T, debt, Debitable_QueueA. sauto.
 Qed.
-
-  (*                lia. *)
-
-  (* apply (pop_ind (fun A q u => *)
-  (*                   forall B LDA EAB outD, *)
-  (*                     outD `is_approx` u -> *)
-  (*                     let d := match outD with *)
-  (*                              | Some (Thunk (pairA _ qD)) => debt qD *)
-  (*                              | _ => 0 *)
-  (*                              end in *)
-  (*                     let inM := popD' q outD in *)
-  (*                     let cost := Tick.cost inM in *)
-  (*                     let inD := Tick.val inM in *)
-  (*                     debt inD + cost <= 2 + d)). *)
-  (* - invert_clear 1. simpl. lia. *)
-  (* - simpl. intros ? ? ? ? ? ? ? ->. invert_clear 2. invert_clear H0. *)
-  (*   + simpl. lia. *)
-  (*   + destruct x1. invert_clear H0. invert_clear H1; try solve [ simpl; lia ]. *)
-  (*     invert_clear H1. *)
-  (*     * simpl. *)
-  (*       specialize (H (prodA B B) _ _ (Some (Thunk (pairA (Thunk bottom) q1))) *)
-  (*                     ltac:(repeat constructor; eauto)). simpl in *. *)
-  (*       invert_clear H1. *)
-  (*       -- *)
-  (*     * invert_clear H1. *)
-  (*       specialize (H (prodA B B) _ _ (Some (Thunk (pairA (Thunk (pairA x1 y1)) q1))) *)
-  (*                     ltac:(repeat constructor; eauto)). simpl. *)
-  (*       simpl in *. unfold debt. simpl. unfold debt at 2. simpl. *)
-  (*       invert_clear H3. *)
-  (*       -- simpl. *)
-  (*          set (p := (Tick.val (popD' m (Some (Thunk (pairA (Thunk (pairA x1 y1)) q1)))))) in *. *)
-  (*          change (Debitable_T p) with (debt p). change (Debitable_T q1) with (debt q1). *)
-  (*          lia. *)
-  (*       -- simpl. invert_clear H3. *)
-  (*          ** simpl. *)
-  (*             set (p := (Tick.val (popD' m (Some (Thunk (pairA (Thunk (pairA x1 y1)) q1)))))) *)
-  (*               in *. *)
-  (*             change (Debitable_T p) with (debt p). change (Debitable_T q1) with (debt q1). *)
-  (*             lia. *)
-  (*          ** simpl. unfold debt, Debitable_T at 1. simpl *)
-  (*             set (p := (Tick.val (popD' m (Some (Thunk (pairA (Thunk (pairA x1 y1)) q1)))))) *)
-  (*               in *. *)
-  (*             change (Debitable_T p) with (debt p). change (Debitable_T q1) with (debt q1). *)
-
-
 
 From Coq Require Import List.
 Import ListNotations.
