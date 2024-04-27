@@ -617,6 +617,15 @@ Proof.
   - apply H3. apply SELF.
 Qed.
 
+Lemma push_is_Deep (A : Type) (q : Queue A) (x : A) : exists f m r, push q x = Deep f m r.
+Proof.
+  refine (match q with
+          | Nil => _
+          | Deep f m RZero => _
+          | Deep f m (ROne y) => _
+          end); simpl; eauto.
+Qed.
+
 (* Note that this definition *is* maximally lazy. *)
 Fixpoint pushA' (A : Type) (q : QueueA A) (x : T A) : M (QueueA A) :=
   tick >>
@@ -691,15 +700,6 @@ Fixpoint pushD' (A B : Type) (q : Queue A) (x : A) (outD : QueueA B) :
    about. *)
 Definition pushD (A : Type) : Queue A -> A -> QueueA A ->  Tick (prodA (QueueA A) A) :=
   pushD'.
-
-Lemma push_is_Deep (A : Type) (q : Queue A) (x : A) : exists f m r, push q x = Deep f m r.
-Proof.
-  refine (match q with
-          | Nil => _
-          | Deep f m RZero => _
-          | Deep f m (ROne y) => _
-          end); simpl; eauto.
-Qed.
 
 Lemma pushD'_approx : forall (A B : Type) `{LessDefined B, Exact A B}
                         (q : Queue A) (x : A) (outD : QueueA B),
@@ -911,11 +911,12 @@ Proof.
     + apply H5.
 Qed.
 
-Definition unzipT (A B : Type) (p : T (prodA A B)) : prodA A B :=
-  match p with
-  | Undefined => pairA Undefined Undefined
-  | Thunk p => p
-  end.
+Lemma pop_None_inv (A : Type) (q : Queue A) : pop q = None -> q = Nil.
+Proof.
+  destruct q.
+  - auto.
+  - destruct f; discriminate.
+Qed.
 
 (* Note that this definition *is* maximally lazy. *)
 Fixpoint popA' (A : Type) (q : QueueA A) : M (option (T (prodA A (QueueA A)))) :=
@@ -1024,10 +1025,6 @@ Fixpoint popD' (A B : Type) (q : Queue A) (outD : option (T (prodA B (QueueA B))
 Definition popD (A : Type) (q : Queue A) (outD : option (T (prodA A (QueueA A)))) :
   Tick (T (QueueA A)) :=
   popD' q outD.
-
-(* Compute popD
-   (Deep (FOne 1) (Deep (FOne (2, 3)) Nil RZero) RZero)
-   (Some Undefined). *)
 
 Lemma popD'_approx : forall (A B : Type) `{LDB : LessDefined B, Exact A B}
                        (q : Queue A) (outD : option (T (prodA B (QueueA B)))),
@@ -1378,6 +1375,21 @@ Proof.
         -- invert_clear H. invert_clear H; cbn; sauto.
 Qed.
 
+Corollary popD_cost : forall (A : Type) `{LessDefined A}
+                        (q : Queue A) (outD : option (T (prodA A (QueueA A)))),
+    outD `is_approx` pop q ->
+    let d := match outD with
+             | Some (Thunk (pairA _ qD)) => debt qD
+             | _ => 0
+             end in
+    let inM := popD' q outD in
+    let cost := Tick.cost inM in
+    let inD := Tick.val inM in
+    debt inD + cost <= 3 + d.
+Proof.
+  intros. apply popD'_cost. auto.
+Qed.
+
 From Coq Require Import List.
 Import ListNotations.
 From Clairvoyance Require Import Interfaces.
@@ -1385,16 +1397,21 @@ Open Scope tick_scope.
 
 Inductive op (A : Type) : Type :=
 | Empty
-| Push (x : A).
+| Push (x : A)
+| Pop.
 
 #[global] Instance WellFormed_Queue (A : Type) : WellFormed (Queue A) := fun _ => True.
 
 #[global] Instance Eval_Queue (A : Type) : Eval (op A) (Queue A) :=
   fun op args => match op, args with
-                 | Empty, [] => [empty]
-                 | Push x, [q] => [push q x]
-                 | _, _ => []
-                 end.
+              | Empty, [] => [empty]
+              | Push x, [q] => [push q x]
+              | Pop, [q] => match pop q with
+                           | Some (_, q') => [q']
+                           | _ => []
+                           end
+              | _, _ => []
+              end.
 
 #[global] Instance Budget_Queue (A : Type) : Budget (op A) (Queue A) :=
   fun _ _ => 3.
@@ -1408,6 +1425,14 @@ Inductive op (A : Type) : Type :=
     | Push x, [q], [outD] =>
         let outD := forceD (bottom_of (exact (push q x))) outD in
         let+ (pairA qD _) := pushD q x outD in
+        Tick.ret [qD]
+    | Pop, [q], outD =>
+        let outD' := match outD with
+                     | [] => None
+                     | [qD'] => Some (Thunk (pairA Undefined qD'))
+                     | _ => Some Undefined
+                     end in
+        let+ qD := popD q outD' in
         Tick.ret [qD]
     | _, _, _ => Tick.ret (bottom_of (exact args))
     end.
@@ -1445,6 +1470,7 @@ Proof.
   refine (match o, args, output with
           | Empty, [], [_] => _
           | Push x, [q], [outD] => _
+          | Pop, [q], outD => _
           | _, _, _ => _
           end); try solve [ do 2 invert_clear 1; simpl in *;
                             try (rewrite Hpb); lia ].
@@ -1457,6 +1483,16 @@ Proof.
       invert_clear 1.
       destruct (Tick.val (pushD q x x0)) as [ qD xD ]. simpl.
       change (Potential_Queue qD) with (debt qD). lia.
+  - simpl. destruct (pop q) eqn:Hpop.
+    + destruct p as [ x q' ]. invert_clear 1 as [ | qD' ? ? ? HqD' ]. invert_clear H.
+      assert (Some (Thunk (pairA Undefined qD')) `is_approx` pop q)
+        as Happrox
+          by (rewrite Hpop; repeat constructor; auto).
+      pose proof (popD_cost _ Happrox) as Hcost. fcrush.
+    + invert_clear 1. simpl.
+      pose proof (pop_None_inv Hpop). subst.
+      unfold popD, popD', Tick.tick, Tick.ret, Tick.bind. simpl.
+      invert_clear 1. simpl. lia.
 Qed.
 #[export] Existing Instance physicist's_argumentD.
 
@@ -1513,11 +1549,27 @@ Proof.
       destruct (Tick.val (pushD q x x0)).
       fcrush.
     + destruct (Tick.val (pushD q x x0)). invert_clear HpushD. auto.
+  - simpl. refine (match args with
+                   | [] => _
+                   | [q] => _
+                   | _ => _
+                   end).
+    + repeat constructor.
+    + destruct (pop q) eqn:Hpop.
+      * simpl. destruct p as [ x q' ]. invert_clear 1. invert_clear H0.
+        repeat constructor. apply popD_approx. rewrite Hpop. repeat constructor. auto.
+      * pose proof (pop_None_inv Hpop). subst. repeat constructor.
+    + simpl. intros. apply bottom_is_least. reflexivity.
 Qed.
 
 Definition Exec_QueueA (A : Type) : Exec (op A) (T (QueueA A)) :=
   fun o args => match o, args with
-                | Empty, [] => let! q := emptyA in ret [Thunk q]
-                | Push x, [q] => let! q' := pushA q (Thunk x) in ret [Thunk q']
-                | _, _ => ret []
-                end.
+             | Empty, [] => let! q := emptyA in ret [Thunk q]
+             | Push x, [q] => let! q' := pushA q (Thunk x) in ret [Thunk q']
+             | Pop, [q] => let! p := popA q in
+                          match p with
+                          | Some (Thunk (pairA x q)) => ret [q]
+                          | _ => ret []
+                          end
+             | _, _ => ret []
+             end.
