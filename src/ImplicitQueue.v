@@ -550,13 +550,6 @@ Proof.
     + eauto.
 Qed.
 
-#[global] Instance IsApproxAlgebra_QueueA (A : Type)
-  `{LDA : LessDefined A, PreOrder A LDA, LBA : Lub A, @LubLaw A LBA LDA} :
-  IsApproxAlgebra (Queue A) (T (QueueA A)).
-Proof.
-  econstructor; try typeclasses eauto.
-Defined.
-
 (* empty *)
 
 Definition empty (A : Type) : Queue A := Nil.
@@ -1450,181 +1443,243 @@ Import ListNotations.
 From Clairvoyance Require Import Interfaces.
 Open Scope tick_scope.
 
-Inductive op (A : Type) : Type :=
-| Empty
-| Push (x : A)
-| Pop.
+Section Physicist'sArgument.
 
-#[global] Instance WellFormed_Queue (A : Type) : WellFormed (Queue A) := fun _ => True.
+  Context (A : Type).
+  Definition value := Queue A.
+  Definition valueA := T (QueueA A).
 
-#[global] Instance Eval_Queue (A : Type) : Eval (op A) (Queue A) :=
-  fun op args => match op, args with
-              | Empty, [] => [empty]
-              | Push x, [q] => [push q x]
-              | Pop, [q] => match pop q with
-                           | Some (_, q') => [q']
-                           | _ => []
-                           end
-              | _, _ => []
-              end.
+  Inductive op : Type :=
+  | Empty
+  | Push (x : A)
+  | Pop.
 
-#[global] Instance Budget_Queue (A : Type) : Budget (op A) (Queue A) :=
-  fun _ _ => 3.
+  #[export] Instance eval : Eval op value :=
+    fun op args => match op, args with
+                | Empty, [] => [empty]
+                | Push x, [q] => [push q x]
+                | Pop, [q] => match pop q with
+                             | Some (_, q') => [q']
+                             | _ => []
+                             end
+                | _, _ => []
+                end.
 
-#[global] Instance Demand_Queue (A : Type) : Demand (op A) (Queue A) (T (QueueA A)) :=
-  fun op args argsA =>
-    match op, args, argsA with
-    | Empty, [], [outD] =>
-        let outD := forceD (bottom_of (exact empty)) outD in
-        emptyD outD >> Tick.ret []
-    | Push x, [q], [outD] =>
-        let outD := forceD (bottom_of (exact (push q x))) outD in
-        let+ (pairA qD _) := pushD q x outD in
-        Tick.ret [qD]
-    | Pop, [q], outD =>
-        let outD' := match outD with
-                     | [] => None
-                     | [qD'] => Some (Thunk (pairA Undefined qD'))
-                     | _ => Some Undefined
-                     end in
-        let+ qD := popD q outD' in
-        Tick.ret [qD]
-    | _, _, _ => Tick.ret (bottom_of (exact args))
-    end.
+  #[export] Instance budget : Budget op value :=
+    fun _ _ => 3.
 
-#[global] Instance Potential_Queue (A : Type) : Potential (T (QueueA A)) :=
-  fun qD => match qD with
-            | Thunk qA => debt qA
-            | Undefined => 0
-            end.
+  #[export] Instance exec : Exec op valueA :=
+    fun o args => match o, args with
+               | Empty, [] => let! q := emptyA in ret [Thunk q]
+               | Push x, [q] => let! q' := pushA q (Thunk x) in ret [Thunk q']
+               | Pop, [q] => let! p := popA q in
+                            match p with
+                            | Some (Thunk (pairA x q)) => ret [q]
+                            | Some Undefined => ret [Undefined]
+                            | _ => ret []
+                            end
+               | _, _ => ret []
+               end.
 
-Lemma potential_bottom_of (A : Type) (q : Queue A) :
-  Potential_Queue (bottom_of (exact q)) = 0.
-Proof.
-  destruct q; reflexivity.
-Qed.
-#[global] Hint Resolve potential_bottom_of : core.
+  #[export] Instance wf : WellFormed value := fun _ => True.
 
-Lemma sumof_potential_bottom_of (A : Type) (qs : list (Queue A)) :
-  sumof Potential_Queue (bottom_of (exact qs)) = 0.
-Proof.
-  induction qs; auto.
-Qed.
-#[global] Hint Resolve sumof_potential_bottom_of : core.
+  Lemma wf_eval : WfEval.
+  Proof using A.
+    unfold WfEval. destruct o, vs; repeat constructor.
+    - simpl. destruct vs; repeat constructor.
+    - simpl. destruct vs, (pop v) as [ [ ? ? ] | ]; repeat constructor.
+  Qed.
+  #[export] Existing Instance wf_eval.
 
-Theorem physicist's_argumentD :
-  forall (A : Type) `{LDA : LessDefined A, PreOrder A LDA, LBA : Lub A, @LubLaw A LBA LDA},
-    @Physicist'sArgumentD
-      (op A) (Queue A) (T (QueueA A))
-      _ _ _ _ _ _.
-Proof.
-  intro A. pose proof (@sumof_potential_bottom_of A) as Hpb.
-  unfold bottom_of, exact in Hpb.
-  unfold Physicist'sArgumentD.
-  intros LDA HPreOrder LBA HLubLaw o args _ output.
-  refine (match o, args, output with
-          | Empty, [], [_] => _
-          | Push x, [q], [outD] => _
-          | Pop, [q], outD => _
-          | _, _, _ => _
-          end); try solve [ do 2 invert_clear 1; simpl in *;
-                            try (rewrite Hpb); lia ].
-  - invert_clear 1. invert_clear 1. simpl. invert_clear H; try invert_clear H; simpl; lia.
-  - invert_clear 1 as [ | ? ? ? ? HoutD _ ]. invert_clear HoutD as [ | ? ? HoutD ].
-    + unfold Demand_Queue. simpl. unfold bottom_of, BottomOf.
-      pose proof (push_is_Deep q x) as Hpush. destruct Hpush as [? [? [? Hpush] ] ].
-      rewrite Hpush. simpl. destruct q; fcrush.
-    + pose proof (pushD_cost _ _ HoutD) as Hcost. cbn in Hcost.
-      invert_clear 1.
-      destruct (Tick.val (pushD q x x0)) as [ qD xD ]. simpl.
-      change (Potential_Queue qD) with (debt qD). lia.
-  - simpl. destruct (pop q) eqn:Hpop.
-    + destruct p as [ x q' ]. invert_clear 1 as [ | qD' ? ? ? HqD' ]. invert_clear H.
-      assert (Some (Thunk (pairA Undefined qD')) `is_approx` pop q)
-        as Happrox
-          by (rewrite Hpop; repeat constructor; auto).
-      pose proof (popD_cost _ Happrox) as Hcost. fcrush.
-    + invert_clear 1. simpl.
-      pose proof (pop_None_inv Hpop). subst.
-      unfold popD, popD', Tick.tick, Tick.ret, Tick.bind. simpl.
-      invert_clear 1. simpl. lia.
-Qed.
-#[export] Existing Instance physicist's_argumentD.
+  Lemma monotonic_exec `{LDA : LessDefined A, !PreOrder LDA} (o : op) : Monotonic (exec o).
+  Proof using A.
+    assert (Reflexive (less_defined (a := QueueA A))) by typeclasses eauto.
+    unfold Monotonic. destruct o; invert_clear 1; simpl; try solve [ solve_mon ].
+    - invert_clear H1; solve_mon.
+      apply pushA_mon; try solve [ auto ]. reflexivity.
+    - invert_clear H1; try solve [ solve_mon ].
+      apply bind_mon.
+      + apply popA_mon; auto.
+      + intros. invert_clear H1; solve_mon.
+        * destruct y; try solve [ solve_mon ]. destruct x2; solve_mon.
+        * destruct x, y1; try solve [ solve_mon ].
+          subst. invert_clear H2. solve_mon.
+  Qed.
 
-Lemma pd (A : Type)
-  `{LDA : LessDefined A, PA : PreOrder A LDA, LBA : Lub A, LLA : @LubLaw A LBA LDA} :
-  @PureDemand (op A) (Queue A) (T (QueueA A))
-    IsApproxAlgebra_QueueA
-    Eval_Queue
-    Demand_Queue.
-Proof.
-  assert (@Reflexive A less_defined)
-    as HRA
-    by (destruct PA; auto).
-  assert (@Reflexive (QueueA A) less_defined)
-    as HRQA
-    by apply (@Reflexive_LessDefined_QueueA A LDA HRA).
-  unfold PureDemand, pure_demand.
-  intros o args output.
-  set (o' := o). revert o'.
-  set (args' := args). revert args'.
-  set (output' := output). revert output'.
-  refine (match o, args, output with
-          | Empty, [], [_] => _
-          | Push x, [q], [outD] => _
-          | _, _, _ => _
-          end); try solve [ repeat constructor +
-                              invert_clear 1; try apply bottom_is_least; reflexivity ].
-  simpl. invert_clear 1. invert_clear H.
-  - simpl.
-    destruct (Tick.val (pushD q x (bottom_of (exact (push q x))))) eqn:HpushD.
-    constructor; auto.
-    replace t with (fstA (Tick.val (pushD q x (bottom_of (exact (push q x)))))).
-    + assert (bottom_of (exact (push q x)) `less_defined` exact (push q x)).
-      apply bottom_is_least. auto.
-      pose proof (@pushD_approx _ _ q x _ H).
-      unfold less_defined, LessDefined_prodA in H1.
-      change (pushD' q x (bottom_of (exact (push q x))))
-        with
-        (pushD q x (bottom_of (exact (push q x))))
-        in H1.
-      destruct (Tick.val (pushD q x (bottom_of (exact (push q x))))).
-      sauto.
-    + destruct (Tick.val (pushD q x (bottom_of (exact (push q x))))).
-      invert_clear HpushD. auto.
-  - simpl.
-    destruct (Tick.val (pushD q x x0)) eqn:HpushD. simpl.
-    constructor; auto.
-    replace t with (fstA (Tick.val (pushD q x x0))).
-    + pose proof (@pushD_approx _ _ q x _ H).
-      change (pushD' q x x0)
-        with
-        (pushD q x x0)
-        in H1.
-      destruct (Tick.val (pushD q x x0)).
-      fcrush.
-    + destruct (Tick.val (pushD q x x0)). invert_clear HpushD. auto.
-  - simpl. refine (match args with
-                   | [] => _
-                   | [q] => _
-                   | _ => _
-                   end).
-    + repeat constructor.
-    + destruct (pop q) eqn:Hpop.
-      * simpl. destruct p as [ x q' ]. invert_clear 1. invert_clear H0.
-        repeat constructor. apply popD_approx. rewrite Hpop. repeat constructor. auto.
-      * pose proof (pop_None_inv Hpop). subst. repeat constructor.
-    + simpl. intros. apply bottom_is_least. reflexivity.
-Qed.
+  #[export] Instance approx_algebra
+    `{LDA : LessDefined A, PreOrder A LDA, LBA : Lub A, @LubLaw A LBA LDA} :
+    IsApproxAlgebra value valueA.
+  Proof.
+    econstructor; try typeclasses eauto.
+  Defined.
 
-Definition Exec_QueueA (A : Type) : Exec (op A) (T (QueueA A)) :=
-  fun o args => match o, args with
-             | Empty, [] => let! q := emptyA in ret [Thunk q]
-             | Push x, [q] => let! q' := pushA q (Thunk x) in ret [Thunk q']
-             | Pop, [q] => let! p := popA q in
-                          match p with
-                          | Some (Thunk (pairA x q)) => ret [q]
-                          | _ => ret []
-                          end
-             | _, _ => ret []
-             end.
+  Lemma well_defined_exec
+    `{LDA : LessDefined A, PreOrder A LDA, LBA : Lub A, @LubLaw A LBA LDA} :
+    @WellDefinedExec op value valueA _ _.
+  Proof using A.
+    constructor; exact monotonic_exec.
+  Qed.
+
+  #[export] Instance demand : Demand op value valueA :=
+    fun op args argsA =>
+      match op, args, argsA with
+      | Empty, [], [outD] =>
+          let outD := forceD (bottom_of (exact empty)) outD in
+          emptyD outD >> Tick.ret []
+      | Push x, [q], [outD] =>
+          let outD := forceD (bottom_of (exact (push q x))) outD in
+          let+ (pairA qD _) := pushD q x outD in
+          Tick.ret [qD]
+      | Pop, [q], outD =>
+          let outD' := match outD with
+                       | [] => None
+                       | [qD'] => Some (Thunk (pairA Undefined qD'))
+                       | _ => Some Undefined
+                       end in
+          let+ qD := popD q outD' in
+          Tick.ret [qD]
+      | _, _, _ => Tick.ret (bottom_of (exact args))
+      end.
+
+  Lemma pd
+    `{LDA : LessDefined A, PA : !PreOrder LDA, LBA : Lub A, LLA : @LubLaw A LBA LDA} :
+    @PureDemand op value valueA
+                approx_algebra
+                eval
+                demand.
+  Proof using A.
+    assert (@Reflexive A less_defined)
+      as HRA
+        by (destruct PA; auto).
+    assert (@Reflexive (QueueA A) less_defined)
+      as HRQA
+        by apply (@Reflexive_LessDefined_QueueA A LDA HRA).
+    unfold PureDemand, pure_demand.
+    intros o args output.
+    set (o' := o). revert o'.
+    set (args' := args). revert args'.
+    set (output' := output). revert output'.
+    refine (match o, args, output with
+            | Empty, [], [_] => _
+            | Push x, [q], [outD] => _
+            | _, _, _ => _
+            end); try solve [ repeat constructor +
+                                invert_clear 1; try apply bottom_is_least; reflexivity ].
+    simpl. invert_clear 1. invert_clear H.
+    - simpl.
+      destruct (Tick.val (pushD q x (bottom_of (exact (push q x))))) eqn:HpushD.
+      constructor; auto.
+      replace t with (fstA (Tick.val (pushD q x (bottom_of (exact (push q x)))))).
+      + assert (bottom_of (exact (push q x)) `less_defined` exact (push q x)).
+        apply bottom_is_least. auto.
+        pose proof (@pushD_approx _ _ q x _ H).
+        unfold less_defined, LessDefined_prodA in H1.
+        change (pushD' q x (bottom_of (exact (push q x))))
+          with
+          (pushD q x (bottom_of (exact (push q x))))
+          in H1.
+        destruct (Tick.val (pushD q x (bottom_of (exact (push q x))))).
+        sauto.
+      + destruct (Tick.val (pushD q x (bottom_of (exact (push q x))))).
+        invert_clear HpushD. auto.
+    - simpl.
+      destruct (Tick.val (pushD q x x0)) eqn:HpushD. simpl.
+      constructor; auto.
+      replace t with (fstA (Tick.val (pushD q x x0))).
+      + pose proof (@pushD_approx _ _ q x _ H).
+        change (pushD' q x x0)
+          with
+          (pushD q x x0)
+          in H1.
+        destruct (Tick.val (pushD q x x0)).
+        fcrush.
+      + destruct (Tick.val (pushD q x x0)). invert_clear HpushD. auto.
+    - simpl. refine (match args with
+                     | [] => _
+                     | [q] => _
+                     | _ => _
+                     end).
+      + repeat constructor.
+      + destruct (pop q) eqn:Hpop.
+        * simpl. destruct p as [ x q' ]. invert_clear 1. invert_clear H0.
+          repeat constructor. apply popD_approx. rewrite Hpop. repeat constructor. auto.
+        * pose proof (pop_None_inv Hpop). subst. repeat constructor.
+      + simpl. intros. apply bottom_is_least. reflexivity.
+  Qed.
+  #[export] Existing Instance pd.
+
+  #[global] Instance potential : Potential valueA :=
+    fun qD => match qD with
+           | Thunk qA => debt qA
+           | Undefined => 0
+           end.
+
+  Lemma potential_bottom_of (q : value) :
+    potential (bottom_of (exact q)) = 0.
+  Proof using A.
+    destruct q; reflexivity.
+  Qed.
+  Hint Resolve potential_bottom_of : core.
+
+  Lemma sumof_potential_bottom_of (qs : list value) :
+    sumof potential (bottom_of (exact qs)) = 0.
+  Proof using A.
+    induction qs; auto.
+  Qed.
+  Hint Resolve sumof_potential_bottom_of : core.
+
+  Theorem physicist's_argumentD :
+    forall `{LDA : LessDefined A, !PreOrder LDA, LBA : Lub A, @LubLaw A LBA LDA},
+      @Physicist'sArgumentD
+        op value valueA
+        _ _ _ _ _ _.
+  Proof using A.
+    pose proof sumof_potential_bottom_of as Hpb.
+    unfold bottom_of, exact in Hpb.
+    unfold Physicist'sArgumentD.
+    intros LDA HPreOrder LBA HLubLaw o args _ output.
+    refine (match o, args, output with
+            | Empty, [], [_] => _
+            | Push x, [q], [outD] => _
+            | Pop, [q], outD => _
+            | _, _, _ => _
+            end); try solve [ do 2 invert_clear 1; simpl in *;
+                              try (rewrite Hpb); lia ].
+    - invert_clear 1. invert_clear 1. simpl. invert_clear H; try invert_clear H; simpl; lia.
+    - invert_clear 1 as [ | ? ? ? ? HoutD _ ]. invert_clear HoutD as [ | ? ? HoutD ].
+      + unfold demand. simpl. unfold bottom_of, BottomOf.
+        pose proof (push_is_Deep q x) as Hpush. destruct Hpush as [? [? [? Hpush] ] ].
+        rewrite Hpush. simpl. destruct q; fcrush.
+      + pose proof (pushD_cost _ _ HoutD) as Hcost. cbn in Hcost.
+        invert_clear 1.
+        destruct (Tick.val (pushD q x x0)) as [ qD xD ]. simpl.
+        change (potential qD) with (debt qD). lia.
+    - simpl. destruct (pop q) eqn:Hpop.
+      + destruct p as [ x q' ]. invert_clear 1 as [ | qD' ? ? ? HqD' ]. invert_clear H.
+        assert (Some (Thunk (pairA Undefined qD')) `is_approx` pop q)
+          as Happrox
+            by (rewrite Hpop; repeat constructor; auto).
+        pose proof (popD_cost _ Happrox) as Hcost. simpl in *.
+        unfold Tick.bind. simpl. inversion 1. subst. simpl.
+        change (popD' q (Some (Thunk (pairA Undefined qD'))))
+          with (popD q (Some (Thunk (pairA Undefined qD'))))
+          in Hcost.
+        change (potential (Tick.val (popD q (Some (Thunk (pairA Undefined qD'))))))
+          with (debt (Tick.val (popD q (Some (Thunk (pairA Undefined qD')))))).
+        change (potential qD') with (debt qD').
+        replace (debt qD' + 0) with (debt qD') by lia.
+        replace (debt (Tick.val (popD q (Some (Thunk (pairA Undefined qD'))))) + 0 +
+                   (Tick.cost (popD q (Some (Thunk (pairA Undefined qD')))) + 0))
+          with (debt (Tick.val (popD q (Some (Thunk (pairA Undefined qD'))))) +
+                  (Tick.cost (popD q (Some (Thunk (pairA Undefined qD'))))))
+          by lia.
+        (* ??? Why doesn't lia work ??? *)
+        exact Hcost.
+      + invert_clear 1. simpl.
+        pose proof (pop_None_inv Hpop). subst.
+        unfold popD, popD', Tick.tick, Tick.ret, Tick.bind. simpl.
+        invert_clear 1. simpl. lia.
+  Qed.
+  #[export] Existing Instance physicist's_argumentD.
+
+End Physicist'sArgument.
