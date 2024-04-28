@@ -570,10 +570,7 @@ Lemma emptyD_spec (A : Type) `{LDA : LessDefined A, !Reflexive LDA} (outD : Queu
   let dcost := Tick.cost (emptyD outD) in
   emptyA [[ fun out cost => outD `less_defined` out /\ cost <= dcost ]].
 Proof.
-  invert_clear 1. simpl. eapply optimistic_mon.
-  - unfold emptyA. mgo_.
-    assert ((fun q n => q = @NilA A /\ n = 1) NilA 1) by (split; reflexivity). exact H.
-  - simpl. intros ? ? [ [] [] ]; split; auto.
+  unfold emptyA. mgo_.
 Qed.
 
 (* push *)
@@ -1366,17 +1363,6 @@ Proof.
   intros. apply pushD'_cost. auto.
 Qed.
 
-(* Compute popD (Deep (FOne 1) (Deep (FOne (2, 3)) Nil RZero) RZero) (Some Undefined). *)
-
-(* Goal forall (A : Type) `{LessDefined A} (q : Queue A), Some (Thunk (pairA Undefined Undefined)) `is_approx` pop q -> *)
-(*                                                   debt (Tick.val (popD q (Some (Thunk (pairA Undefined Undefined))))) <= 1. *)
-(*   induction q. *)
-(*   - simpl. unfold debt, Debitable_T, debt. simpl. lia. *)
-(*   - simpl. destruct f as [ x | x y ]. *)
-(*     + destruct (pop q) eqn:Hpop. *)
-(*       * destruct p. simpl. unfold debt, Debitable_T, debt. simpl. lia. *)
-(*       * simpl.  *)
-
 Lemma popD_None: forall A B (q : Queue A),
     pop q = None ->
     popD' q None = Tick.MkTick 1 (Thunk (NilA : QueueA B)).
@@ -1530,6 +1516,7 @@ Section Physicist'sArgument.
   Proof using A.
     constructor; exact monotonic_exec.
   Qed.
+  #[export] Existing Instance well_defined_exec.
 
   #[export] Instance demand : Demand op value valueA :=
     fun op args argsA =>
@@ -1624,6 +1611,28 @@ Section Physicist'sArgument.
            | Thunk qA => debt qA
            | Undefined => 0
            end.
+
+  Lemma well_defined_potential
+    `{LDA : LessDefined A, PreOrder A LDA, LBA : Lub A, @LubLaw A LBA LDA} :
+    @WellDefinedPotential value valueA _ _.
+  Proof using A.
+    constructor.
+    - red. invert_clear 1. invert_clear H1.
+      invert_clear H1; invert_clear H2; simpl; try solve [ lia ].
+      induction y0.
+      + invert_clear H1. invert_clear H2. unfold lub. simpl. lia.
+      + invert_clear H1. invert_clear H2.
+        unfold lub, debt. simpl.
+        assert (Debitable_T (lub q1 q0) <= Debitable_T q1 + Debitable_T q0)
+          by (invert_clear H3; invert_clear H4; invert_clear H6; simpl; try solve [ lia ];
+              eapply H3; try solve [ typeclasses eauto + auto ]).
+        invert_clear H5; invert_clear H7;
+          try invert_clear H5; try invert_clear H7;
+          invert_clear H1; invert_clear H2;
+          try invert_clear H1; try invert_clear H2; simpl; lia.
+    - red. simpl. lia.
+Qed.
+#[export] Existing Instance well_defined_potential.
 
   Lemma potential_bottom_of (q : value) :
     potential (bottom_of (exact q)) = 0.
