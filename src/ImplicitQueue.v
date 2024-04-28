@@ -1699,7 +1699,7 @@ Section Physicist'sArgument.
             | _, _, _ => _
             end); try solve [ do 2 invert_clear 1; simpl in *;
                               try (rewrite Hpb); lia ].
-    - invert_clear 1. invert_clear 1. simpl. invert_clear H; try invert_clear H; simpl; lia.
+    - sauto q: on.
     - invert_clear 1 as [ | ? ? ? ? HoutD _ ]. invert_clear HoutD as [ | ? ? HoutD ].
       + unfold demand. simpl. unfold bottom_of, BottomOf.
         pose proof (push_is_Deep q x) as Hpush. destruct Hpush as [? [? [? Hpush] ] ].
@@ -1714,25 +1714,9 @@ Section Physicist'sArgument.
           as Happrox
             by (rewrite Hpop; repeat constructor; auto).
         pose proof (popD_cost _ Happrox) as Hcost. simpl in *.
-        unfold Tick.bind. simpl. inversion 1. subst. simpl.
-        change (popD' q (Some (Thunk (pairA Undefined qD'))))
-          with (popD q (Some (Thunk (pairA Undefined qD'))))
-          in Hcost.
-        change (potential (Tick.val (popD q (Some (Thunk (pairA Undefined qD'))))))
-          with (debt (Tick.val (popD q (Some (Thunk (pairA Undefined qD')))))).
-        change (potential qD') with (debt qD').
-        replace (debt qD' + 0) with (debt qD') by lia.
-        replace (debt (Tick.val (popD q (Some (Thunk (pairA Undefined qD'))))) + 0 +
-                   (Tick.cost (popD q (Some (Thunk (pairA Undefined qD')))) + 0))
-          with (debt (Tick.val (popD q (Some (Thunk (pairA Undefined qD'))))) +
-                  (Tick.cost (popD q (Some (Thunk (pairA Undefined qD'))))))
-          by lia.
-        (* ??? Why doesn't lia work ??? *)
-        exact Hcost.
-      + invert_clear 1. simpl.
-        pose proof (pop_None_inv Hpop). subst.
-        unfold popD, popD', Tick.tick, Tick.ret, Tick.bind. simpl.
-        invert_clear 1. simpl. lia.
+        unfold Tick.bind. 
+        hauto b: on.
+      + sauto q: on.
   Qed.
   #[export] Existing Instance physicist's_argumentD.
 
