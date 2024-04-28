@@ -565,6 +565,17 @@ From Clairvoyance Require Import Core.
 
 Definition emptyA (A : Type) : M (QueueA A) := tick >> ret NilA.
 
+Lemma emptyD_spec (A : Type) `{LDA : LessDefined A, !Reflexive LDA} (outD : QueueA A) :
+  outD `is_approx` empty ->
+  let dcost := Tick.cost (emptyD outD) in
+  emptyA [[ fun out cost => outD `less_defined` out /\ cost <= dcost ]].
+Proof.
+  invert_clear 1. simpl. eapply optimistic_mon.
+  - unfold emptyA. mgo_.
+    assert ((fun q n => q = @NilA A /\ n = 1) NilA 1) by (split; reflexivity). exact H.
+  - simpl. intros ? ? [ [] [] ]; split; auto.
+Qed.
+
 (* push *)
 
 (* Note that this definition is written so as to "look" maximally lazy. *)
