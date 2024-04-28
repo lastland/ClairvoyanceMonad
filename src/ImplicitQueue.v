@@ -993,6 +993,28 @@ Fixpoint popA' (A : Type) (q : QueueA A) : M (option (T (prodA A (QueueA A)))) :
 Definition popA (A : Type) (q : T (QueueA A)) : M (option (T (prodA A (QueueA A)))) :=
   popA' $! q.
 
+Lemma popA_mon (A : Type) `{LDA : LessDefined A, PreOrder A LDA} (q' q : T (QueueA A))
+  : q' `less_defined` q ->
+    popA q' `less_defined` popA q.
+Proof.
+  invert_clear 1; try solve [ solve_mon ].
+  rename x into q'. rename y into q. rename H0 into Hq.
+  simpl. induction q as [ | ? f m r ].
+  - invert_clear Hq. solve_mon.
+  - rename H0 into IH. invert_clear Hq as [ | f' ? m' ? r' ? Hf Hm Hr ]. simpl.
+    apply tick_mon. repeat (apply bind_mon); try solve [ solve_mon ].
+    + clear dependent f'. clear f. intros f f' Hf.
+      invert_clear Hf as [ x x' Hx | ]; try solve [ solve_mon ].
+      apply bind_mon; try solve [ intros; solve_mon ].
+      apply thunk_mon. apply bind_mon.
+      * invert_clear Hm; try solve [ solve_mon ].
+        invert_clear IH as [ ? IH | ]; try solve [ solve_mon ].
+        simpl. apply IH; try solve [ auto ]. typeclasses eauto.
+      * intros. solve_mon. destruct x2, x'1. invert_clear H4. solve_mon.
+        destruct x2, x'1. invert_clear H6. solve_mon.
+    + intros [ ? ? ] [ ? ? ] [ ? ? ]. solve_mon.
+Qed.
+
 Fixpoint popD' (A B : Type) (q : Queue A) (outD : option (T (prodA B (QueueA B)))) :
   Tick (T (QueueA B)) :=
   Tick.tick >>
