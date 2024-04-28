@@ -1,5 +1,5 @@
 From Coq Require Import Arith Psatz Relations RelationClasses.
-From Clairvoyance Require Import Core Approx Tick Prod Option FormalTranslation.
+From Clairvoyance Require Import Core Approx ApproxM Tick Prod Option FormalTranslation.
 
 From Hammer Require Import Tactics.
 
@@ -657,6 +657,39 @@ Fixpoint pushA' (A : Type) (q : QueueA A) (x : T A) : M (QueueA A) :=
 
 Definition pushA (A : Type) (q : T (QueueA A)) (x : T A) : M (QueueA A) :=
   forcing q (fun q => pushA' q x).
+
+Lemma pushA_mon (A : Type) `{LDA : LessDefined A, PreOrder A LDA} (q' q : T (QueueA A)) x' x
+  : q' `less_defined` q ->
+    x' `less_defined` x ->
+    pushA q' x' `less_defined` pushA q x.
+Proof.
+  invert_clear 1; try solve [ solve_mon ].
+  rename x0 into q'. rename y into q. rename H0 into Hq.
+  simpl. induction q as [ | ? f m r ]; intro Hx.
+  - invert_clear Hq. simpl. apply tick_mon.
+    apply bind_mon; try solve [ solve_mon ]. intros [ fq' r' ] [ fq r ].
+    invert_clear 1 as [ Hfq Hr ]. simpl in *.
+    destruct fq' as [ f' q' ]. destruct fq as [ f q ].
+    invert_clear Hfq as [ Hf Hq ]. simpl in *.
+    solve_mon.
+  - rename H0 into IH. invert_clear Hq as [ | f' ? m' ? r' ? Hf Hm Hr ].
+    simpl. apply tick_mon.
+    repeat (apply bind_mon); try solve [ solve_mon ].
+    + clear dependent r'. clear r. intros r' r Hr.
+      invert_clear Hr as [ | y' y Hy ]; try solve [ solve_mon ].
+      invert_clear Hm; try solve [ solve_mon ].
+      rename x0 into m'. rename y0 into m. rename H0 into Hm.
+      invert_clear IH as [ ? IH | ]; try solve [ solve_mon ].
+      apply bind_mon; try solve [ solve_mon ].
+      intros yz' yz Hyz. simpl. apply bind_mon.
+      * apply thunk_mon. apply IH; try solve [ auto ]. typeclasses eauto.
+      * intros. solve_mon.
+    + clear dependent r'. clear r. clear dependent m'. clear dependent m.
+      intros [ m' r' ] [ m r ] [ Hm Hr ]. solve_mon.
+    + clear dependent f'. clear f. clear dependent m'. clear dependent m.
+      clear dependent r'. clear r.
+      intros [ [ f' m' ] r' ] [ [ f m ] r ] [ [ Hf Hm ] Hr ]. solve_mon.
+Qed.
 
 (* In order to accommodate polymorphic recursion, the type parameter of the
    demand must be allowed to differ from the type parameter of the input. *)

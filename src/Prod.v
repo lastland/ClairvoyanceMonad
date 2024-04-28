@@ -41,6 +41,16 @@ Proof.
   split; etransitivity; eauto.
 Qed.
 
+#[global] Instance PreOrder_LessDefined_prodA {A B}
+  `{LDA : LessDefined A, LDB : LessDefined B, !PreOrder LDA, !PreOrder LDB} :
+  PreOrder (less_defined (a := prodA A B)).
+Proof.
+  destruct PreOrder0. destruct PreOrder1.
+  split.
+  - apply Reflexive_LessDefined_prodA.
+  - apply Transitive_LessDefined_prodA.
+Qed.
+
 #[global]
 Instance Exact_prodA {A B C D}
   `{Exact A C} `{Exact B D} : Exact (A * B) (prodA C D) :=

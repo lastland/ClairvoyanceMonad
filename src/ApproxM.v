@@ -161,3 +161,9 @@ Ltac solve_mon :=
       end
     | [ |- less_defined _ _ ] => constructor
     end).
+
+Lemma tick_mon {a} `{LessDefined a}
+  : forall x y : M a, x `less_defined` y -> (tick >> x) `less_defined` (tick >> y).
+Proof.
+  intros ? ? Hxy. apply bind_mon; solve_mon.
+Qed.
