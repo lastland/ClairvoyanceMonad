@@ -1338,7 +1338,7 @@ Lemma popD_None: forall A B (q : Queue A),
     pop q = None ->
     popD' q None = Tick.MkTick 1 (Thunk (NilA : QueueA B)).
 Proof. sauto. Qed.
-        
+
 Lemma popD'_cost : forall (A B : Type)
                      `{LessDefined B, Exact A B}
                      (q : Queue A) (outD : option (T (prodA B (QueueA B)))),
@@ -1353,7 +1353,6 @@ Lemma popD'_cost : forall (A B : Type)
     debt inD + cost <= 3 + d.
 Proof.
   intros A B LDB EAB q. revert A q B LDB EAB.
-
   induction q; intros B LDB EAB outD HoutD.
   - sfirstorder.
   - simpl in *. destruct f as [ x | x y ].
@@ -1634,7 +1633,7 @@ Section Physicist'sArgument.
           invert_clear H0. invert_clear H0. invert_clear H0.
           mgo_. change (popD q (Some (Thunk (pairA Undefined x0))))
             with (popD' q (Some (Thunk (pairA Undefined x0)))).
-          -- unfold popD. lia.
+          unfold popD. lia.
       + invert_clear 1. invert_clear 1.
         apply (pop_None_inv) in Epop. rewrite Epop. mgo_.
   Qed.
