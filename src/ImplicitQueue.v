@@ -1440,6 +1440,14 @@ Import ListNotations.
 From Clairvoyance Require Import Interfaces.
 Open Scope tick_scope.
 
+Lemma less_defined_forceD (A : Type) `{LessDefined A} (x : T A) (y : A) (z : A)
+  : y `less_defined` z ->
+    x `less_defined` Thunk z ->
+    forceD y x `less_defined` z.
+Proof.
+  intros Hy Hx; inversion Hx; cbn; auto.
+Qed.
+
 Section Physicist'sArgument.
 
   Context (A : Type).
@@ -1701,5 +1709,60 @@ Qed.
         invert_clear 1. simpl. lia.
   Qed.
   #[export] Existing Instance physicist's_argumentD.
+
+  Lemma cd
+    `{LDA : LessDefined A, PreOrder A LDA, LBA : Lub A, @LubLaw A LBA LDA} :
+    @CvDemand op value valueA _ _ _ _.
+  Proof using A.
+    rename H into PA. rename H0 into LLA.
+    assert (Reflexive LDA) as RA by (destruct PA; auto).
+    unfold CvDemand, cv_demand.
+    destruct o.
+    - simpl. destruct x.
+      + invert_clear 1. invert_clear H0. invert_clear 1. unfold emptyA. mgo_.
+      + invert_clear 1. invert_clear 1. mgo_.
+    - simpl. intro x0. refine (match x0 with
+                               | [] => _
+                               | [q] => _
+                               | _ => _
+                               end); try solve [ invert_clear 1; invert_clear 1; mgo_ ].
+      invert_clear 1. invert_clear H0.
+      destruct pushD eqn:EpushD. unfold pushD in EpushD. destruct val. invert_clear 1. mgo_.
+      (* assert (t0 = Thunk x). *)
+      (* { pose proof (@pushD'_sndA _ _ _ q x (forceD (bottom_of (exact (push q x))) x1)). *)
+      (*   rewrite EpushD in H0. simpl in H0. auto. } *)
+      (* subst. *)
+      eapply optimistic_mon; [ eapply pushD_spec | ].
+      + eapply less_defined_forceD; [ apply bottom_is_less | eassumption ].
+      + rewrite EpushD. simpl. (* XXX Failure here. *) reflexivity.
+      + intros. mgo_.
+        * destruct H0. destruct x1.
+          -- simpl in H0. constructor. auto.
+          -- constructor.
+        * destruct H0. rewrite EpushD in H1. simpl in H1. lia.
+    - simpl. intro x.
+      refine (match x with
+              | [] => _
+              | [q] => _
+              | _ => _
+              end); try solve [ invert_clear 1; invert_clear 1; mgo_ ].
+      destruct (pop q) as [ [ ? q' ] | ] eqn:Epop.
+      + invert_clear 1. invert_clear H0. invert_clear 1. mgo_.
+        eapply optimistic_mon.
+        * eapply popD_spec; [ | reflexivity ]. rewrite Epop. solve_approx.
+        * intro x1. refine (match x1 with
+                            | Some (Thunk (pairA _ q0)) => _
+                            | Some Undefined => _
+                            | None => _
+                            end);
+            try solve [ invert_clear 1; repeat (invert_clear H0) ].
+          intros ? [ ? ? ].
+          invert_clear H0. invert_clear H0. invert_clear H0.
+          mgo_. change (popD q (Some (Thunk (pairA Undefined x0))))
+            with (popD' q (Some (Thunk (pairA Undefined x0)))).
+          unfold popD. lia.
+      + invert_clear 1. invert_clear 1.
+        apply (pop_None_inv) in Epop. rewrite Epop. mgo_.
+  Qed.
 
 End Physicist'sArgument.
