@@ -286,6 +286,18 @@ Proof.
     + lia.
 Qed.
 
+Lemma takeD_approx (n : nat) (xs : list nat) outD :
+  outD `is_approx` take n xs ->
+  Tick.val (takeD n xs outD) `is_approx` xs.
+Proof.
+  revert xs outD. induction n; intros; cbn; [solve_approx |].
+  destruct xs; cbn; [solve_approx |].
+  destruct outD; cbn; [solve_approx |].
+  solve_approx. destruct x2; cbn; [| solve_approx].
+  repeat invert_approx.
+  specialize (IHn xs x H1). apply IHn.
+Qed.  
+        
 Lemma takeD_cost (n : nat) (xs : list nat) outD :
   Tick.cost (takeD n xs outD) <= 1 + n.
 Proof.
