@@ -8,6 +8,8 @@ From Equations Require Import Equations.
 Import ListNotations.
 Import Tick.Notations.
 
+(* Insertion Sort definition *)
+
 Fixpoint insert (x : nat) (xs : list nat) : list nat :=
   match xs with 
   | nil => x :: nil
@@ -24,6 +26,8 @@ Fixpoint insertion_sort (xs : list nat) : list nat :=
       let zs := insertion_sort ys in
       insert y zs
   end.
+
+(* Clairvoyant definitions *)
 
 Fixpoint insertA_ (x : nat) (xs : listA nat) : M (listA nat) :=
   tick >>
@@ -43,6 +47,8 @@ Definition insertA (x:T nat) (xs : T(listA nat)) : M (listA nat) :=
   let! xs' := force xs in 
   insertA_ x' xs'.
 
+(* Clairvoyant cost proofs *)
+
 Lemma insertA__mon (v:nat) (xsA xsA' : listA nat) 
   : xsA `less_defined` xsA' ->
     insertA_ v xsA `less_defined` insertA_ v xsA'.
@@ -60,6 +66,8 @@ Proof.
 Qed.
 
 #[global] Hint Resolve insertA_mon : mon.
+
+(* Basic lemmas *)
 
 Lemma insert_length_inv : forall x xs,
     length (insert x xs) = length xs + 1.
@@ -86,13 +94,13 @@ Proof.
   - simpl. destruct (a <=? x);
     do 2 eapply ex_intro; reflexivity.
 Qed.
-  
+
 Module CaseStudyInsert.
 
 Import CaseStudyFolds.
 
 Definition insertA_pessim_ :
-(** The pessimistic specification of [insertA_]. *)
+(** The pessimistic specification of [insertA_]. **)
 forall (xs : list nat) (xsA : (listA nat)) (v : nat),
   xsA `is_approx` xs ->  
   (insertA_ v xsA)
@@ -101,7 +109,7 @@ Proof.
   intros. revert xsA H.
   induction xs; intros.
   - mgo_list.
-  - mgo_list. 
+  - mgo_list.
     destruct (v <=? exact a) eqn:LE.
     + mgo_. subst. inv H4.
       relax_apply IHxs; eauto.
@@ -111,21 +119,21 @@ Proof.
 Qed.
 
 Definition insertA_pessim :
-(** The pessimistic specification of [foldrA]. *)
+(** The pessimistic specification of [foldrA]. **)
 forall (xs : list nat) (xsA : T (listA nat)) (vA : T nat) (v : nat),
   vA `is_approx` v ->
-  xsA `is_approx` xs ->  
+  xsA `is_approx` xs ->
   (insertA vA xsA)
     {{ fun zsA cost => cost <= 2 * length xs + 1 }}.
 Proof.
-  intros xs xsA. 
+  intros xs xsA.
   destruct xsA; unfold insertA; [|mgo_list].
-  intros. 
+  intros.
   mgo_. subst. inv H. inv H0.
   relax_apply insertA_pessim_. eauto.
 Qed.
 
-Definition sizeT {a} ( x : T a) : nat := 
+Definition sizeT {a} ( x : T a) : nat :=
   match x with 
   | Thunk v => 1
   | Undefined => 0
@@ -133,21 +141,12 @@ Definition sizeT {a} ( x : T a) : nat :=
 
 Definition insertSize : T (listA nat) -> nat := sizeAX sizeT 0.
 
-(* I don't know how to give an optimistic specification of insertA.
-   We don't know how many of the list elements need to be evaluated 
-   when we insert. *)
-Theorem insertA_prefix_cost : forall x (xsA : (listA nat)) n,
-    1 <= n <= sizeX' 0 xsA ->
-    (insertA_ x xsA) [[ fun zsA cost => n + 1 = sizeX' 0 zsA /\ cost <= 2 * n ]].
-Proof.
-  intro x.
-  induction xsA; mgo_list.
-Abort.
+(* Demand function for [insertA].
+   The input list needs to be forced only as long as its elements
+   are <= x. *)
 
-(* Demand function for [insertA]. 
-   The input list needs to be forced only as long as its elements are <= x. 
-*)
-Fixpoint insertD (x:nat) (xs: list nat)  (outD : listA nat) : Tick (T (listA nat)) :=
+Fixpoint insertD (x:nat) (xs: list nat)  (outD : listA nat) :
+  Tick (T (listA nat)) :=
   Tick.tick >>
   match xs, outD with 
   | [], ConsA zD zsD =>
@@ -161,7 +160,8 @@ Fixpoint insertD (x:nat) (xs: list nat)  (outD : listA nat) : Tick (T (listA nat
   | _ , _ => bottom (* absurdity case *)
   end.
 
-Fixpoint insertion_sortD (xs: list nat)  (outD : listA nat) : Tick (T (listA nat)) :=
+Fixpoint insertion_sortD (xs: list nat)  (outD : listA nat) :
+  Tick (T (listA nat)) :=
   Tick.tick >>
   match xs with
   | [] => Tick.ret (Thunk NilA)
@@ -173,16 +173,17 @@ Fixpoint insertion_sortD (xs: list nat)  (outD : listA nat) : Tick (T (listA nat
   end.
 
 Lemma insertD__approx (x : nat) (xs : list nat) (outD : _)
-  : outD `is_approx` insert x xs -> Tick.val (insertD x xs outD) `is_approx` xs.
+  : outD `is_approx` insert x xs -> Tick.val (insertD x xs outD)
+  `is_approx` xs.
 Proof.
   revert outD; induction xs; cbn.
   - intros; destruct outD; solve_approx.
-  - autorewrite with exact; intros. 
+  - autorewrite with exact; intros.
     destruct (a <=? x) eqn:LE.
-    + inversion H; subst.    
+    + inversion H; subst.
       inversion H4; subst; cbn. solve_approx.
       specialize (IHxs _ H2). solve_approx.
-    + inversion H; subst. solve_approx. 
+    + inversion H; subst. solve_approx.
 Qed.
 
 Lemma insertD_size x (xs : list nat) outD :
@@ -257,18 +258,20 @@ Proof.
     + pose proof (insert_is_cons a (insertion_sort xs)).
       destruct H0 as [y [ ys Hic] ]. rewrite Hic in H.
       autorewrite with exact in H. inversion H.
-    + pose proof (insertD__approx a (insertion_sort xs) (ConsA x1 x2) H).
+    + pose proof (insertD__approx a (insertion_sort xs)
+      (ConsA x1 x2) H).
       inversion H0; subst.
       * solve_approx.
       * specialize (IHxs x H3). simpl.
         solve_approx.
-Qed.        
+Qed.
 
 Lemma insertion_sortD_cost (xs : list nat)  (outD : listA nat) :
-  Tick.cost (insertion_sortD xs outD) <= (sizeX' 1 outD + 1) * (length xs + 1).
+  Tick.cost (insertion_sortD xs outD) <= (sizeX' 1 outD + 1) *
+  (length xs + 1).
 Proof.
   revert outD. induction xs; simpl.
-  - destruct outD; simpl; try lia. 
+  - destruct outD; simpl; try lia.
   - intros. rewrite insertD_cost'.
     destruct (insertD a (insertion_sort xs) outD)
       as [cost [ x |] ] eqn:Hinsert.
@@ -286,7 +289,8 @@ Definition head_insertion_sortD (xs : list nat) (outD : nat) :
   let+ xsD := thunkD (insertion_sortD xs) list_headD in
   Tick.ret xsD.
 
-Definition take_insertion_sortD (n : nat) (xs : list nat) (outD : listA nat) :
+Definition take_insertion_sortD (n : nat) (xs : list nat)
+  (outD : listA nat) :
   Tick (T (listA nat)) :=
   let res := insertion_sort xs in
   let+ list_takeD := takeD n res outD in
@@ -303,9 +307,10 @@ Proof.
   destruct (insertion_sort xs) eqn:Hsort.
   - simpl. rewrite insertion_sortD_cost; simpl; lia.
   - simpl. rewrite insertion_sortD_cost; simpl; lia.
-Qed.  
+Qed.
 
-Theorem take_insertion_sortD_cost (n : nat) (xs : list nat) (outD : listA nat) :
+Theorem take_insertion_sortD_cost (n : nat) (xs : list nat)
+  (outD : listA nat) :
   Tick.cost (take_insertion_sortD n xs outD) <=
     (n + 1) * (length xs + 2) + 1.
 Proof.
@@ -327,11 +332,12 @@ Qed.
 Lemma insertD_spec x (xs : list nat) (outD : listA nat)
   : outD `is_approx` insert x xs ->
     forall xsD dcost, Tick.MkTick dcost xsD = insertD x xs outD ->
-    insertA (Thunk x) xsD [[ fun out cost => outD `less_defined` out /\ cost <= dcost ]].
+    insertA (Thunk x) xsD [[ fun out cost =>
+    outD `less_defined` out /\ cost <= dcost ]].
 Proof.
   unfold insertA.
   revert outD; induction xs; cbn; intros * Hout *.
-  - unfold Tick.ret. intros h. inversion h. subst. 
+  - unfold Tick.ret. intros h. inversion h. subst.
     mgo_.
 Admitted.
 
