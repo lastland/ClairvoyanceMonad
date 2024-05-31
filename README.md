@@ -6,7 +6,11 @@ Name:    **Story of Your Lazy Function’s Life: A Bidirectional Demand Semantic
 
 The project lives in the `demand-semantics` directory under the home directory of the default `artifact` user. The image already has all dependencies installed; to execute the proof scripts, you just need to run `make`.
 
-The project is known to work with Coq version 8.17.
+The project is known to work with Coq versions 8.16.1 and 8.17.1.
+
+## Checking axioms
+
+To check the axioms of a named proof term, use the command `Print Assumptions [name]`.  When you check the major proof terms, you should see only the axiom `Classical_Prop.classic`, which is the law of excluded middle.
 
 ## QEMU Instructions
 
