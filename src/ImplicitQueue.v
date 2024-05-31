@@ -562,7 +562,13 @@ Definition emptyD (A : Type) (outD : QueueA A) : Tick unit :=
     | _ => bottom
     end.
 
-From Clairvoyance Require Import Core.
+Lemma emptyD_approx (A : Type) `{LessDefined A} (outD : QueueA A) :
+  outD `is_approx` empty -> Tick.val (emptyD outD) `is_approx` tt.
+Proof.
+  invert_clear 1. sauto.
+Qed.
+
+Clairvoyance Require Import Core.
 
 Definition emptyA (A : Type) : M (QueueA A) := tick >> ret NilA.
 
