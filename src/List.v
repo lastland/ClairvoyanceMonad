@@ -64,12 +64,17 @@ Definition head_def {a} (xs : list a) (d : a) : a :=
 
 (* ---------------------- Section 4: Translation ---------------------- *)
 
-(* Definitions needed for the by-hand translation of the examples from Section 2 *)
+(* Definitions needed for the by-hand translation of the examples from
+   Section 2 *)
 
 
 (** * Figure 9.
 
-    Definition of the [foldrA] function used in the translation of [foldr]. *)
+    Definition of the [foldrA] function used in the translation of
+    [foldr].
+
+**)
+
 Fixpoint foldrA' {a b} (n : M b) (c : T a -> T b -> M b) (x' : listA a) : M b :=
   tick >>
   match x' with
@@ -98,10 +103,15 @@ Fixpoint foldr {a b} (v : b) (f : a -> b -> b)  (xs : list a) : b :=
 (* ---------------------- Approximate versions ---------------------- *)
 
 
-(** 
+(**
 
-    The translated code of append and take from the pure version of Fig. 1. *)
-Fixpoint append_ {a : Type} (xs' : listA a) (ys : T (listA a)) : M (listA a) :=
+    The translated code of append and take from the pure version of
+    Fig. 1.
+
+**)
+
+Fixpoint append_ {a : Type} (xs' : listA a) (ys : T (listA a)) :
+  M (listA a) :=
   tick >>
   match xs' with
   | NilA => force ys
@@ -123,7 +133,8 @@ Fixpoint take_ {a : Type} (n : nat) (xs' : listA a) : M (listA a) :=
     ret (ConsA x t)
   end.
 
-Definition takeA {a : Type} (n : nat) (xs : T (listA a)) : M (listA a) :=
+Definition takeA {a : Type} (n : nat) (xs : T (listA a)) :
+  M (listA a) :=
   take_ n $! xs.
 
 Definition pA {a} (n : nat) (xs ys : T (listA a)) : M (listA a) :=
@@ -132,7 +143,8 @@ Definition pA {a} (n : nat) (xs ys : T (listA a)) : M (listA a) :=
   takeA n t.
 
 
-Fixpoint revA_ {a : Type} (xs' : listA a) (ys : T (listA a)) : M (listA a) :=
+Fixpoint revA_ {a : Type} (xs' : listA a) (ys : T (listA a)) :
+  M (listA a) :=
   tick >>
   match xs' with
   | NilA => force ys
@@ -145,7 +157,8 @@ Definition revA {a : Type} (xs : T (listA a)) : M (listA a) :=
   let~ ys := ret NilA in
   (fun xs' => revA_ xs' ys) $! xs.
 
-Fixpoint foldlA_ {a b} (f : T b -> T a -> M b) (v : T b) (xs : listA a) : M b :=
+Fixpoint foldlA_ {a b} (f : T b -> T a -> M b) (v : T b) (xs : listA a)
+  : M b :=
   tick >>
   match xs with
   | NilA => force v
@@ -153,10 +166,12 @@ Fixpoint foldlA_ {a b} (f : T b -> T a -> M b) (v : T b) (xs : listA a) : M b :=
                   foldlA_ f t $! xs
   end.
 
-Definition foldlA {a b} (f : T b -> T a -> M b) (v : T b) (xs : T (listA a)) : M b :=
+Definition foldlA {a b} (f : T b -> T a -> M b) (v : T b)
+  (xs : T (listA a)) : M b :=
   foldlA_ f v $! xs.
 
-Fixpoint foldrA_ {a b} (f : T a -> T b -> M b) (v : T b) (xs : listA a) : M b :=
+Fixpoint foldrA_ {a b} (f : T a -> T b -> M b) (v : T b)
+(xs : listA a) : M b :=
   tick >>
   match xs with
   | NilA => force v
@@ -164,7 +179,8 @@ Fixpoint foldrA_ {a b} (f : T a -> T b -> M b) (v : T b) (xs : listA a) : M b :=
                  f x t
   end.
 
-Definition foldrA {a b} (f : T a -> T b -> M b) (v : T b) (xs : T (listA a)) : M b :=
+Definition foldrA {a b} (f : T a -> T b -> M b) (v : T b)
+  (xs : T (listA a)) : M b :=
   foldrA_ f v $! xs.
 
 (* ----------------------------------------------------- *)
@@ -187,9 +203,10 @@ Definition tailX {a} (xs : T (listA a)) : T (listA a) :=
 
 (* --------------------- demand functions -------------------- *)
 
-(* Demand function for [appendA]. Note that the output demand [outD] is at least
-   either [NilA] or [ConsA] (i.e., it forces the result at least to WHNF).
-   [thunkD] can then be used to lift the output demand type to thunks.  *)
+(* Demand function for [appendA]. Note that the output demand [outD]
+   is at least either [NilA] or [ConsA] (i.e., it forces the result
+   at least to WHNF). [thunkD] can then be used to lift the output
+   demand type to thunks. *)
 Fixpoint appendD {a} (xs ys : list a) (outD : listA a) : Tick (T (listA a) * T (listA a)) :=
   Tick.tick >>
   match xs, outD with
@@ -197,8 +214,8 @@ Fixpoint appendD {a} (xs ys : list a) (outD : listA a) : Tick (T (listA a) * T (
   | x :: xs, ConsA zD zsD =>
     let+ (xsD, ysD) := thunkD (appendD xs ys) zsD in
     Tick.ret (Thunk (ConsA zD xsD), ysD)
-  | _, _ => bottom (* Nonsense: if (xs = _ :: _) then append xs ys = (_ :: _)
-                      so the demand cannot be of the form [] *)
+  | _, _ => bottom (* Nonsense: if (xs = _ :: _) then append xs ys =
+                      (_ :: _) so the demand cannot be of the form [] *)
   end.
 
 Definition ConsD {A} (xs : listA A) : T A * T (listA A) :=
@@ -223,7 +240,8 @@ Fixpoint lsum (xs : list nat) : nat :=
 Definition lsumD (xs : list nat) (outD : nat) : Tick (T (listA nat)) :=
   Tick.MkTick (1 + length xs) (exact xs).
 
-Definition headD {a} (xs : list a) (d : a) (outD : a) : Tick (T (listA a)) :=
+Definition headD {a} (xs : list a) (d : a) (outD : a) :
+  Tick (T (listA a)) :=
   Tick.tick >>
   match xs with
   | [] => Tick.ret (Thunk NilA)
@@ -232,7 +250,8 @@ Definition headD {a} (xs : list a) (d : a) (outD : a) : Tick (T (listA a)) :=
 
 
 (* We force the list until n = 0 or we run out of list *)
-Fixpoint takeD {a} (n : nat) (xs : list a) (outD : listA a) : Tick (T (listA a)) :=
+Fixpoint takeD {a} (n : nat) (xs : list a) (outD : listA a) :
+  Tick (T (listA a)) :=
   Tick.tick >>
   match n, xs, outD with
   | 0, _, _ => Tick.ret Undefined
@@ -243,24 +262,33 @@ Fixpoint takeD {a} (n : nat) (xs : list a) (outD : listA a) : Tick (T (listA a))
   | _, _, _ => bottom (* does not occur *)
   end.
 
-Definition sumOfTakeD (n : nat) (xs : list nat) (outD : nat) : Tick (T (listA nat)) :=
+Definition sumOfTakeD (n : nat) (xs : list nat) (outD : nat) :
+  Tick (T (listA nat)) :=
   let+ take_xsD := lsumD (take n xs) outD in  
   let+ xsD := thunkD (takeD n xs) take_xsD in
   Tick.ret xsD.
 
 (* Demand function for [revA].
-   [revA] has to traverse the list: the input demand is the whole list.
-   (Actually, a finer solution is to force only the spine, not the elements,
-   since they are protected by [T], but, simplicity.) *)
+
+   [revA] has to traverse the list: the input demand is the whole
+   list. A finer solution would be to force only the spine, not
+   the elements, since they are protected by [T], but we do this
+   instead for simplicity. *)
 Definition revD {a} (xs : list a) (outD : listA a) : Tick (T (listA a)) :=
   Tick.MkTick (1 + length xs) (exact xs).
+
+(* ----------------------------------------------------- *)
+
+(** Demand Proofs **)
+
+(* Basic lemmas *)
 
 Lemma lsumD_cost (xs : list nat) outD :
   Tick.cost (lsumD xs outD) = 1 + length xs.
 Proof.
   reflexivity. Qed.
 
-Lemma headD_demand {a} (xs : list a) (d : a) (outD : a) : 
+Lemma headD_demand {a} (xs : list a) (d : a) (outD : a) :
   sizeX 1 (Tick.val (headD xs d outD)) = 1.
 Proof.
   destruct xs; reflexivity.
@@ -286,6 +314,7 @@ Proof.
     + lia.
 Qed.
 
+(* Lazy Take is an approximation of the list *)
 Lemma takeD_approx (n : nat) (xs : list nat) outD :
   outD `is_approx` take n xs ->
   Tick.val (takeD n xs outD) `is_approx` xs.
@@ -296,12 +325,15 @@ Proof.
   solve_approx. destruct x2; cbn; [| solve_approx].
   repeat invert_approx.
   specialize (IHn xs x H1). apply IHn.
-Qed.  
-        
+Qed.
+
+(*--------------- Proofs of cost for lazy Take ---------------*)
+
 Lemma takeD_cost (n : nat) (xs : list nat) outD :
   Tick.cost (takeD n xs outD) <= 1 + n.
 Proof.
-  (* The proof follows the structure of [takeD]. It is a match on three variables [n, xs, outD],
+  (* The proof follows the structure of [takeD]. It is a match
+     on three variables [n, xs, outD],
      which is sugar for nested matches each on one variable:
 <<
     match n with
@@ -310,12 +342,15 @@ Proof.
              | nil => ...
              | y :: ys => match outD with ...
 >>
-     This nesting is reflected in the proof below, each [match] corresponding to [induction]
-     or [destruct]. (The first match works with the [Fixpoint] to ensure termination, which
-     is a hint that [induction] should be used instead of [destruct].) *)
-  (* All 3 arguments of takeD change in the recursive call, so we should
-     generalize the induction hypothesis with [revert xs outD]
-     so we can then specialize it with different arguments (in [rewrite Ihn]). *)
+     This nesting is reflected in the proof below, each [match]
+     corresponding to [induction] or [destruct]. (The first match
+     works with the [Fixpoint] to ensure termination, which is a
+     hint that [induction] should be used instead of [destruct].)
+
+     All 3 arguments of takeD change in the recursive call, so we
+     should generalize the induction hypothesis with [revert xs outD]
+     so we can then specialize it with different arguments
+     (in [rewrite Ihn]). *)
   revert xs outD; induction n; intros xs outD; simpl.
   - reflexivity.
   - destruct xs; simpl.
@@ -328,17 +363,20 @@ Proof.
 Qed.
 
 
-Lemma takeD_cost' : forall {A : Type} (n : nat) (xs : list A) (outD : listA A),
+Lemma takeD_cost' : forall {A : Type} (n : nat)
+    (xs : list A) (outD : listA A),
     Tick.cost (takeD n xs outD) <= sizeX' 1 outD.
 Proof.
   induction n; destruct xs, outD; simpl; try lia;
     destruct x2; simpl; try lia.
-  specialize (IHn xs x). lia.  
+  specialize (IHn xs x). lia.
 Qed.
 
+(* Basic lemmas *)
 
 Lemma length_take_Sn_leq_1Sn (n n0 : nat) (xs : list nat) :
-  length (take n (n0 :: xs)) <= S n -> length (take (S n) (n0 :: xs)) <= 1 + S n.
+  length (take n (n0 :: xs)) <= S n ->
+  length (take (S n) (n0 :: xs)) <= 1 + S n.
 Proof.
   revert xs n0.
   induction n.
@@ -349,7 +387,7 @@ Proof.
       eapply IHn. apply le_S_n. apply H.
 Qed.
 
-Lemma length_take_n_leq_n (n : nat) (xs : list nat) : 
+Lemma length_take_n_leq_n (n : nat) (xs : list nat) :
   length (take n xs) <= 1 + n.
 Proof.
   induction n.
@@ -361,6 +399,8 @@ Proof.
       * lia.
       * apply IHn.
 Qed.
+
+(* Cost of composing Sum and Take *)
 
 Lemma sum_of_take_cost (n : nat) (xs : list nat) outD
   : outD `is_approx` (lsum (take n xs)) ->
@@ -383,9 +423,11 @@ Qed.
 
 (** * Monotonicity *)
 
-(** Making inputs of approximation functions more defined makes the output more defined.
-  These can be used to generalize the demand specifications above to inputs greater than
-  the input demand. *)
+(** Making inputs of approximation functions more defined
+    makes the output more defined. These can be used to
+    generalize the demand specifications above to inputs
+    greater than
+    the input demand. *)
 
 (** Proofs of monotonicity are largely automated by the [solve_mon] tactic from the
   [ApproxM] module. *)

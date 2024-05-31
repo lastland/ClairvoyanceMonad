@@ -4,7 +4,7 @@ From Clairvoyance Require Import Core Approx ApproxM List ListA Misc BankersQueu
 
 Import ListNotations.
 Import Tick.Notations.
- 
+
 
 Set Primitive Projections.
 Set Implicit Arguments.
