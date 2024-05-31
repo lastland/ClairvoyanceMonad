@@ -423,21 +423,20 @@ Qed.
 
 (** * Monotonicity *)
 
-(** Making inputs of approximation functions more defined
-    makes the output more defined. These can be used to
-    generalize the demand specifications above to inputs
-    greater than
-    the input demand. *)
+(** Making inputs of approximation functions more defined makes the
+    output more defined. These can be used to generalize the demand
+    specifications above to inputs greater than the input demand. *)
 
-(** Proofs of monotonicity are largely automated by the [solve_mon] tactic from the
-  [ApproxM] module. *)
+(** Proofs of monotonicity are largely automated by the [solve_mon]
+    tactic from the [ApproxM] module. *)
 
 Lemma appendA__mon {a} (xsA xsA' : listA a) (ysA ysA' : T (listA a))
   : xsA `less_defined` xsA' ->
     ysA `less_defined` ysA' ->
     append_ xsA  ysA `less_defined` append_ xsA' ysA'.
 Proof.
-  intros Hxs; revert ysA ysA'; induction Hxs; intros * Hys; cbn; solve_mon.
+  intros Hxs; revert ysA ysA'; induction Hxs; intros * Hys; cbn;
+  solve_mon.
 Qed.
 
 #[global] Hint Resolve appendA__mon : mon.
@@ -457,7 +456,8 @@ Lemma revA__mon {a} (xsA xsA' : listA a) (ysA ysA' : T (listA a))
     ysA `less_defined` ysA' ->
     revA_ xsA ysA `less_defined` revA_ xsA' ysA'.
 Proof.
-  intros Hxs; revert ysA ysA'; induction Hxs; intros * Hys; cbn; solve_mon.
+  intros Hxs; revert ysA ysA'; induction Hxs; intros * Hys; cbn;
+  solve_mon.
 Qed.
 
 #[global] Hint Resolve revA__mon : mon.
@@ -479,16 +479,20 @@ Qed.
 
 #[global] Hint Resolve tailX_mon : mon.
 
-#[global] Instance Proper_tailX {a} : Proper (less_defined ==> less_defined) (@tailX a).
+#[global] Instance Proper_tailX {a} : Proper (less_defined ==>
+  less_defined) (@tailX a).
 Proof. exact (@tailX_mon a). Qed.
 
 
-(** * append *)
+(** append **)
 
-(** *
+(**
 
-    The partial functional correctness and pure functional correctness theorems
-    and their proofs. *)
+    The partial functional correctness and pure functional correctness
+    theorems and their proofs.
+
+**)
+
 Theorem appendA_correct_partial {a} :
   forall (xs ys : list a) (xsA ysA : T (listA a)),
     xsA `is_approx` xs -> ysA `is_approx` ys ->
@@ -516,7 +520,7 @@ Proof.
 Qed.
 
 
-(** The pessimistic specification for the cost of [appendA]. *)
+(** The pessimistic specification for the cost of [appendA]. **)
 Theorem appendA_cost_interval {a} : forall (xsA ysA : T (listA a)),
     (appendA xsA ysA)
     {{ fun zsA cost => 1 <= cost <= sizeX 1 xsA }}.
@@ -526,24 +530,28 @@ Proof.
   relax_apply IHx. mgo_list.
 Qed.
 
-(** The pessimistic specification for the cost + functional correctness of
-    [appendA] can be obtained using the conjunction rule. *)
+(** The pessimistic specification for the cost + functional
+    correctness of [appendA] can be obtained using the conjunction
+    rule. **)
+
 Theorem appendA_spec {a} :
   forall (xs ys : list a) (xsA ysA : T (listA a)),
     xsA `is_approx` xs ->
     ysA `is_approx` ys ->
-    (appendA xsA ysA) {{ fun zsA cost => zsA `is_approx` append xs ys /\ 1 <= cost <= sizeX 1 xsA }}.
+    (appendA xsA ysA) {{ fun zsA cost => zsA `is_approx`
+    append xs ys /\ 1 <= cost <= sizeX 1 xsA }}.
 Proof.
   intros. apply pessimistic_conj.
   - apply appendA_correct_partial; assumption.
   - apply appendA_cost_interval.
 Qed.
 
-(** [appendA_prefix_cost] as described in the paper. This is the case when the
-    execution of [appendA] does not reach the end of [xsA]. *)
+(** [appendA_prefix_cost] as described in the paper. This is the case
+    when the execution of [appendA] does not reach the end of [xsA]. **)
 Theorem appendA_prefix_cost {a} : forall n (xsA ysA : T (listA a)),
     1 <= n <= sizeX 0 xsA ->
-    (appendA xsA ysA) [[ fun zsA cost => n = sizeX 0 (Thunk zsA) /\ cost <= n ]].
+    (appendA xsA ysA) [[ fun zsA cost => n = sizeX 0 (Thunk zsA) /\
+    cost <= n ]].
 Proof.
   destruct xsA; [| cbn; intros; lia].
   generalize dependent n.
@@ -556,31 +564,35 @@ Proof.
       mgo_list.
 Qed.
 
-(** [appendA_full_cost] as described in the paper. This is the case when the
-    execution of [appendA] does reach the end of [xsA]. *)
-Theorem appendA_full_cost {a} : forall (xs : list a) (xsA := exact xs) (ysA : T (listA a)),
-    is_defined ysA ->
+(** [appendA_full_cost] as described in the paper. This is the case
+    when the execution of [appendA] does reach the end of [xsA]. **)
+
+Theorem appendA_full_cost {a} : forall (xs : list a) (xsA := exact xs)
+    (ysA : T (listA a)), is_defined ysA ->
     (appendA xsA ysA) [[ fun zsA cost =>
-      length xs + sizeX 1 ysA = sizeX 1 (Thunk zsA) /\ cost <= length xs + 1 ]].
+    length xs + sizeX 1 ysA = sizeX 1 (Thunk zsA) /\
+    cost <= length xs + 1 ]].
 Proof.
   induction xs; mgo_list.
   apply optimistic_thunk_go.
   relax_apply IHxs; mgo_list.
 Qed.
 
-(** Demand-based reasoning for appendD *)
+(** Demand-based reasoning for appendD **)
 
 (** These proofs should be automatable, the demand functions can be derived from the
-  pure functions. *)
+  pure functions. **)
 
 Lemma appendD_approx {a} (xs ys : list a) (outD : _)
-  : outD `is_approx` append xs ys -> Tick.val (appendD xs ys outD) `is_approx` (xs, ys).
+  : outD `is_approx` append xs ys -> Tick.val (appendD xs ys outD)
+  `is_approx` (xs, ys).
 Proof.
   revert outD; induction xs; cbn.
   - intros; solve_approx.
   - autorewrite with exact; intros. inversion H; subst.
     inversion H4; subst; cbn.
-    + constructor; cbn; constructor. autorewrite with exact. constructor; auto; constructor.
+    + constructor; cbn; constructor. autorewrite with exact.
+      constructor; auto; constructor.
     + specialize (IHxs _ H2). inversion IHxs; subst.
       destruct (Tick.val _); cbn in *. solve_approx.
 Qed.
@@ -600,8 +612,8 @@ Qed.
 
 Lemma appendD_Thunk_r {a} (xs ys : list a) (outD : _)
   : outD `is_approx` append xs ys ->
-    forall xsA ysA, (xsA, Thunk ysA) = Tick.val (appendD xs ys outD) ->
-    sizeX 0 xsA = length xs.
+    forall xsA ysA, (xsA, Thunk ysA) = Tick.val (appendD xs ys outD)
+    -> sizeX 0 xsA = length xs.
 Proof.
   revert outD; induction xs; cbn; intros outD Hout xsA ysA H.
   - inversion H; reflexivity.
@@ -616,23 +628,27 @@ Qed.
 
 Lemma appendD_spec {a} (xs ys : list a) (outD : listA a)
   : outD `is_approx` append xs ys ->
-    forall xsD ysD dcost, Tick.MkTick dcost (xsD, ysD) = appendD xs ys outD ->
-    appendA xsD ysD [[ fun out cost => outD `less_defined` out /\ cost <= dcost ]].
+    forall xsD ysD dcost, Tick.MkTick dcost (xsD, ysD) =
+    appendD xs ys outD -> appendA xsD ysD [[ fun out cost =>
+    outD `less_defined` out /\ cost <= dcost ]].
 Proof.
   revert outD; induction xs; cbn; intros * Hout *.
   - inversion 1; subst; cbn; mgo_; split; reflexivity.
-  - autorewrite with exact in Hout. inv Hout. destruct thunkD as [ ? [] ] eqn:Eth; cbn.
+  - autorewrite with exact in Hout. inv Hout.
+    destruct thunkD as [ ? [] ] eqn:Eth; cbn.
     inversion 1; subst; cbn. mgo_. inv H3; cbn in Eth; inv Eth.
     + apply optimistic_skip. mgo_. 
-    + apply optimistic_thunk_go. relax_apply IHxs; [ try rewrite H1; eauto .. | cbn; intros * [] ].
-      mgo_. 
+    + apply optimistic_thunk_go. relax_apply IHxs;
+    [ try rewrite H1; eauto .. | cbn; intros * [] ].
+      mgo_.
 Qed.
 
 Lemma appendD_spec' {a} (xs ys : list a) (outD : listA a)
   : outD `is_approx` append xs ys ->
-    forall xsD ysD dcost, Tick.MkTick dcost (xsD, ysD) = appendD xs ys outD ->
-    forall xsD' ysD', xsD `less_defined` xsD' -> ysD `less_defined` ysD' ->
-    appendA xsD' ysD' [[ fun out cost => outD `less_defined` out /\ cost <= dcost ]].
+    forall xsD ysD dcost, Tick.MkTick dcost (xsD, ysD) =
+    appendD xs ys outD -> forall xsD' ysD', xsD `less_defined` xsD'
+    -> ysD `less_defined` ysD' -> appendA xsD' ysD' [[ fun out cost =>
+    outD `less_defined` out /\ cost <= dcost ]].
 Proof.
   intros; eapply optimistic_corelax.
   - eapply appendA_mon; eassumption.
@@ -640,21 +656,23 @@ Proof.
   - eapply appendD_spec; eassumption.
 Qed.
 
-(** ** Cost specs for auxiliary functions *)
+(** Cost specs for auxiliary functions **)
 
-(** [appendA] is our first example where the notion of demand is relevant
-  (so this differs from the spec from our initial paper).
+(** [appendA] is our first example where the notion of demand is
+    relevant
+   (so this differs from the spec from our initial paper).
 
-  1. The caller (user of this theorem) must specify a demand [outD] on the
-     output (first condition: [outD] must be an approximation of the pure
-     output [append xs ys]).
-  2. This corresponds to an input demand [(xsA, ysA)], via the demand
-     function [appendD].
-  3. When that input demand is met (i.e., we use [xsA] and [ysA] as the inputs
-     of [appendA]), we can satisfy the output demand: we can (optimistically)
-     produce an output [out] at least as defined as [outD] in time bounded
-     by some function of the output demand (here it is a function of the input
-     demand, which is itself a function of the output demand). *)
+   1. The caller (user of this theorem) must specify a demand [outD] on
+      the output (first condition: [outD] must be an approximation of
+      the pure output [append xs ys]).
+   2. This corresponds to an input demand [(xsA, ysA)], via the demand
+      function [appendD].
+   3. When that input demand is met (i.e., we use [xsA] and [ysA] as
+      the inputs of [appendA]), we can satisfy the output demand: we
+      can (optimistically) produce an output [out] at least as defined
+      as [outD] in time bounded by some function of the output demand
+      (here it is a function of the input demand, which is itself a
+      function of the output demand). **)
 
 Lemma appendD_cost {a} (xs ys : list a) outD
   : outD `is_approx` append xs ys ->
@@ -673,24 +691,29 @@ Lemma appendA_cost {a} (xs ys : list a) outD
       outD `less_defined` out /\ cost <= sizeX 1 xsA ]].
 Proof.
   intros. destruct appendD as [ ? [] ] eqn:ED; inv H0.
-  relax; [ eapply appendD_spec; eassumption + rewrite ED; reflexivity | cbn; intros * [] ].
+  relax; [ eapply appendD_spec; eassumption + rewrite ED; reflexivity |
+  cbn; intros * [] ].
   split; [ auto | ]. rewrite H1.
-  replace cost with (Tick.cost (appendD xs ys outD)) by (rewrite ED; reflexivity).
-  apply Nat.eq_le_incl, appendD_cost; [ assumption | rewrite ED; reflexivity ].
+  replace cost with (Tick.cost (appendD xs ys outD)) by
+  (rewrite ED; reflexivity).
+  apply Nat.eq_le_incl, appendD_cost; [ assumption | rewrite ED;
+  reflexivity ].
 Qed.
 
-(** We can then generalize that theorem: the postcondition can be satisfied
-  as long as the input [(xsA',ysA')] is at least as defined as the input demand
-  [(xsA,ysA)]. This is a straightforward consequence of [appendA]'s monotonicity
-  proved earlier. *)
+(** We can then generalize that theorem: the postcondition can be
+    satisfied as long as the input [(xsA',ysA')] is at least as
+    defined as the input demand [(xsA,ysA)]. This is a straightforward
+    consequence of [appendA]'s monotonicity proved earlier. **)
 
-(** Relaxed cost specification *)
+(** Relaxed cost specification **)
+
 Lemma appendA_cost' {a} (xs ys : list a) outD
   : outD `is_approx` append xs ys ->
     forall xsA ysA, (xsA, ysA) = Tick.val (appendD xs ys outD) ->
-    forall xsA' ysA', xsA `less_defined` xsA' -> ysA `less_defined` ysA' ->
+    forall xsA' ysA', xsA `less_defined` xsA' ->
+    ysA `less_defined` ysA' ->
     appendA xsA' ysA' [[ fun out cost =>
-      outD `less_defined` out /\ cost <= sizeX 1 xsA ]].
+    outD `less_defined` out /\ cost <= sizeX 1 xsA ]].
 Proof.
   intros. eapply optimistic_corelax.
   - eapply appendA_mon; eassumption.
@@ -699,9 +722,9 @@ Proof.
 Qed.
 
 
-(** * rev *)
+(** rev **)
 
-(** The pessimistic specification about [revA]. *)
+(** The pessimistic specification about [revA]. **)
 
 Lemma revA_pessim_ {a} :
 forall (xs : list a) (xsA : listA a) (ysA : T (listA a)),
@@ -733,14 +756,16 @@ Proof.
 Qed.
 
 
-Lemma revD_cost {a} (xs : list a) outD : Tick.cost (revD xs outD) = 1 + length xs.
+Lemma revD_cost {a} (xs : list a) outD : Tick.cost (revD xs outD) =
+  1 + length xs.
 Proof. reflexivity. Qed.
 
 Lemma revA__cost {a} (xs ys : list a)
   : revA_ (exact xs) (exact ys) [[ fun out cost =>
       out = exact (rev_ xs ys) /\ cost = 1 + length xs ]].
 Proof.
-  revert ys; induction xs; [ rewrite exact_list_unfold_nil | rewrite exact_list_unfold_cons ];
+  revert ys; induction xs; [ rewrite exact_list_unfold_nil |
+  rewrite exact_list_unfold_cons ];
     intros; mgo'.
   apply optimistic_thunk_go; mgo'.
   specialize (IHxs (a0 :: ys)). unfold exact at 2, Exact_T in IHxs.
@@ -752,33 +777,37 @@ Lemma revA_cost {a} (xs : list a)
   : revA (a := a) (exact xs) [[ fun out cost =>
       out = exact (rev xs) /\ cost = 1 + length xs ]].
 Proof.
-  unfold revA; mgo'. apply optimistic_thunk_go; mgo'. relax_apply (revA__cost xs nil).
+  unfold revA; mgo'. apply optimistic_thunk_go; mgo'.
+  relax_apply (revA__cost xs nil).
 Qed.
 
-(* This proof for [revD] is backwards (we prove [revA_cost] first, whereas for other
-   functions we use the [*D_spec] lemma to prove [*A_cost]), because we took
-   a shortcut in the definition of [revD]. *)
+(* This proof for [revD] is backwards (we prove [revA_cost] first,
+   whereas for other functions we use the [*D_spec] lemma to prove
+   [*A_cost]), because we took a shortcut in the definition of [revD]. *)
 Lemma revD_spec {a} (xs : list a) (outD : listA a)
   : outD `is_approx` rev xs ->
     forall xsD dcost, Tick.MkTick dcost xsD = revD xs outD ->
-    revA xsD [[ fun out cost => outD `less_defined` out /\ cost <= dcost ]].
+    revA xsD [[ fun out cost => outD `less_defined` out /\ cost <=
+    dcost ]].
 Proof.
-  intros Hout *; inversion 1; subst. relax; [ apply revA_cost | cbn; intros * []; subst ].
+  intros Hout *; inversion 1; subst. relax; [ apply revA_cost |
+  cbn; intros * []; subst ].
   split; [ assumption | reflexivity ].
 Qed.
 
 
-(** * Left and right folds. *)
+(** Left and right folds. **)
 
 Module CaseStudyFolds.
 
 Definition foldl_pessim {a b bA} `{LessDefined bA} `{Exact b bA} :
-(** The pessimistic specification of [foldlA]. *)
+(** The pessimistic specification of [foldlA]. **)
 forall f (xs : list a) (xsA : T (listA a)) (v : b) (vA : T bA),
-  (forall x y, (f x y) {{ fun bA cost => exists b, bA `is_approx` b /\ cost = 1 }}) ->
-  xsA `is_approx` xs ->  vA `is_approx` v ->
+  (forall x y, (f x y) {{ fun bA cost => exists b, bA `is_approx` b /\
+  cost = 1 }}) ->  xsA `is_approx` xs ->  vA `is_approx` v ->
   (foldlA f vA xsA)
-    {{ fun zsA cost => cost >= length xs + 1 /\ cost <= 2 * length xs + 1 }}.
+    {{ fun zsA cost => cost >= length xs + 1 /\ cost <= 2 * length xs
+    + 1 }}.
 Proof.
   intros f xs xsA v vA Hf Hxs. revert v vA.
   unfold foldlA. inv Hxs.
@@ -795,8 +824,9 @@ Proof.
       cbn. lia.
 Qed.
 
-Definition foldr_pessim {a b bA} `{LessDefined bA} `{LessDefined (T bA)} `{Exact b bA} :
-(** The pessimistic specification of [foldrA]. *)
+Definition foldr_pessim {a b bA} `{LessDefined bA}
+  `{LessDefined (T bA)} `{Exact b bA} :
+(** The pessimistic specification of [foldrA]. **)
 forall f (xs : list a) (xsA : T (listA a)) (v : b) (vA : T bA),
   (forall x y, (f x y) {{ fun bA cost => cost = 1 }}) ->
   xsA `is_approx` xs ->  vA `is_approx` v ->
@@ -813,7 +843,8 @@ Proof.
   - relax; [ apply Hf | cbn ]. mgo idtac. inv H6; lia.
 Qed.
 
-Definition foldr_optim1 {a b bA} `{LessDefined bA} `{LessDefined (T bA)} `{Exact b bA} :
+Definition foldr_optim1 {a b bA} `{LessDefined bA}
+  `{LessDefined (T bA)} `{Exact b bA} :
 forall f (xs : list a) (xsA : T (listA a)) (v : b) (vA : T bA) n,
   1 <= n -> n < sizeX 0 xsA ->
   xsA `is_approx` xs ->  vA `is_approx` v ->
@@ -831,8 +862,9 @@ Proof.
     cbn; intros. relax_apply H6. cbn; intros. lia.
 Qed.
 
-Definition foldr_optim2 {a b bA} `{LessDefined bA} `{LessDefined (T bA)} `{Exact b bA}:
-(** And a special cost exists when [xs] is fully evaluated. *)
+Definition foldr_optim2 {a b bA} `{LessDefined bA}
+  `{LessDefined (T bA)} `{Exact b bA}:
+(** And a special cost exists when [xs] is fully evaluated. **)
 forall f (xs : list a) (xsA : T (listA a)) (v : b) (vA : T bA),
   xsA = exact xs ->  vA `is_approx` v -> is_defined vA ->
   (forall x y, (f x y) [[ fun bA cost => cost = 1 ]]) ->
@@ -848,32 +880,39 @@ Qed.
 End CaseStudyFolds.
 
 
-(* Partial function: we assume that both arguments approximate the same list *)
+(* Partial function: we assume that both arguments approximate the
+   same list *)
+
 Fixpoint lub_listA {a} (xs ys : listA a) : listA a :=
   match xs, ys with
   | NilA, NilA => NilA
-  | ConsA x xs, ConsA y ys => ConsA (lub_T (fun r _ => r) x y) (lub_T lub_listA xs ys)
-  | _, _ => NilA  (* silly case *)
+  | ConsA x xs, ConsA y ys => ConsA (lub_T (fun r _ => r) x y)
+    (lub_T lub_listA xs ys)
+  | _, _ => NilA  (* nonsense case *)
   end.
 
 #[global] Instance Lub_listA {a} : Lub (listA a) := lub_listA.
 
 #[global] Instance LubLaw_listA {a} : LubLaw (listA a).
+
 Proof.
   constructor.
-  - intros x y z Hx; revert y; induction Hx; intros ?; inversion 1; subst; cbn; constructor; auto.
+  - intros x y z Hx; revert y; induction Hx; intros ?; inversion 1;
+    subst; cbn; constructor; auto.
     1: inversion H; subst; inversion H4; subst; try constructor; auto.
     1: inversion H; subst; inversion H5; subst; try constructor; auto.
     inversion H6; constructor; auto.
-  - intros x y [z [ Hx Hy] ]; revert y Hy; induction Hx; intros ?; inversion 1; subst; cbn;
-      constructor; auto.
+  - intros x y [z [ Hx Hy] ]; revert y Hy; induction Hx; intros ?;
+    inversion 1; subst; cbn; constructor; auto.
     1: inversion H; inversion H3; constructor; reflexivity + auto.
     1: inversion H; inversion H4; constructor; reflexivity.
     inversion H5; subst; constructor; [ reflexivity | auto ].
-  - intros x y [z [Hx Hy] ]; revert x Hx; induction Hy; intros ?; inversion 1; subst; cbn;
-      constructor; auto.
-    1: inversion H; inversion H3; subst; invert_approx; constructor; reflexivity + auto; inversion H7; invert_approx; reflexivity.
-    1: inversion H; inversion H4; subst; invert_approx; constructor; reflexivity + auto; inversion H8; invert_approx; reflexivity.
+  - intros x y [z [Hx Hy] ]; revert x Hx; induction Hy; intros ?;
+    inversion 1; subst; cbn; constructor; auto.
+    1: inversion H; inversion H3; subst; invert_approx; constructor;
+    reflexivity + auto; inversion H7; invert_approx; reflexivity.
+    1: inversion H; inversion H4; subst; invert_approx; constructor;
+    reflexivity + auto; inversion H8; invert_approx; reflexivity.
     inversion H5; subst; constructor; [ reflexivity | auto ].
 Qed.
 
@@ -881,5 +920,6 @@ Lemma less_defined_tail_cons {a} (l : T (listA a)) x xs
   : l `less_defined` Thunk (ConsA x xs) ->
     l `less_defined` Thunk (ConsA x (tailX l)).
 Proof.
-  inversion 1; subst; constructor. inversion H2; constructor; cbn; [ auto | reflexivity ].
+  inversion 1; subst; constructor. inversion H2; constructor; cbn;
+  [ auto | reflexivity ].
 Qed.
