@@ -6,6 +6,10 @@ Name:    **Story of Your Lazy Function’s Life: A Bidirectional Demand Semantic
 
 ### Major proof terms
 
+- Insertion sort (`InsertionSort.v`):
+  + Functional correctness: `insertion_sortD__approx`
+  + Cost: `insertion_sortD_cost`
+  + Cost when composed with `take`: `take_insertion_sortD_cost`
 - Banker's queue:
   + Functional correctness (`BankersQueue.v`):
     * `mkQueueD_approx`
@@ -38,7 +42,7 @@ The project is known to work with Coq versions 8.16.1 and 8.17.1.  You also need
 - [Equations](https://github.com/mattam82/Coq-Equations)
 - [CoqHammer](https://github.com/lukaszcz/coqhammer) (only the `sauto` component is needed)
 
-Both of these plugins are part of the [Coq platform](https://github.com/coq/platform).
+Both of these components are part of the [Coq platform](https://github.com/coq/platform).
 
 ### Checking axioms
 
