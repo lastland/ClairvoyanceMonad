@@ -2,13 +2,45 @@
 
 Name:    **Story of Your Lazy Function’s Life: A Bidirectional Demand Semantics for Mechanized Cost Analysis of Lazy Programs**
 
+## Project overview
+
+### Major proof terms
+
+- Banker's queue:
+  + Functional correctness (`BankersQueue.v`):
+    * `mkQueueD_approx`
+    * `pushD_approx`
+    * `popD_approx`
+  + Equivalence with clairvoyance semantics (`BankersQueue.v`):
+    * `mkQueueD_spec`
+    * `pushD_spec`
+    * `popD_spec`
+  + Amortized cost (`QueueInterface.v`): `amortized_cost`
+- Implicit queue (`ImplicitQueue.v`):
+  + Functional correctness:
+    * `emptyD_approx`
+    * `pushD_apporox`
+    * `popD_approx`
+  + Equivalence with clairvoyance semantics:
+    * `emptyD_spec`
+    * `pushD_spec`
+    * `popD_spec`
+  + Amortized cost: `amortized_cost`
+
 ## Artifact Instructions
 
 The project lives in the `demand-semantics` directory under the home directory of the default `artifact` user. The image already has all dependencies installed; to execute the proof scripts, you just need to run `make`.
 
-The project is known to work with Coq versions 8.16.1 and 8.17.1.
+### Dependencies
 
-## Checking axioms
+The project is known to work with Coq versions 8.16.1 and 8.17.1.  You also need the following Coq libraries and plugins:
+
+- [Equations](https://github.com/mattam82/Coq-Equations)
+- [CoqHammer](https://github.com/lukaszcz/coqhammer) (only the `sauto` component is needed)
+
+Both of these plugins are part of the [Coq platform](https://github.com/coq/platform).
+
+### Checking axioms
 
 To check the axioms of a named proof term, use the command `Print Assumptions [name]`.  When you check the major proof terms, you should see only the axiom `Classical_Prop.classic`, which is the law of excluded middle.
 
