@@ -568,7 +568,7 @@ Proof.
   invert_clear 1. sauto.
 Qed.
 
-Clairvoyance Require Import Core.
+From Clairvoyance Require Import Core.
 
 Definition emptyA (A : Type) : M (QueueA A) := tick >> ret NilA.
 

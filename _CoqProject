@@ -1,39 +1,21 @@
 -Q src Clairvoyance
 
 src/Misc.v
-src/Partial.v
 src/Core.v
 src/Approx.v
 src/ApproxM.v
 src/FormalTranslation.v
-src/FingerTree.v
-src/FingerTreeM.v
-src/Fix.v
 src/ListA.v
 src/List.v
 src/Prod.v
 src/Option.v
-src/SelectionSort.v
-src/MergeSort.v
 src/InsertionSort.v
 src/BankersQueue.v
-src/RealtimeBankersQueue.v
-src/Eval.v
 src/Interfaces.v
 src/QueueInterface.v
-src/Launchbury.v
-src/Fuel.v
-src/LazyT.v
 src/Cost.v
-src/QueueTrace.v
-src/FingerTreeInterface.v
 src/Tick.v
 src/TickCost.v
-src/TwoListQueue.v
 src/Relations.v
 src/Setoid.v
-src/DemandLogic.v
-src/BinomialHeap.v
-src/Demand2.v
-# src/DemandSemantics.v
 src/ImplicitQueue.v
