@@ -10,7 +10,7 @@ The project lives in the `demand-semantics` directory under the home directory o
 
 The project is known to work with Rocq (AKA Coq) versions 8.16.1, 8.17.1, and 8.18.0. You also need the following Rocq libraries and plugins:
 
-- [Equations](https://github.com/mattam82/Rocq-Equations)
+- [Equations](https://github.com/mattam82/Coq-Equations)
 - [CoqHammer](https://github.com/lukaszcz/coqhammer) (only the `sauto` component is needed)
 
 Both of these components are part of the [Coq platform](https://github.com/coq/platform).
