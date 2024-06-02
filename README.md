@@ -2,7 +2,14 @@
 
 Name:    **Story of Your Lazy Function’s Life: A Bidirectional Demand Semantics for Mechanized Cost Analysis of Lazy Programs**
 
-## Project overview
+## Project overview and relation to the paper
+
+- Approximation data types are defined in
+- General notions relating to approximations are defined in `Approx.v`.
+  + The typeclass `LessDefined` represents the lattice of approximations itself: an instance `LessDefined A` defines the approximation relation, called `less_defined` in Coq, for the type `A`.  The paper states facts about this relation (e.g., transitivity) as lemmas; however, in Coq, these lemmas must be proven for each instance.
+  + The `Exact` typeclass shows how to embed a type into its type of approximations (via the `exact` method).  The `ExactMaximal` typeclass is a law for `Exact`: it says that an embedded value should be maximal with respect to `less_defined`.  We *define* the "approximates" relation `is_approx` (denoted ≺ in the paper) by saying that a value `xD` approximates `x` if `xD` is less defined than `exact x`; i.e., `xD` lies below `exact x` in the lattice of approximations.
+  +
+- The clairvoyance semantics of Hackett and Hutchinson are formalized in `Core.v`.  The clairvoyance monad itself is called `M`
 
 ### Major proof terms
 
@@ -33,7 +40,7 @@ Name:    **Story of Your Lazy Function’s Life: A Bidirectional Demand Semantic
 
 ## Artifact Instructions
 
-The project lives in the `demand-semantics` directory under the home directory of the default `artifact` user. The image already has all dependencies installed; to execute the proof scripts, you just need to run `make`.
+The project lives in the `demand-semantics` directory under the home directory of the default `artifact` user.  (Whenever a password is required, enter `password`).  The image already has all dependencies installed; to execute the proof scripts, you just need to run `make`.
 
 ### Dependencies
 
