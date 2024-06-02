@@ -8,12 +8,12 @@ The project lives in the `demand-semantics` directory under the home directory o
 
 ### Dependencies
 
-The project is known to work with Rocq versions 8.16.1 and 8.17.1. You also need the following Rocq libraries and plugins:
+The project is known to work with Rocq (AKA Coq) versions 8.16.1, 8.17.1, and 8.18.0. You also need the following Rocq libraries and plugins:
 
 - [Equations](https://github.com/mattam82/Rocq-Equations)
-- [RocqHammer](https://github.com/lukaszcz/coqhammer) (only the `sauto` component is needed)
+- [CoqHammer](https://github.com/lukaszcz/coqhammer) (only the `sauto` component is needed)
 
-Both of these components are part of the [Rocq platform](https://github.com/coq/platform).
+Both of these components are part of the [Coq platform](https://github.com/coq/platform).
 
 ### Checking axioms
 
@@ -72,7 +72,7 @@ The correctness of the reverse physicist's method is proved in `Interfaces.v`.  
 - Define an instance of `Potential`; i.e., a function `potential` that computes the potential of a demand.
 - Define an instance of `WellDefinedPotential`.  This consists of two technical sub-lemmas: that `lub` is *sub-additive* with respect to `potential`—i.e., the potential of `lub x y` is no greater than the sum of the potentials of `x` and `y`—and that the potential of any bottom element ⊥ₐ is zero.
 - Define an instance of `Physicist'sArgumentD`. This is theorem showing that the premises of the reverse physicist's method hold; i.e., that the demand-semantics cost of executing an operation is always less than the difference in potential plus the amortized cost.
-- Apply `physicist's_method`, proving that the cost of executing any trace is always less than its total budget.
+- Apply `physicist's_method`, proving that the cost of executing any trace (of `op`s) is always less than its total budget.
 
 The banker's queue theory is developed in `BankersQueue.v` and `QueueInterfaces.v`; the implicit queue theory is developed in `ImplicitQueue.v`.  Both developments apply the reverse physicist's argument via the above procedure.
 
