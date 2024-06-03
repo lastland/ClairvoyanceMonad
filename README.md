@@ -57,25 +57,47 @@ In `Demand2.v`, the type `Correct` essentially represents the statements of Theo
 
 ### The banker's queue and the reverse physicist's method
 
-The correctness of the reverse physicist's method is proved in `Interfaces.v`.  In order to apply it to a data structure `T`, the following steps are necessary.
+The correctness of the reverse physicist's method is proved in `Interfaces.v`.
+In order to apply it to a data structure `T`, the following steps are necessary.
 
 - Define a type `op` that represents the algebra of operations on `T`.
-- Define an instance of `Eval`; i.e., a function `eval` that applies an `op` to a list of arguments.
-- Define an instance of `Budget`; i.e., a function that computes the *amortized* cost of evaluating a given `op` on a given argument list.
-- Define an instance of `Exec`; i.e., a function `exec` that applies an `op` to a list of arguments *in the clairvoyance monad*.
-- Define an instance of `WellFormed`; i.e., a predicate `well_formed` that indicates whether a given element of `T` is valid. This is necessary in case `T` upholds some invariant that its type does not capture.
-- Define an instance of `WfEval`; i.e., a lemma demonstrating that `eval` preserves the `well_formed` property.
+- Define an instance of `Eval`; i.e., a function `eval` that applies an `op` to
+  a list of arguments.
+- Define an instance of `Budget`; i.e., a function that computes the *amortized*
+  cost of evaluating a given `op` on a given argument list.
+- Define an instance of `Exec`; i.e., a function `exec` that applies an `op` to
+  a list of arguments *in the clairvoyance monad*.
+- Define an instance of `WellFormed`; i.e., a predicate `well_formed` that
+  indicates whether a given element of `T` is valid. This is necessary in case
+  `T` upholds some invariant that its type does not capture.
+- Define an instance of `WfEval`; i.e., a lemma demonstrating that `eval`
+  preserves the `well_formed` property.
 - Define an instance of `IsApproxAlgebra`.
-- Define an instance of `WellDefinedExec`; i.e., a lemma showing that `exec` is monotonic with respect to `less_defined`.
-- Define an instance of `Demand`; i.e., a function `demand` that, given an `op`, a list of arguments, and an output demand, computes an input demand.
-- Define an instance of `PureDemand`; i.e., a lemma showing that `demand` is functionally correct with respect to `eval`.
-- Define an instance of `CvDemand`; i.e., a lemma showing that `demand` is cost-equivalent to `exec`.
-- Define an instance of `Potential`; i.e., a function `potential` that computes the potential of a demand.
-- Define an instance of `WellDefinedPotential`.  This consists of two technical sub-lemmas: that `lub` is *sub-additive* with respect to `potential`—i.e., the potential of `lub x y` is no greater than the sum of the potentials of `x` and `y`—and that the potential of any bottom element ⊥ₐ is zero.
-- Define an instance of `Physicist'sArgumentD`. This is theorem showing that the premises of the reverse physicist's method hold; i.e., that the demand-semantics cost of executing an operation is always less than the difference in potential plus the amortized cost.
-- Apply `physicist's_method`, proving that the cost of executing any trace (of `op`s) is always less than its total budget.
+- Define an instance of `WellDefinedExec`; i.e., a lemma showing that `exec` is
+  monotonic with respect to `less_defined`.
+- Define an instance of `Demand`; i.e., a function `demand` that, given an `op`,
+  a list of arguments, and an output demand, computes an input demand.
+- Define an instance of `PureDemand`; i.e., a lemma showing that `demand` is
+  functionally correct with respect to `eval`.
+- Define an instance of `CvDemand`; i.e., a lemma showing that `demand` is
+  cost-equivalent to `exec`.
+- Define an instance of `Potential`; i.e., a function `potential` that computes
+  the potential of a demand.
+- Define an instance of `WellDefinedPotential`. This consists of two technical
+  sub-lemmas: that `lub` is *sub-additive* with respect to `potential`—i.e., the
+  potential of `lub x y` is no greater than the sum of the potentials of `x` and
+  `y`—and that the potential of any bottom element ⊥ₐ is zero.
+- Define an instance of `Physicist'sArgumentD`. This is theorem showing that the
+  premises of the reverse physicist's method hold; i.e., that the
+  demand-semantics cost of executing an operation is always less than the
+  difference in potential plus the amortized cost.
+- Apply `physicist's_method`, proving that the cost of executing any trace (of
+  `op`s) is always less than its total budget.
 
-The banker's queue theory is developed in `BankersQueue.v` and `QueueInterfaces.v`; the implicit queue theory is developed in `ImplicitQueue.v`.  Both developments apply the reverse physicist's argument via the above procedure.
+The banker's queue theory is developed in `BankersQueue.v` and
+`QueueInterfaces.v`; the implicit queue theory is developed in
+`ImplicitQueue.v`. Both developments apply the reverse physicist's argument via
+the above procedure.
 
 ## Major proof terms
 
@@ -98,7 +120,7 @@ The banker's queue theory is developed in `BankersQueue.v` and `QueueInterfaces.
     * `mkQueueD_spec`
     * `pushD_spec`
     * `popD_spec`
-  + Amortized cost (`QueueInterface.v`): `amortized_cost`
+  + Amortized cost and persistence (`QueueInterface.v`): `amortized_cost`
 - Implicit queue (`ImplicitQueue.v`):
   + Functional correctness:
     * `emptyD_approx`
@@ -108,7 +130,7 @@ The banker's queue theory is developed in `BankersQueue.v` and `QueueInterfaces.
     * `emptyD_spec`
     * `pushD_spec`
     * `popD_spec`
-  + Amortized cost: `amortized_cost`
+  + Amortized cost and persistence: `amortized_cost`
 
 ## QEMU Instructions
 
