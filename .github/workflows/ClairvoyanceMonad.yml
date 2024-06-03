@@ -1,4 +1,4 @@
-name: ClairvoyanceMonad
+name: LazyAnalysis
 
 on: [push, pull_request]
 
@@ -9,6 +9,8 @@ jobs:
     strategy:
       matrix:
         image:
+          - 'coqorg/coq:8.19'
+          - 'coqorg/coq:8.18'
           - 'coqorg/coq:8.17'
           - 'coqorg/coq:8.16'
       fail-fast: false
