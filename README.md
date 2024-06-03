@@ -4,7 +4,10 @@ Name:    **Story of Your Lazy Function’s Life: A Bidirectional Demand Semantic
 
 ## Artifact Instructions
 
-The project lives in the `demand-semantics` directory under the home directory of the default `artifact` user. (Whenever a password is required, enter `password`.) The image already has all dependencies installed; to execute the proof scripts, you just need to run `make`.
+If you using the VM image. The project lives in the `demand-semantics` directory
+under the home directory of the default `artifact` user. (Whenever a password is
+required, enter `password`.) The image already has all dependencies installed;
+to execute the proof scripts, you just need to run `make`.
 
 ### Dependencies
 
