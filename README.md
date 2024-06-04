@@ -51,6 +51,9 @@ The shallowly-embedded Rocq demand semantics discussed thus far is much broader 
 Monadic clairvoyance semantics are formalized in `Core.v`. The clairvoyance monad itself is called `M`.  Pessimistic specifications are given by `pessimistic` (also notated `u {{ r }}`, and optimistic specifications are given by `optimistic` (also notated `u [[ r ]]`).
 
 In `Demand2.v`:
+- the syntax is given by the inductive types [ty] and [tm].
+- the denotation of types is in an algebraic structure called `ApproxAlgebra`, and the denotation function is `den_ty`.
+- the denotation functions of terms are `den_lens` for the demand semantics and `den_cv` for the clairvoyant semantics.
 - the type `Good` gives the statements of Theorems 3.4, 3.5, 3.6; the proof is provided by `Good_den`.
 - the type `Correct` gives the statements of Theorems 3.7, 3.8, and 3.8; the proof is provided by `Correct_den`.
 
