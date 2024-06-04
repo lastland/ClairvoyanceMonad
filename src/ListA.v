@@ -267,11 +267,6 @@ Proof.
     + inversion H8; subst; constructor; [ reflexivity | ]. auto.
 Qed.
 
-Lemma sizeX1_length {a} (x : T (listA a)) (y : list a)
-  : x `is_approx` y -> sizeX 1 x <= 1 + length y.
-Proof.
-Admitted.
-
 #[global] Instance BottomOf_listA {a : Type} {H : BottomOf a} : BottomOf (listA a) :=
   fun xs => match xs with NilA => NilA | ConsA x xs => ConsA Undefined Undefined end.
 
@@ -294,7 +289,9 @@ Proof.
 Defined.
 
 #[global] Instance Setoid_list {a} {_ : Setoid a} : Setoid (list a).
-Admitted.
+Proof.
+  econstructor. try typeclasses eauto.
+Defined.
 
 Parameter TODO : forall {P : Type}, P.
 
