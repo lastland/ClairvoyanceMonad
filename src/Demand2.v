@@ -5,6 +5,25 @@
     theorems of Section 3, whose statements appear formally in the definitions of
     [Good] and [Correct]. *)
 
+(** Main attractions in this file (= commented parts):
+    - Syntax: [Inductive ty], [Inductive tm]
+    - Denotation of types:
+       + [IsApproxAlgebra], [is_approx]
+       + [den_ty] (every type is an approximation algebra)
+       + [Lemma_3_1], [Lemma_3_2], [Lemma_3_3],
+         making explicit those lemmas as they are stated in our paper,
+         to compensate for some differences between the paper and this formalization.
+    - Denotation of terms:
+       + [Lens]
+       + [Good]
+       + [Correct]
+       + Denotation of variables and associated proofs,
+         to illustrate the structure that other term constructs also follow:
+         [id_fn], [id_dem], [id_lens], [id_cv], [Good_id], [Correct_id]
+       + [den_lens], [den_cv] (the denotation functions for terms)
+       + [Good_den], [Correct_den] (theorems of Section 3).
+ *)
+
 From Coq Require Import Arith Setoid Morphisms Lia.
 From Equations Require Import Equations.
 From Clairvoyance Require Import Core Approx ListA Misc Tick.
@@ -83,6 +102,8 @@ Class IsApproxAlgebra (t tA : Type) : Type :=
    [exact] with [is_approx] in the definition of [IsApproxAlgebra].
    We believe that would enable us to extend the language formalized here with
    higher-order and general recursive functions. *)
+(* The properties in Lemma 3.1, 3.2, 3.3 (which involve [is_approx]) are stated
+   here in [Lemma_3_1], [Lemma_3_2], [Lemma_3_3]. *)
 Definition is_approx {t tA} `{IsApproxAlgebra t tA} : tA -> t -> Prop :=
   fun x y => x `less_defined` exact y.
 Infix "`is_approx`" := is_approx.
@@ -250,7 +271,7 @@ Proof.
   intros; apply bottom_is_least. auto.
 Qed.
 
-(** * Demand semantics *)
+(** * Denotation of terms *)
 
 (* The demand semantics is the pair of an evaluation function ("eval" brackets in the paper)
    and a demand function ("dem" brackets in the paper.) *)
@@ -481,6 +502,9 @@ Record Good `{IsAA G G', IsAA A A'} (l : Lens G G' A A') : Prop := MkGood
    double brackets "_ [[ _ ]]" denote existential quantification.
    - [cv g {{ prop }} = forall a n, (a, n) \in cv g -> prop a n]
    - [cv g [[ prop ]] = exists a n, (a, n) \in cv g /\ prop a n] *)
+(* This relation is called "correctness" in the sense that we prove the "correctness" of the demand semantics
+   relative to the clairvoyant semantics as a pre-established semantics for laziness (which was itself
+   "proved correct" relative the natural operational semantics of Launchbury in prior work). *)
 Record Correct `{IsAA G G', IsAA A A'} (l : Lens G G' A A') (cv : G' -> M A') : Prop := MkCorrect
   { Good_correct : Good l
     (* Theorem 3.7 *)
@@ -500,18 +524,28 @@ Record Correct `{IsAA G G', IsAA A A'} (l : Lens G G' A A') (cv : G' -> M A') : 
 
 #[global] Hint Resolve Good_correct : core.
 
+(* The semantics (both demand sem. and clairvoyant sem.) and correctness proofs ([Good] and [Correct])
+   are given one term constructor at a time. *)
+
+(* For example, for variables [x : A |- x : A] *)
+
+(* Evaluation function *)
 Definition id_fn {A : Type} : A -> A :=
   fun a => a.
 
+(* Demand function (the demand [a'] on the term is returned as the demand on the context). *)
 Definition id_dem {A A' : Type} : A -> A' -> Tick A' :=
   fun a a' => Tick.ret a'.
 
+(* Demand semantics: evaluation and demand functions paired together *)
 Definition id_lens {A A' : Type} : Lens A A' A A' :=
   MkLens id_fn id_dem.
 
+(* Clairvoyant semantics *)
 Definition id_cv {A' : Type} : A' -> M A' :=
   ret.
 
+(* Good properties of the demand semantics *)
 Theorem Good_id `{IsAA A A'} : Good (@id_lens A A').
 Proof.
   constructor; cbn; unfold id_fn, id_dem; cbn; auto.
@@ -519,6 +553,7 @@ Proof.
   - intros; apply lub_ret; auto.
 Qed.
 
+(* Correctness relation between demand semantics and clairvoyant semantics *)
 Theorem Correct_id `{IsAA A A'} : Correct (@id_lens A A') id_cv.
 Proof.
   constructor; cbn; unfold id_cv.
@@ -527,6 +562,8 @@ Proof.
   - intros. apply optimistic_ret. split; auto.
   - intros. apply pessimistic_ret. intros. constructor; cbn; auto.
 Qed.
+
+(* Same structure for all other constructors. No more comments until the bottom ([den_lens]). *)
 
 Definition fst_fn {G A B : Type} : (G -> A * B) -> (G -> A) :=
   fun f g => fst (f g).
@@ -1424,6 +1461,7 @@ Proof.
     apply less_defined_ret. apply bottom_is_least; auto.
 Qed.
 
+(* Demand semantics of terms: denoted by lenses *)
 Fixpoint den_lens {A B} (t : tm A B)
   : Lens (carrier (den_ty A)) (approx (den_ty A)) (carrier (den_ty B)) (approx (den_ty B)) :=
   match t with
@@ -1440,6 +1478,7 @@ Fixpoint den_lens {A B} (t : tm A B)
   | Boo b => boo_lens b
   end.
 
+(* Clairvoyant semantics of terms: denoted by functions in the clairvoyance monad *)
 Fixpoint den_cv {A B} (t : tm A B) : approx (den_ty A) -> M (approx (den_ty B)) :=
   match t with
   | Var => id_cv
@@ -1455,6 +1494,7 @@ Fixpoint den_cv {A B} (t : tm A B) : approx (den_ty A) -> M (approx (den_ty B)) 
   | Boo b => boo_cv b
   end.
 
+(* Good properties of the demand semantics *)
 Theorem Good_den {A B} (t : tm A B) : Good (den_lens t).
 Proof.
   induction t; cbn.
@@ -1463,6 +1503,7 @@ Proof.
   - apply Good_nil. - apply Good_cons; auto. - apply Good_foldr; auto.
 Qed.
 
+(* Correctness relation between the demand semantics and the clairvoyant semantics *)
 Theorem Correct_den {A B} (t : tm A B) : Correct (den_lens t) (den_cv t).
 Proof.
   induction t; cbn.
