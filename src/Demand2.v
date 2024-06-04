@@ -1503,6 +1503,8 @@ Proof.
   - apply Good_nil. - apply Good_cons; auto. - apply Good_foldr; auto.
 Qed.
 
+(* Print Assumptions Good_den. *)
+
 (* Correctness relation between the demand semantics and the clairvoyant semantics *)
 Theorem Correct_den {A B} (t : tm A B) : Correct (den_lens t) (den_cv t).
 Proof.
@@ -1513,4 +1515,4 @@ Proof.
   - apply Correct_nil. - apply Correct_cons; auto. - apply Correct_foldr; auto.
 Qed.
 
-Print Assumptions Correct_den.
+(* Print Assumptions Correct_den. *)
