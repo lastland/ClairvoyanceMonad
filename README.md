@@ -50,7 +50,9 @@ The shallowly-embedded Rocq demand semantics discussed thus far is much broader 
 
 Monadic clairvoyance semantics are formalized in `Core.v`. The clairvoyance monad itself is called `M`.  Pessimistic specifications are given by `pessimistic` (also notated `u {{ r }}`, and optimistic specifications are given by `optimistic` (also notated `u [[ r ]]`).
 
-In `Demand2.v`, the type `Correct` essentially represents the statements of Theorems 3.7, 3.8, and 3.8; the proof is provided by `Correct_den`.
+In `Demand2.v`:
+- the type `Good` gives the statements of Theorems 3.4, 3.5, 3.6; the proof is provided by `Good_den`.
+- the type `Correct` gives the statements of Theorems 3.7, 3.8, and 3.8; the proof is provided by `Correct_den`.
 
 ### Case studies: sorting algorithms
 
@@ -105,6 +107,7 @@ the above procedure.
 ## Major proof terms
 
 - Demand semantics metatheory (`Demand2.v`):
+  + Properties of approximations: `Lemma_3_1`, `Lemma_3_2`, `Lemma_3_3`.
   + Totality, monotonicity, and ⊔-homomorphism: `Good_den`
   + Correctness with respect to clairvoyance semantics: `Correct_den`
 - Selection sort (`SelectionSort.v`):
