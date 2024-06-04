@@ -7,55 +7,104 @@ Name:    **Story of Your Lazy Function’s Life: A Bidirectional Demand Semantic
 If you using the VM image. The project lives in the `demand-semantics` directory
 under the home directory of the default `artifact` user. (Whenever a password is
 required, enter `password`.) The image already has all dependencies installed;
-to execute the proof scripts, you just need to run `make`.
+to ask the Rocq Prover (AKA Coq) to proof check all the proof scripts, you just
+need to run `make`.
 
 ### Dependencies
 
-The project is known to work with Rocq (AKA Coq) versions 8.16.1, 8.17.1,
-8.18.0, and 8.19.1. You also need the following Rocq libraries and plugins:
+The project is known to work with Rocq Prover (AKA Coq) versions 8.16.1, 8.17.1,
+8.18.0, and 8.19.1. You also need the following Rocq Prover libraries and
+plugins:
 
 - [Equations](https://github.com/mattam82/Coq-Equations)
-- [CoqHammer](https://github.com/lukaszcz/coqhammer) (only the `sauto` component is needed)
+- [CoqHammer](https://github.com/lukaszcz/coqhammer) (only the `sauto` component
+  is needed; no need for installing an SMT solver)
 
-Both of these components are part of the [Coq platform](https://github.com/coq/platform).
+Both of these components are part of the [Coq
+platform](https://github.com/coq/platform).
 
 ### Checking axioms
 
-To check the axioms of a named proof term, use the command `Print Assumptions [name]`. If you check the major proof terms, you should see only the axiom `Classical_Prop.classic`, which is the law of excluded middle.
+To check the axioms of a named proof term, use the command `Print Assumptions
+[name]`. If you check the major proof terms, you should see only the axiom
+`Classical_Prop.classic`, which is the law of excluded middle.
 
 ## Correspondence between the paper and the project
 
 ### Bidirectional demand semantics
 
-The fundamental `T` datatype and its basic theory is defined in `Core.v`. Approximation types for other common types include `listA` (`ListA.v`),  `optionA` (`Option.v`), and `prodA` (`Prod.v`).
+The fundamental `T` datatype and its basic theory is defined in `Core.v`.
+Approximation types for other common types include `listA` (`ListA.v`),
+`optionA` (`Option.v`), and `prodA` (`Prod.v`).
 
 General notions relating to approximations are defined in `Approx.v`.
 
- - The typeclass `LessDefined` represents the lattice of approximations itself: an instance `LessDefined A` defines the approximation relation, written ≤ in the paper and called `less_defined` in Rocq, for the type `A`. The paper states facts about this relation as lemmas (e.g., Lemma 3.1, transitivity); however, in Rocq, each instance must be proven to be a preorder.
- - There is also a `Bottom` typeclass, which shows how to compute the least element in the less-defined relation for a type; i.e., ⊥ from the paper. `Bottom` is only defined for `T A` or types that wrap it; i.e., monads returning `T A`.
-- The typeclass `Exact` shows how to embed a type into its type of approximations (via the `exact` method). The `ExactMaximal` typeclass is a law for `Exact`: it says that an embedded value should be a maximal element with respect to `less_defined`. We *define* the "approximates" relation `is_approx` (written ≺ in the paper) by saying that a value `xD` approximates `x` if `xD` is less defined than `exact x`; i.e., `xD` lies below `exact x` in the lattice of approximations.
-- The typeclass `Lub` shows how to compute the least upper bound (supremum) of two approximations, written ⊔ in the paper and called `lub` in Rocq. The `LubLaw` typeclass defines laws for `Lub`, corresponding to Lemma 3.2. (Part (1) of Lemma 3.2 is an immediate consequence of `lub_least_upper_bound`, `exact_maximal` from the `ExactMaximal` typeclass, and transitivity.)
-- The `BottomOf` typeclass shows how to compute the least approximation for an element `a`, written ⊥ₐ in the paper and called `bottom_of` in Rocq. Lemma 3.3 is represented by the `BottomIsLeast` typeclass.
-- The `Exact`, `LessDefined`, `Lub`, and `BottomOf` typeclasses, plus their laws, are bundled together in the `IsApproxAlgebra` typeclass.
+- The typeclass `LessDefined` represents the lattice of approximations itself:
+  an instance `LessDefined A` defines the approximation relation, written ≤ in
+  the paper and called `less_defined` in Rocq, for the type `A`. The paper
+  states facts about this relation as lemmas (e.g., Lemma 3.1, transitivity);
+  however, in Rocq, each instance must be proven to be a preorder.
+- There is also a `Bottom` typeclass, which shows how to compute the least
+  element in the less-defined relation for a type; i.e., ⊥ from the paper.
+  `Bottom` is only defined for `T A` or types that wrap it; i.e., monads
+  returning `T A`.
+- The typeclass `Exact` shows how to embed a type into its type of
+  approximations (via the `exact` method). The `ExactMaximal` typeclass is a law
+  for `Exact`: it says that an embedded value should be a maximal element with
+  respect to `less_defined`. We *define* the "approximates" relation `is_approx`
+  (written ≺ in the paper) by saying that a value `xD` approximates `x` if `xD`
+  is less defined than `exact x`; i.e., `xD` lies below `exact x` in the lattice
+  of approximations.
+- The typeclass `Lub` shows how to compute the least upper bound (supremum) of
+  two approximations, written ⊔ in the paper and called `lub` in Rocq. The
+  `LubLaw` typeclass defines laws for `Lub`, corresponding to Lemma 3.2. (Part
+  (1) of Lemma 3.2 is an immediate consequence of `lub_least_upper_bound`,
+  `exact_maximal` from the `ExactMaximal` typeclass, and transitivity.)
+- The `BottomOf` typeclass shows how to compute the least approximation for an
+  element `a`, written ⊥ₐ in the paper and called `bottom_of` in Rocq. Lemma 3.3
+  is represented by the `BottomIsLeast` typeclass.
+- The `Exact`, `LessDefined`, `Lub`, and `BottomOf` typeclasses, plus their
+  laws, are bundled together in the `IsApproxAlgebra` typeclass.
 
-Since we lack a mechanized translation, each pure function in the Rocq development gets its own hand-written demand-semantics version: a pure function, say, `f : A₁ → A₂ → ⋯ → Aₙ → B`, will typically have a demand-semantics version `fD : A₁ → A₂ → ⋯ → Aₙ → Bᴰ → Tick (T A₁ᴰ * T A₂ᴰ * ⋯ * T Aₙᴰ)`.
+Since we lack a mechanized translation (discussed in Section 2.3 in the paper),
+each pure function in the Rocq development gets its own hand-written
+demand-semantics version: a pure function, say, `f : A₁ → A₂ → ⋯ → Aₙ → B`, will
+typically have a demand-semantics version `fD : A₁ → A₂ → ⋯ → Aₙ → Bᴰ → Tick (T
+A₁ᴰ * T A₂ᴰ * ⋯ * T Aₙᴰ)`.
 
-The `Tick` monad, defined in `Tick.v`, is used to count function calls, which is our cost model: it is essentially a writer monad over the monoid (ℕ, 0, +) whose API "conceptually" only provides the operation `tick`, which simply adds `1` to the output.  `Tick` also has instances for `LessDefined` and `Bottom`, the latter mainly for convenience; e.g., it allows using `bottom` to abort an absurd case of a demand function.
+The `Tick` monad, defined in `Tick.v`, is used to count function calls, which is
+our cost model: it is essentially a writer monad over the monoid (ℕ, 0, +) whose
+API "conceptually" only provides the operation `tick`, which simply adds `1` to
+the output. `Tick` also has instances for `LessDefined` and `Bottom`, the latter
+mainly for convenience; e.g., it allows using `bottom` to abort an absurd case
+of a demand function.
 
 #### Properties of demand semantics
 
-The shallowly-embedded Rocq demand semantics discussed thus far is much broader than the fairly minimal calculus presented in the paper. This is close to how we imagine the demand semantics might be used in practice, but it does not admit the study of metatheoretical properties. To that end, `Demand2.v` contains a deep embedding of the paper's calculus.  The type `Good` essentially represents the statements of Lemmas 3.4, 3.5, and 3.6; the proof is provided by `Good_den`.
+The shallowly-embedded Rocq demand semantics discussed thus far is much broader
+than the fairly minimal calculus presented in the paper. This is close to how we
+imagine the demand semantics might be used in practice, but it does not admit
+the study of metatheoretical properties. To that end, `Demand2.v` contains a
+deep embedding of the paper's calculus. The type `Good` essentially represents
+the statements of Lemmas 3.4, 3.5, and 3.6; the proof is provided by `Good_den`.
 
 #### Correctness: Correspondence with Clairvoyant Semantics
 
-Monadic clairvoyance semantics are formalized in `Core.v`. The clairvoyance monad itself is called `M`.  Pessimistic specifications are given by `pessimistic` (also notated `u {{ r }}`, and optimistic specifications are given by `optimistic` (also notated `u [[ r ]]`).
+Monadic clairvoyance semantics are formalized in `Core.v`. The clairvoyance
+monad itself is called `M`. Pessimistic specifications are given by
+`pessimistic` (also notated `u {{ r }}`, and optimistic specifications are given
+by `optimistic` (also notated `u [[ r ]]`).
 
 In `Demand2.v`:
-- the syntax is given by the inductive types [ty] and [tm].
-- the denotation of types is in an algebraic structure called `ApproxAlgebra`, and the denotation function is `den_ty`.
-- the denotation functions of terms are `den_lens` for the demand semantics and `den_cv` for the clairvoyant semantics.
-- the type `Good` gives the statements of Theorems 3.4, 3.5, 3.6; the proof is provided by `Good_den`.
-- the type `Correct` gives the statements of Theorems 3.7, 3.8, and 3.8; the proof is provided by `Correct_den`.
+- the syntax is given by the inductive types `ty` and `tm`.
+- the denotation of types is in an algebraic structure called `ApproxAlgebra`,
+  and the denotation function is `den_ty`.
+- the denotation functions of terms are `den_lens` for the demand semantics and
+  `den_cv` for the clairvoyant semantics.
+- the type `Good` gives the statements of Theorems 3.4, 3.5, 3.6; the proof is
+  provided by `Good_den`.
+- the type `Correct` gives the statements of Theorems 3.7, 3.8, and 3.8; the
+  proof is provided by `Correct_den`.
 
 ### Case studies: sorting algorithms
 
