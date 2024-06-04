@@ -1054,6 +1054,17 @@ Proof.
   - intros. cbn in H. lia.
 Qed.
 
-(* Print Assumptions good_queue. *)
+(*
+Print Assumptions good_queue.
+*)
 
 Transparent Nat.mul Nat.add Nat.sub.
+
+(*
+Print Assumptions mkQueueD_approx.
+Print Assumptions pushD_approx.
+Print Assumptions popD_approx.
+Print Assumptions mkQueueD_spec.
+Print Assumptions pushD_spec.
+Print Assumptions popD_spec.
+*)

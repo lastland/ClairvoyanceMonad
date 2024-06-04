@@ -1734,3 +1734,13 @@ Section Physicist'sArgument.
   Qed.
 
 End Physicist'sArgument.
+
+(*
+Print Assumptions emptyD_approx.
+Print Assumptions pushD_approx.
+Print Assumptions popD_approx.
+Print Assumptions emptyD_spec.
+Print Assumptions pushD_spec.
+Print Assumptions popD_spec.
+Print Assumptions amortized_cost.
+*)

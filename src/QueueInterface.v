@@ -285,4 +285,6 @@ Qed.
 Theorem amortized_cost : AmortizedCostSpec.
 Proof. apply physicist's_method. Qed.
 
-(* Print Assumptions amortized_cost. *)
+(*
+Print Assumptions amortized_cost.
+*)
