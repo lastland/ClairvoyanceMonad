@@ -485,8 +485,7 @@ Record Correct `{IsAA G G', IsAA A A'} (l : Lens G G' A A') (cv : G' -> M A') : 
   { Good_correct : Good l
     (* Theorem 3.7 *)
   ; functional_correct : forall g g', g' `is_approx` g -> cv g' {{ fun a' n => a' `is_approx` get l g }}
-  ; underapprox : forall g g', g' `is_approx` g -> cv g' {{ fun a' n =>
-      put l g a' `less_defined` Tick.MkTick n g' }}
+    (* Theorem 3.8 *)
   ; minimal_ex :
       forall g a', a' `is_approx` get l g ->
       forall g', g' `is_approx` g ->
@@ -525,8 +524,6 @@ Proof.
   constructor; cbn; unfold id_cv.
   - apply Good_id.
   - intros. unfold id_cv. apply pessimistic_ret. auto.
-  - intros. unfold id_cv. apply pessimistic_ret. unfold id_dem. constructor; cbn; auto.
-    reflexivity.
   - intros. apply optimistic_ret. split; auto.
   - intros. apply pessimistic_ret. intros. constructor; cbn; auto.
 Qed.
@@ -587,14 +584,6 @@ Proof.
     intros; apply pessimistic_ret. cbn.
     unfold fst_fn.
     apply H0.
-  - intros. apply pessimistic_bind.
-    apply (pessimistic_mon (pessimistic_conj (functional_correct Cf _ _ H) (underapprox Cf _ H))).
-    intros ? ? [H1 H2]; apply pessimistic_ret. cbn. unfold fst_dem.
-    rewrite Nat.add_0_r.
-    rewrite <- H2.
-    apply monotone; [ apply Cf | | auto ].
-    constructor; cbn; [ reflexivity | ].
-    apply bottom_is_least; apply H1.
   - intros. apply optimistic_bind. cbn in *.
     unfold fst_fn in H.
     refine (optimistic_mon (optimistic_conj (functional_correct Cf _ _ H0) (minimal_ex Cf _ _ _ _ H0 H1)) _).
@@ -639,14 +628,6 @@ Proof.
     intros; apply pessimistic_ret. cbn.
     unfold snd_fn.
     apply H0.
-  - intros. apply pessimistic_bind.
-    apply (pessimistic_mon (pessimistic_conj (functional_correct Cf _ _ H) (underapprox Cf _ H))).
-    intros ? ? [H1 H2]; apply pessimistic_ret. cbn. unfold snd_dem.
-    rewrite Nat.add_0_r.
-    rewrite <- H2.
-    apply monotone; [ apply Cf | | auto ].
-    constructor; cbn; [ | reflexivity ].
-    apply bottom_is_least; apply H1.
   - intros. apply optimistic_bind. cbn in *.
     unfold snd_fn in H.
     refine (optimistic_mon (optimistic_conj (functional_correct Cf _ _ H0) (minimal_ex Cf _ _ _ _ H0 H1)) _).
@@ -736,14 +717,6 @@ Proof.
     apply (pessimistic_mon (functional_correct Cb _ _ H)).
     intros b' _ Hb. apply pessimistic_ret.
     constructor; auto.
-  - intros g g' H. apply pessimistic_bind.
-    apply (pessimistic_mon (underapprox Ca _ H)).
-    intros a' na Ha. apply pessimistic_bind.
-    apply (pessimistic_mon (underapprox Cb _ H)).
-    intros b' nb Hb. apply pessimistic_ret.
-    constructor; cbn.
-    + rewrite Nat.add_0_r; apply Nat.add_le_mono; [ apply Ha | apply Hb ].
-    + apply lub_least_upper_bound; [ apply Ha | apply Hb ].
   - intros g ab' [Ha Hb] g' Hg Hg'. apply optimistic_bind.
     refine (optimistic_mon (minimal_ex Ca _ _ Ha _ Hg _) _).
     { etransitivity; [ apply lub_upper_bound_l | apply Hg' ].
@@ -800,15 +773,6 @@ Proof.
     intros ? _ ?. apply pessimistic_ret.
     unfold cons_fn. simp exact_listA.
     constructor; auto.
-  - intros; apply pessimistic_bind.
-    apply (pessimistic_mon (underapprox Ca _ H)).
-    intros ? ? ?. apply pessimistic_bind.
-    apply (pessimistic_mon (underapprox Cb _ H)).
-    intros ? ? ?. apply pessimistic_ret.
-    unfold cons_dem.
-    constructor; cbn; auto.
-    + rewrite Nat.add_0_r. apply Nat.add_le_mono; apply H0 + apply H1.
-    + apply lub_least_upper_bound; apply H0 + apply H1.
   - intros; apply optimistic_bind. unfold Exact_list in H. unfold cons_fn in H. simp exact_listA in H. inv H.
     assert (Tick.val (put la g x) `is_approx` g) by apply Ca, H5.
     assert (Tick.val (put lb g xs) `is_approx` g) by apply Cb, H6.
@@ -857,9 +821,6 @@ Proof.
   constructor; intros.
   - apply Good_boo.
   - apply pessimistic_ret. reflexivity.
-  - apply pessimistic_ret. constructor.
-    { reflexivity. }
-    cbn. apply bottom_is_least. auto.
   - apply optimistic_ret. split; [ reflexivity | auto ].
   - apply pessimistic_ret. intros. constructor; [ reflexivity | cbn ].
     apply bottom_is_least; auto.
@@ -896,10 +857,6 @@ Proof.
   - apply Good_tick; apply Cl.
   - apply pessimistic_bind, pessimistic_tick.
     apply (pessimistic_mon (functional_correct Cl _ _ H)); auto.
-  - apply pessimistic_bind, pessimistic_tick.
-    apply (pessimistic_mon (underapprox Cl _ H)); auto.
-    intros; cbn. constructor; try apply H0.
-    cbn. apply le_n_S. apply H0.
   - apply optimistic_bind, optimistic_tick.
     apply (optimistic_mon (minimal_ex Cl _ _ H _ H0 H1)).
     intros * []; split; auto.
@@ -946,9 +903,6 @@ Proof.
   - apply pessimistic_thunk; [ | constructor ].
     apply (pessimistic_mon (functional_correct Cl _ _ H)).
     intros x _ Hx. constructor. auto.
-  - apply pessimistic_thunk; [ | constructor; cbn; [ auto | apply bottom_is_least; auto ] ].
-    apply (pessimistic_mon (underapprox Cl _ H)).
-    intros x n Hx. cbn; auto.
   - intros. inv H.
     * apply optimistic_skip. split; constructor.
     * apply optimistic_thunk_go.
@@ -995,10 +949,6 @@ Proof.
     apply pessimistic_force.
     intros ? ->.
     inv Hx. auto.
-  - intros; apply pessimistic_bind.
-    apply (pessimistic_mon (underapprox Cf _ H)).
-    intros. apply pessimistic_force.
-    intros ? ->; cbn. unfold force_dem. rewrite Nat.add_0_r. auto.
   - intros; apply optimistic_bind.
     refine (optimistic_mon (minimal_ex Cf _ _ _ _ H0 H1) _).
     { constructor; auto. }
@@ -1286,65 +1236,6 @@ Proof.
   - apply H3; [ apply H2 | apply H1 ].
 Qed.
 
-Theorem underapprox_foldr' `{IsAA G G', IsAA A A', IsAA B B'}
-    (lb : Lens ((G * A) * B) ((G' * T A') * T B') B B') (ln : Lens G G' B B')
-    (fb : (G' * T A') * T B' -> M B') (fn : G' -> M B')
-  : Correct lb fb -> Correct ln fn ->
-    forall (g : G) (g' : G'), g' `is_approx` g ->
-    forall (a : list A) (a' : listA A'), a' `is_approx` a ->
-    foldr_cv' (fun x' b' => fb (g', x', b')) (fn g') a' {{ fun b' n =>
-      foldr_dem' lb ln g a b' `less_defined` Tick.MkTick n (g', a') }}.
-Proof.
-  intros Cb Cn g g' Eg a. induction a; intros a' Ea.
-  - inv Ea; cbn.
-    apply (pessimistic_mon (underapprox Cn _ Eg)).
-    intros b' n Eb. constructor; cbn.
-    + rewrite Nat.add_0_r. apply Eb.
-    + constructor; [ apply Eb | constructor ].
-  - unfold exact in Ea; cbn in Ea. unfold Exact_list in Ea; simp exact_listA in Ea; inv Ea.
-    apply pessimistic_bind. apply pessimistic_thunk.
-    + apply pessimistic_forcing. intros x0 ->. inv H3.
-      apply (pessimistic_mon (@pessimistic_conj _ _ _ _ (IHa _ H1) (fcorrect_foldr' Cb Cn g g' Eg a0 H1))).
-      intros b1 n [ Eb1 Eb2 ].
-      refine (pessimistic_mon (underapprox Cb (g, a, (foldr_fn' (fun a b => get lb (g, a, b)) (get ln g) a0)) _) _).
-      { repeat constructor; cbn; try assumption. }
-      intros b2 m Hb2. rewrite (Nat.add_comm n m).
-      change (Tick.MkTick _ _) with (Tick.bind (Tick.MkTick m (g', x, Thunk b1)) (fun _ =>
-        Tick.MkTick n (g', ConsA x (Thunk x0)))).
-      apply (less_defined_bind'' (fun _ w => w = (g', x, Thunk b1))); [ auto .. | ].
-      intros [ [ g3 x3 ] b3 ] _ -> [ [Eg3 Ex3] Eb3 ] . cbn in *.
-      rewrite <- (Nat.add_0_r n).
-      change (Tick.MkTick _ _) with (Tick.bind (Tick.MkTick n (g', Thunk x0)) (fun _ => Tick.ret (g', ConsA x (Thunk x0)))).
-      apply (less_defined_bind'' (fun _ w => w = (g', Thunk x0))).
-      { inv Eb3.
-        * constructor; cbn; [ apply Nat.le_0_l | ].
-          constructor; [ | constructor ].
-          apply bottom_is_least; cbn; auto.
-        * rewrite <- (Nat.add_0_r n). change (Tick.MkTick _ _) with (Tick.bind
-            (Tick.MkTick n (g', x0)) (fun '(g', x0) => Tick.ret (g', Thunk x0))).
-          apply less_defined_bind; [ | ].
-          { etransitivity; [ | eassumption ].
-            apply monotone_foldr'; eauto. }
-          intros [] [] []; repeat constructor; cbn; auto.
-      }
-      { auto. }
-      { intros [] _ -> []. cbn in *. apply less_defined_ret.
-        repeat constructor; cbn; auto.
-        apply lub_least_upper_bound; auto.
-      }
-    + refine (pessimistic_mon (underapprox Cb (g, a, (foldr_fn' (fun a b => get lb (g, a, b)) (get ln g) a0)) _) _).
-      { repeat constructor; cbn; try assumption. }
-      intros b2 m Hb2. rewrite <- (Nat.add_0_r m).
-      change (Tick.MkTick _ _) with (Tick.bind (Tick.MkTick m (g', x, Undefined (a := B'))) (fun _ =>
-        Tick.MkTick 0 (g', ConsA x xs))).
-      apply (less_defined_bind'' (fun _ w => w = (g', x, Undefined))); [ auto .. | ].
-      intros [ [ g3 x3 ] b3 ] _ -> [ [Eg3 Ex3] Eb3 ] . cbn in *.
-      inv Eb3; cbn.
-      repeat constructor; cbn; auto.
-      apply lub_least_upper_bound; auto.
-      apply bottom_is_least; auto.
-Qed.
-
 Theorem minimal_ex_foldr' `{IsAA G G', IsAA A A', IsAA B B'}
     (lb : Lens ((G * A) * B) ((G' * T A') * T B') B B') (ln : Lens G G' B B')
     (fb : (G' * T A') * T B' -> M B') (fn : G' -> M B')
@@ -1387,7 +1278,7 @@ Proof.
       inv Exs. inv H7. inv H3.
       cbn in *.
       refine (optimistic_mon
-        (optimistic_conj (fcorrect_foldr' Cb Cn _ _ Eg _ H6)  (IHa _ H1 _ Eg _ H6 _)) _).
+        (optimistic_conj (fcorrect_foldr' Cb Cn _ _ Eg H6)  (IHa _ H1 _ Eg _ H6 _)) _).
       { rewrite E3. constructor; cbn.
         { etransitivity; [ | apply Eg3' ]. apply lub_upper_bound_r. eauto. }
         { auto. } }
@@ -1438,7 +1329,7 @@ Proof.
       apply lub_least_upper_bound; auto.
       apply bottom_is_least; auto.
     + apply pessimistic_forcing. intros xs' ->. inv H3.
-      apply (pessimistic_mon (pessimistic_conj (fcorrect_foldr' Cb Cn _ _ Eg _ H1) (IHa _ H1))).
+      apply (pessimistic_mon (pessimistic_conj (fcorrect_foldr' Cb Cn _ _ Eg H1) (IHa _ H1))).
       intros b3 n [Eb3 F].
       refine (pessimistic_mon (pessimistic_conj (functional_correct Cb (g, a, _) _ _) (minimal_univ Cb (g, a,  _) _)) _).
       1,2: repeat constructor; eauto.
@@ -1472,24 +1363,8 @@ Proof.
   - apply pessimistic_bind.
     apply (pessimistic_mon (functional_correct Ca _ _ H)).
     intros x _ Ex.
-    apply (pessimistic_mon (fcorrect_foldr' Cb Cn _ _ H _ Ex)).
+    apply (pessimistic_mon (fcorrect_foldr' Cb Cn _ _ H Ex)).
     intros b' _ Eb'. apply Eb'.
-  - apply pessimistic_bind.
-    apply (pessimistic_mon (pessimistic_conj (functional_correct Ca _ _ H) (underapprox Ca _ H))).
-    intros x n [Ex Fx].
-    apply (pessimistic_mon (underapprox_foldr' Cb Cn _ H _ Ex)).
-    intros. unfold foldr_dem.
-    rewrite (Nat.add_comm n n0).
-    change (Tick.MkTick (n0 + n) _) with (Tick.bind (Tick.MkTick n0 (g', x)) (fun _ => Tick.MkTick n g')).
-    apply (less_defined_bind'' (fun _ gx => gx = (g', x))); auto.
-    intros [g1 x1] _ -> [Eg1 Ex2]; cbn in *.
-    rewrite <- (Nat.add_0_r n).
-    change (Tick.MkTick (n + 0) _) with (Tick.MkTick n g' >> Tick.MkTick 0 g')%tick.
-    apply (less_defined_bind'' (fun _ g2 => g2 = g')); auto.
-    { etransitivity; [ | apply Fx ].
-      apply (monotone (Good_correct Ca)); auto. }
-    intros g2 _ -> Eg2.
-    apply less_defined_ret. apply lub_least_upper_bound; auto.
   - apply optimistic_bind.
     unfold foldr_fn in H.
     destruct (Tick.val (foldr_dem' lb ln g (get la g) a')) as [g1 x1] eqn:Ef'.
@@ -1501,7 +1376,7 @@ Proof.
       eexists; split; [ apply Hg | apply total; eauto ]. }
     apply (optimistic_mon (optimistic_conj (functional_correct Ca _ _ H0) (minimal_ex Ca _ _ Hx _ H0 Hp))).
     intros x _ [Hg0 [-> Ex] ].
-    refine (optimistic_mon (minimal_ex_foldr' Cb Cn _ _ _ H H0 Hg0 _) _).
+    refine (optimistic_mon (minimal_ex_foldr' Cb Cn _ _ H H0 Hg0 _) _).
     { rewrite Ef'. constructor; cbn; auto.
       etransitivity; [ | apply H1 ].
       apply lub_upper_bound_l; eexists; split; [ | etransitivity ]; eauto. }
@@ -1509,7 +1384,7 @@ Proof.
   - apply pessimistic_bind.
     apply (pessimistic_mon (pessimistic_conj (functional_correct Ca _ _ H) (minimal_univ Ca _ H))).
     intros x n [Hx Fx].
-    apply (pessimistic_mon (minimal_univ_foldr' Cb Cn _ H _ Hx)).
+    apply (pessimistic_mon (minimal_univ_foldr' Cb Cn _ H Hx)).
     intros b m Fb b' Eb'.
     unfold foldr_dem.
     rewrite (Nat.add_comm n m).
@@ -1544,7 +1419,6 @@ Proof.
   constructor; cbn; unfold nil_cv.
   - apply Good_nil.
   - intros; apply pessimistic_ret. constructor.
-  - intros; apply pessimistic_ret. apply less_defined_ret. apply bottom_is_least; auto.
   - intros; apply optimistic_ret. split; auto.
   - intros; apply pessimistic_ret; intros.
     apply less_defined_ret. apply bottom_is_least; auto.
