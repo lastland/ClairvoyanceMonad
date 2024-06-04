@@ -1,3 +1,10 @@
+(** * Equivalence between demand semantics and clairvoyant semantics *)
+
+(** This file formalizes the results presented in Section 3 of our paper. *)
+(** The main theorems are [Good_den] and [Correct_den] which collect together the various
+    theorems of Section 3, whose statements appear formally in the definitions of
+    [Good] and [Correct]. *)
+
 From Coq Require Import Arith Setoid Morphisms Lia.
 From Equations Require Import Equations.
 From Clairvoyance Require Import Core Approx ListA Misc Tick.
@@ -9,28 +16,80 @@ Generalizable All Variables.
 
 Import Tick.Notations.
 
+(** * Syntax *)
+
+(** Syntax of types *)
+Inductive ty : Set :=
+  | Bool                     (* Booleans *)
+  | Th : ty -> ty            (* Thunks ([T] in our paper) *)
+  | List : ty -> ty          (* Lists *)
+  | Prod : ty -> ty -> ty    (* Product types (pairs) *)
+  .
+
+(** Syntax of terms *)
+(* We represent the context [G] minimalistically, as the product of the types
+    of free variables. *)
+(* Typically the context would be represented as a list of types, and variables as
+   list membership proofs. In this formalization, the context can be thought of as just
+   one variable, and we can use the projections [Fst] and [Snd] to extract its components.
+   The benefit is that we don't need separate syntactic categories for contexts and variables.
+   Since we measure the cost of programs with explicit ticks ([Tik]), this doesn't affect the
+   cost of programs. *)
+Inductive tm (G : ty) : ty -> Set :=
+  | Var : tm G G                                           (* variable *)
+  | Fst {A B : ty} : tm G (Prod A B) -> tm G A             (* first pair projection *)
+  | Snd {A B : ty} : tm G (Prod A B) -> tm G B             (* second pair projection *)
+  | Pair {A B : ty} : tm G A -> tm G B -> tm G (Prod A B)  (* pair constructor *)
+  | Boo : bool -> tm G Bool                                (* boolean *)
+  | Tik (A : ty) : tm G A -> tm G A                        (* tick, then carry on as the enclosed term *)
+  | Lazy {A : ty} : tm G A -> tm G (Th A)                  (* Delay a computation into a thunk *)
+  | Force {A : ty} : tm G (Th A) -> tm G A                 (* Force the computation contained in a thunk *)
+  | Nil {A : ty} : tm G (List A)                           (* empty list *)
+  | Cons {A : ty} : tm G (Th A) -> tm G (Th (List A)) -> tm G (List A)  (* append an element to a list *)
+  | Foldr {A B : ty} : tm (Prod (Prod G (Th A)) (Th B)) B -> tm G B -> tm G (List A) -> tm G B  (* fold over a list *)
+.
+
+(** * Denotation of types *)
+
+(** The main construction of this section is [den_ty], a function mapping types
+    to their meanings as "approximation algebras", a lattice-like algebraic structure,
+    cf. [IsApproxAlgebra] just below. *)
+
+(* Partial order relation *)
 Class Order {A : Type} (r : relation A) : Prop :=
   { Order_Reflexive :> Reflexive r
   ; Order_Transitive :> Transitive r
   ; Order_AntiSymmetric :> Antisymmetric A eq r
   }.
 
-(** Order structure on approximation values [valueA].
-    Core operations ([exact], [less_defined], [lub], [bottom_of])
-    and their properties. *)
+(** Approximation algebra: [tA] is a set with an order relation ([less_defined]),
+    least-upper bounds [lub], and least elements [bottom_of].
+    [t] is a set of "exact values" that the elements of [tA] approximate. *)
 Class IsApproxAlgebra (t tA : Type) : Type :=
-  { AO_Exact         :> Exact t     tA
-  ; AO_LessDefined   :> LessDefined tA
-  ; AO_Lub           :> Lub         tA
-  ; AO_BottomOf      :> BottomOf    tA
+  { AO_Exact         :> Exact t     tA   (* [exact x]: embedding of exact values [t] into approximations [tA] *)
+  ; AO_LessDefined   :> LessDefined tA   (* [less_defined x y]: order relation between approximations *)
+  ; AO_Lub           :> Lub         tA   (* [lub x y]: least upper bound of two elements *)
+  ; AO_BottomOf      :> BottomOf    tA   (* [bottom_of x]: the smallest element less than [x] *)
 
+    (* Laws *)
   ; AO_Order         :> Order (A := tA) less_defined
-  ; AO_LubLaw        :> LubLaw        tA
-  ; AO_BottomIsLeast :> BottomIsLeast tA
+  ; AO_LubLaw        :> LubLaw        tA      (* [lub] behaves as the least upper bound. Defined in Approx.v *)
+  ; AO_BottomIsLeast :> BottomIsLeast tA      (* [bottom_of] is a minimum. Defined in Approx.v *)
   }.
+
+(* In the paper, instead of [exact], we have a relation [is_approx] ($\prec$ in the paper),
+   which is obtained as [x `is_approx` y = x `less_defined` (exact y)]. *)
+(* In the future we'd like to follow the paper more closely by replacing
+   [exact] with [is_approx] in the definition of [IsApproxAlgebra].
+   We believe that would enable us to extend the language formalized here with
+   higher-order and general recursive functions. *)
+Definition is_approx {t tA} `{IsApproxAlgebra t tA} : tA -> t -> Prop :=
+  fun x y => x `less_defined` exact y.
+Infix "`is_approx`" := is_approx.
 
 #[global] Hint Mode IsApproxAlgebra - - : typeclass_instances.
 
+(** Abbreviation *)
 Notation IsAA := IsApproxAlgebra (only parsing).
 
 Lemma order_def {A} {r : relation A} `{!PreOrder r, !Antisymmetric A eq r} : Order r.
@@ -126,6 +185,7 @@ Instance IsAA_list `{H : IsAA a a'} : IsAA (list a) (listA a') := {}.
 #[local]
 Instance IsAA_prod `{H : IsAA a a', H2 : IsAA b b'} : IsAA (a * b) (a' * b') := {}.
 
+(** Packed representation of "approximation algebras". *)
 Record ApproxAlgebra : Type := Build_ApproxAlgebra
   { carrier : Type;
     approx : Type;
@@ -136,41 +196,13 @@ Existing Instance AA_IsAA.
 
 Notation AA := ApproxAlgebra.
 
+(* Constructors from the syntax of types as [AA] constructors. *)
 Definition AA_bool : AA := {| carrier := bool ; approx := bool |}.
 Definition AA_T (a : AA) : AA := {| carrier := carrier a ; approx := T (approx a) |}.
 Definition AA_list (a : AA) : AA := {| carrier := list (carrier a) ; approx := listA (approx a) |}.
 Definition AA_prod (a b : AA) : AA := {| carrier := carrier a * carrier b ; approx := approx a * approx b |}.
 
-Inductive ty : Set :=
-  | Bool
-  | Th : ty -> ty
-  | List : ty -> ty
-  | Prod : ty -> ty -> ty
-  .
-
-Inductive tm (G : ty) : ty -> Set :=
-  | Var : tm G G
-  | Fst {A B : ty} : tm G (Prod A B) -> tm G A
-  | Snd {A B : ty} : tm G (Prod A B) -> tm G B
-  | Pair {A B : ty} : tm G A -> tm G B -> tm G (Prod A B)
-  | Boo : bool -> tm G Bool
-  | Tik (A : ty) : tm G A -> tm G A
-  | Lazy {A : ty} : tm G A -> tm G (Th A)
-  | Force {A : ty} : tm G (Th A) -> tm G A
-  | Nil {A : ty} : tm G (List A)
-  | Cons {A : ty} : tm G (Th A) -> tm G (Th (List A)) -> tm G (List A)
-  | Foldr {A B : ty} : tm (Prod (Prod G (Th A)) (Th B)) B -> tm G B -> tm G (List A) -> tm G B
-.
-
-Record Lens (A A' B B' : Type) : Type := MkLens
-  { get : A -> B
-  ; put : A -> B' -> Tick A'
-  }.
-
-Arguments MkLens {A A' B B'}.
-Arguments get {A A' B B'}.
-Arguments put {A A' B B'}.
-
+(* Every type is an approximation algebra. *)
 Fixpoint den_ty (A : ty) : AA :=
   match A with
   | Bool => AA_bool
@@ -184,6 +216,56 @@ Instance IsAA_den_ty {A} : IsAA (carrier (den_ty A)) (approx (den_ty A)).
 Proof.
   typeclasses eauto.
 Defined.
+
+(* Lemmas 3.1, 3.2, 3.3 in the paper follow from the approximation algebra structure. *)
+Lemma Lemma_3_1 : forall (A : ty) (a' a'' : approx (den_ty A)) (a : carrier (den_ty A)),
+  a' `less_defined` a'' -> a'' `is_approx` a -> a' `is_approx` a.
+Proof.
+  intros *; unfold is_approx; apply transitivity.
+Qed.
+
+(* In the paper, in the last claim, there is an extra assumption [a' `is_approx` a]
+   which turns out to be unnecessary, but in the paper we just try to maintain
+   the convention that all approximations exist relatively to an exact value. *)
+Lemma Lemma_3_2 : forall (A : ty) (a : carrier (den_ty A)) (a1 a2 : approx (den_ty A)),
+  a1 `is_approx` a -> a2 `is_approx` a ->
+  (lub a1 a2 `is_approx` a) /\
+  (a1 `less_defined` lub a1 a2 /\ a2 `less_defined` lub a1 a2) /\
+  (forall a', a1 `less_defined` a' -> a2 `less_defined` a' -> lub a1 a2 `less_defined` a').
+Proof.
+  unfold is_approx; repeat split.
+  - apply lub_least_upper_bound; auto.
+  - apply lub_upper_bound_l; eauto.
+  - apply lub_upper_bound_r; eauto.
+  - intros; apply lub_least_upper_bound; auto.
+Qed.
+
+(* In the paper the $\bot_a$ notation is defined for
+   exact values, rather than approximations (this follows the aforementioned convention
+   that all approximations exist relatively to an exact value). $\bot_a$ in the paper
+   is thus [bottom_of (exact a)] in this formalization. *)
+Lemma Lemma_3_3 : forall (A : ty) (a : carrier (den_ty A)) (a' : approx (den_ty A)),
+  a' `is_approx` a -> bottom_of (exact a) `less_defined` a'.
+Proof.
+  intros; apply bottom_is_least. auto.
+Qed.
+
+(** * Demand semantics *)
+
+(* The demand semantics is the pair of an evaluation function ("eval" brackets in the paper)
+   and a demand function ("dem" brackets in the paper.) *)
+(* The demand semantics has the same shape as lenses in the bidirectional
+   programming literature. *)
+Record Lens (A A' B B' : Type) : Type := MkLens
+  { get : A -> B
+  ; put : A -> B' -> Tick A'
+  }.
+
+Arguments MkLens {A A' B B'}.
+Arguments get {A A' B B'}.
+Arguments put {A A' B B'}.
+
+(** ** Auxiliary definitions *)
 
 Definition lift2_lub `{Lub A} : Tick A -> Tick A -> Tick A :=
   fun u v => Tick.MkTick (Tick.cost u + Tick.cost v) (lub (Tick.val u) (Tick.val v)).
@@ -372,20 +454,36 @@ Proof.
   apply lub_r; auto.
 Qed.
 
+(** * Main properties of demand semantics *)
+
+(** Properties of demand semantics *)
+(* This provides the statements of Theorems 3.4, 3.5, 3.6 in our paper.
+   They are proved together in [Good_den]. *)
 Record Good `{IsAA G G', IsAA A A'} (l : Lens G G' A A') : Prop := MkGood
-  { complete : forall g a', a' `is_approx` get l g -> Tick.val (put l g a') `is_approx` g
+  { (* Theorem 3.4 *)
+    total : forall g a', a' `is_approx` get l g -> Tick.val (put l g a') `is_approx` g
+    (* Theorem 3.5 *)
   ; monotone : forall g a' a'',
       a' `less_defined` a'' ->
       a'' `is_approx` get l g ->
       put l g a' `less_defined` put l g a''
+    (* Theorem 3.6 *)
   ; homomorphic : forall g a' a'',
       a' `is_approx` get l g ->
       a'' `is_approx` get l g ->
       eqle (put l g (lub a' a'')) (lift2_lub (put l g a') (put l g a''))
   }.
 
+(** Relation between demand semantics [l] and clairvoyant semantics [cv]. *)
+(* Statements of Theorems 3.7, 3.8, 3.9 in our paper. *)
+(* The double braces and double brackets are notation from prior work on
+   clairvoyant semantics. Double braces "_ {{ _ }}" denote universal quantification, whereas
+   double brackets "_ [[ _ ]]" denote existential quantification.
+   - [cv g {{ prop }} = forall a n, (a, n) \in cv g -> prop a n]
+   - [cv g [[ prop ]] = exists a n, (a, n) \in cv g /\ prop a n] *)
 Record Correct `{IsAA G G', IsAA A A'} (l : Lens G G' A A') (cv : G' -> M A') : Prop := MkCorrect
   { Good_correct : Good l
+    (* Theorem 3.7 *)
   ; functional_correct : forall g g', g' `is_approx` g -> cv g' {{ fun a' n => a' `is_approx` get l g }}
   ; underapprox : forall g g', g' `is_approx` g -> cv g' {{ fun a' n =>
       put l g a' `less_defined` Tick.MkTick n g' }}
@@ -394,6 +492,7 @@ Record Correct `{IsAA G G', IsAA A A'} (l : Lens G G' A A') (cv : G' -> M A') : 
       forall g', g' `is_approx` g ->
         Tick.val (put l g a') `less_defined` g' ->
         cv g' [[ fun a'' n => n = Tick.cost (put l g a') /\ a' `less_defined` a'' ]]
+    (* Theorem 3.9 *)
   ; minimal_univ :
       forall g g', g' `is_approx` g ->
         cv g' {{ fun a'' m =>
@@ -782,7 +881,7 @@ Theorem Good_tick `{IsAA G G', IsAA A A'} (l : Lens G G' A A')
   : Good l -> Good (tick_lens l).
 Proof.
   constructor; intros; cbn.
-  - apply complete; auto.
+  - apply total; auto.
   - apply less_defined_bind. reflexivity.
     intros _ _ _. apply monotone; auto.
   - constructor. cbn.
@@ -970,7 +1069,7 @@ Definition foldr_cv `{IsAA G G', IsAA A A', IsAA B B'}
     let! xs := fa g in
     foldr_cv' (fun a b => fb (g, a, b)) (fn g) xs.
 
-Lemma complete_foldr' `{IsAA G G', IsAA A A', IsAA B B'}
+Lemma total_foldr' `{IsAA G G', IsAA A A', IsAA B B'}
     (lb : Lens ((G * A) * B) ((G' * T A') * T B') B B') (ln : Lens G G' B B')
   : Good lb -> Good ln ->
     forall g (a : list A) b',
@@ -1029,7 +1128,7 @@ Proof.
         * apply bottom_is_least. inv J6.
           { apply bottom_is_less. }
           assert (H1 : Tick.val (foldr_dem' lb ln g a0 x) `is_approx` (g, a0)); cbn.
-          { apply (complete_foldr' Gb Gn). auto. }
+          { apply (total_foldr' Gb Gn). auto. }
           destruct (Tick.val (foldr_dem' _ _ _ _ _)) as [g'' a']; cbn. apply H1.
         * constructor.
       + inv J6. apply less_defined_bind.
@@ -1041,7 +1140,7 @@ Proof.
       + split; [ apply bottom_is_less | constructor ].
       + cbn.
         assert (H1 : Tick.val (foldr_dem' lb ln g a0 x) `is_approx` (g, a0)); cbn.
-        { apply (complete_foldr' Gb Gn). auto. }
+        { apply (total_foldr' Gb Gn). auto. }
         destruct H1; cbn in *.
         destruct (Tick.val (foldr_dem' _ _ _ _ _)); cbn; constructor; [ | constructor ]; cbn; auto. }
     destruct (Tick.val (match Tb0' with _ => _ end)) as [g'' a'].
@@ -1086,7 +1185,7 @@ Proof.
     { intros ? EE; inv EE.
       { cbn. constructor; [ apply bottom_is_less | constructor ]. }
       assert (Tick.val (foldr_dem' lb ln g a0 x) `is_approx` (g, a0)).
-      { apply complete_foldr'; auto. }
+      { apply total_foldr'; auto. }
       cbn. destruct (Tick.val (foldr_dem' lb ln g a0 x)). inv H1. cbn in *.
       constructor; [ auto | constructor; auto ]. }
     apply (lub_bind (P := fun ga => ga `is_approx` (g, a0))).
@@ -1095,7 +1194,7 @@ Proof.
     { assert (W : forall x,
         x `is_approx` foldr_fn' (fun a b => get lb (g, a, b)) (get ln g) a0 ->
         Tick.val (foldr_dem' lb ln g a0 x) `is_approx` (g, a0)).
-      { intros x. apply complete_foldr'; auto. }
+      { intros x. apply total_foldr'; auto. }
       inv ETb0; inv ETb1; cbn.
       + apply lift2_lub_idempotent.
       + apply lift2_lub_r. cbn. constructor; [ cbn | constructor ].
@@ -1125,12 +1224,12 @@ Proof.
   intros Gb Gn Ga. unfold foldr_lens; constructor; cbn; intros.
   - destruct (Tick.val (foldr_dem' lb ln g (get la g) a')) as [g' a0] eqn:Ef.
     cbn. assert (F : (g', a0) `is_approx` (g, get la g)).
-    { rewrite <- Ef. apply (complete_foldr' Gb Gn). auto. }
+    { rewrite <- Ef. apply (total_foldr' Gb Gn). auto. }
     apply lub_least_upper_bound.
     + change g' with (fst (g', a0)). apply F.
     + apply Ga, F.
   - unfold foldr_dem. montac. { apply (monotone_foldr' Gb Gn); auto. }
-    apply (complete_foldr' Gb Gn) in H0.
+    apply (total_foldr' Gb Gn) in H0.
     destruct (Tick.val (foldr_dem' _ _ _ _ a')).
     destruct (Tick.val (foldr_dem' _ _ _ _ a'')).
     destruct H0, H2; cbn in *.
@@ -1139,8 +1238,8 @@ Proof.
     apply less_defined_ret. apply less_defined_lub; eauto.
   - unfold foldr_dem.
     apply (lub_bind (P := fun ga => ga `is_approx` (g, get la g))).
-    { apply complete_foldr'; auto. }
-    { apply complete_foldr'; auto. }
+    { apply total_foldr'; auto. }
+    { apply total_foldr'; auto. }
     { apply homomorphic_foldr'; auto. }
     intros [g' x'] [] ? [Eg' Ea'] []. cbn in *.
     apply (lub_bind (P := fun g'' => g'' `is_approx` g)).
@@ -1265,7 +1364,7 @@ Proof.
     destruct (Tick.val (put lb (g, a, foldr_fn' (fun x b => get lb (g, x, b)) (get ln g) a0) b'))
       as [ [g2 a2] b2] eqn:E2.
     assert (E2' : (g2, a2, b2) `is_approx` (g, a, foldr_fn' (fun x b => get lb (g, x, b)) (get ln g) a0)).
-    { rewrite <- E2; apply (complete (Good_correct Cb)); auto. }
+    { rewrite <- E2; apply (total (Good_correct Cb)); auto. }
     destruct E2' as [ [Eg2 Ea2] Eb2 ]; cbn in *.
     apply optimistic_bind.
     unfold Exact_T in Eb2. inv Eb2.
@@ -1282,7 +1381,7 @@ Proof.
     + apply optimistic_thunk_go. rewrite E2 in *. cbn in Efold.
       destruct (Tick.val (foldr_dem' lb ln g a0 x0)) as [g3 a3] eqn:E3. cbn in *.
       assert (H3' : (g3, a3) `is_approx` (g, a0)).
-      { rewrite <- E3. apply complete_foldr'; eauto. }
+      { rewrite <- E3. apply total_foldr'; eauto. }
       destruct H3' as [Eg3 Ea3].
       destruct Efold as [Eg3' Exs].
       inv Exs. inv H7. inv H3.
@@ -1395,11 +1494,11 @@ Proof.
     unfold foldr_fn in H.
     destruct (Tick.val (foldr_dem' lb ln g (get la g) a')) as [g1 x1] eqn:Ef'.
     assert (Hgx : (g1, x1) `is_approx` (g, get la g)).
-    { rewrite <- Ef'. apply complete_foldr'; eauto. }
+    { rewrite <- Ef'. apply total_foldr'; eauto. }
     destruct Hgx as [Hg Hx]; cbn in *.
     assert (Hp : Tick.val (put la g x1) `less_defined` g').
     { apply lub_inv in H1; [ apply H1 | ].
-      eexists; split; [ apply Hg | apply complete; eauto ]. }
+      eexists; split; [ apply Hg | apply total; eauto ]. }
     apply (optimistic_mon (optimistic_conj (functional_correct Ca _ _ H0) (minimal_ex Ca _ _ Hx _ H0 Hp))).
     intros x _ [Hg0 [-> Ex] ].
     refine (optimistic_mon (minimal_ex_foldr' Cb Cn _ _ _ H H0 Hg0 _) _).
