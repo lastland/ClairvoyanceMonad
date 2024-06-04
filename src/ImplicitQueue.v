@@ -1,5 +1,5 @@
 From Coq Require Import Arith Psatz Relations RelationClasses.
-From Clairvoyance Require Import Core Approx ApproxM Tick Prod Option FormalTranslation.
+From Clairvoyance Require Import Core Approx ApproxM Tick Prod Option.
 
 From Hammer Require Import Tactics.
 
