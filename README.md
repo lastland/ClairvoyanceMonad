@@ -84,9 +84,10 @@ of a demand function.
 The shallowly-embedded Rocq demand semantics discussed thus far is much broader
 than the fairly minimal calculus presented in the paper. This is close to how we
 imagine the demand semantics might be used in practice, but it does not admit
-the study of metatheoretical properties. To that end, `Demand2.v` contains a
-deep embedding of the paper's calculus. The type `Good` essentially represents
-the statements of Lemmas 3.4, 3.5, and 3.6; the proof is provided by `Good_den`.
+the study of metatheoretical properties. To that end, `DemandSemantics.v`
+contains a deep embedding of the paper's calculus. The type `Good` essentially
+represents the statements of Lemmas 3.4, 3.5, and 3.6; the proof is provided by
+`Good_den`.
 
 #### Correctness: Correspondence with Clairvoyant Semantics
 
@@ -95,7 +96,7 @@ monad itself is called `M`. Pessimistic specifications are given by
 `pessimistic` (also notated `u {{ r }}`, and optimistic specifications are given
 by `optimistic` (also notated `u [[ r ]]`).
 
-In `Demand2.v`:
+In `DemandSemantics.v`:
 - the syntax is given by the inductive types `ty` and `tm`.
 - the denotation of types is in an algebraic structure called `ApproxAlgebra`,
   and the denotation function is `den_ty`.
@@ -158,7 +159,7 @@ the above procedure.
 
 ## Major proof terms
 
-- Demand semantics metatheory (`Demand2.v`):
+- Demand semantics metatheory (`DemandSemantics.v`):
   + Properties of approximations: `Lemma_3_1`, `Lemma_3_2`, `Lemma_3_3`.
   + Totality, monotonicity, and ⊔-homomorphism: `Good_den`
   + Correctness with respect to clairvoyance semantics: `Correct_den`

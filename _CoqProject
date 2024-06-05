@@ -19,5 +19,5 @@ src/TickCost.v
 src/Relations.v
 src/Setoid.v
 src/ImplicitQueue.v
-src/Demand2.v
+src/DemandSemantics.v
 src/SelectionSort.v
