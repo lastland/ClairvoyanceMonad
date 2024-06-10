@@ -182,6 +182,35 @@ Proof.
         f_equal. lia.
 Qed.
 
+Lemma selectD_approx (x : nat) (xs : list nat) (outD : prodA nat (listA nat)):
+  outD `is_approx` select x xs ->
+  Tick.val (selectD x xs outD) `is_approx` xs.
+Proof.
+  revert x outD. induction xs; cbn.
+  - intros; destruct outD; solve_approx.
+  - intros. destruct (x <=? a) eqn:LE.
+    + destruct (select x xs) eqn:HS.
+      destruct outD. inversion H; subst.
+      cbn. solve_approx. apply IHxs. cbn.
+      rewrite HS. cbn.
+      split; [solve_approx|].
+      destruct t0.
+      * destruct x0; solve_approx.
+        simpl. inversion H1; subst.
+        inversion H4; subst. solve_approx.
+      * solve_approx.
+    + destruct (select a xs) eqn:HS.
+      destruct outD. inversion H; subst.
+      cbn. solve_approx. apply IHxs. cbn.
+      rewrite HS. cbn.
+      split; [solve_approx|].
+      destruct t0.
+      * destruct x0; solve_approx.
+        simpl. inversion H1; subst.
+        inversion H4; subst. solve_approx.
+      * solve_approx.
+Qed.
+
 Lemma selection_sortD_cost (xs : list nat) (n : nat) (outD : listA nat) :
   n >= length xs ->
   Tick.cost (selection_sortD xs n outD) <= (sizeX' 1 outD) * (length xs + 1).
@@ -199,6 +228,31 @@ Proof.
       pose proof (select_length_inv n0 xs n1 l Hselect).
       assert (n >= length l) by lia. rewrite H0. specialize (IHn H1).
       rewrite selectD_cost. lia.
+Qed.
+
+Lemma selection_sortD_approx (xs : list nat) (n : nat) (outD : listA nat) :
+  n >= length xs ->
+  outD `is_approx` selection_sort xs n ->
+  Tick.val (selection_sortD xs n outD) `is_approx` xs.
+Proof.
+  revert xs outD. induction n; intros.
+  - cbn. destruct xs; cbn; inversion H0; solve_approx.
+  - destruct (selection_sort xs (S n)) eqn:HSS.
+    + inversion H0; subst. cbn.
+      destruct xs; solve_approx.
+    + inversion H0; subst. cbn.
+      destruct xs; [solve_approx|].
+      destruct (select n1 xs) eqn:HS.
+      cbn. solve_approx.
+      apply selectD_approx. cbn.
+      rewrite HS. cbn. split; [solve_approx|].
+      destruct xs0.
+      * cbn. apply IHn.
+        simpl in H. 
+        erewrite select_length_inv with (xs:=xs)(ys:=l0) in H; [lia|apply HS].
+        cbn in HSS. rewrite HS in HSS. inversion HSS; subst.
+        inversion H5; subst. apply H3.
+      * cbn. solve_approx.
 Qed.
 
 Lemma head_selection_sortD_cost (xs : list nat) (outD : nat) :
