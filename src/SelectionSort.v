@@ -231,16 +231,15 @@ Proof.
 Qed.
 
 Lemma selection_sortD_approx (xs : list nat) (n : nat) (outD : listA nat) :
-  n >= length xs ->
   outD `is_approx` selection_sort xs n ->
   Tick.val (selection_sortD xs n outD) `is_approx` xs.
 Proof.
   revert xs outD. induction n; intros.
-  - cbn. destruct xs; cbn; inversion H0; solve_approx.
+  - cbn. destruct xs; cbn; inversion H; solve_approx.
   - destruct (selection_sort xs (S n)) eqn:HSS.
-    + inversion H0; subst. cbn.
+    + inversion H; subst. cbn.
       destruct xs; solve_approx.
-    + inversion H0; subst. cbn.
+    + inversion H; subst. cbn.
       destruct xs; [solve_approx|].
       destruct (select n1 xs) eqn:HS.
       cbn. solve_approx.
@@ -249,9 +248,8 @@ Proof.
       destruct xs0.
       * cbn. apply IHn.
         simpl in H. 
-        erewrite select_length_inv with (xs:=xs)(ys:=l0) in H; [lia|apply HS].
         cbn in HSS. rewrite HS in HSS. inversion HSS; subst.
-        inversion H5; subst. apply H3.
+        inversion H4; subst. apply H2.
       * cbn. solve_approx.
 Qed.
 
