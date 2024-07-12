@@ -67,7 +67,7 @@ pred translate_value i:(indemand -> term -> prop) i:v i:term o:term.
 
 translate_head Vs (fun X A M) (fun X A M') :- !,
   pi x\
-    (pi D K R\ (translate_value K D x R :- K (pair x D :: []) R)) =>
+    (pi D K R\ (translate_value K D x R :- !, K (pair x D :: []) R)) =>
     translate_head (x :: Vs) (M x) (M' x).
 translate_head Vs M (fun `d` _ M') :-
   not (var M),
@@ -98,11 +98,10 @@ pred lookup_indemand i:v i:indemand o:term.
 lookup_indemand V Dem M :- lookup_indemand_aux V Dem none M.
 
 pred lub_indemand i:indemand i:indemand o:indemand.
-lub_indemand E1 E2 R :- append E1 E2 R.
+lub_indemand E1 E2 R :- std.append E1 E2 R.
 
 translate_body D K {{ Core.ret lp:M }} N' :- !,
-  sigma R\
-    translate_value K D M N'.
+  translate_value K D M N'.
 % match should be on a variable
 translate_body D K (match V {{fun x : listA _ => _}} [N_nil, N_cons])
                    (match V {{fun x : listA _ => _}} [N_nil', N_cons']) :- !,
@@ -121,7 +120,7 @@ translate_value K D {{ ConsA lp:M0 lp:M1 }}
   :- !,
   pi d0 d1\
     sigma K0\ K0 = (Es0\ M1'\
-      sigma K1\ K1 = (Es1\ R\ K { lub_indemand Es0 Es1 } R),
+      sigma K1\ K1 = (Es1\ R\ sigma TMP\ lub_indemand Es0 Es1 TMP, K TMP R),
       translate_value K1 d1 M1 M1'),
     translate_value K0 d0 M0 (M01 d0 d1).
 
